@@ -1,6 +1,7 @@
 version: 2
 updates:
-  # One pull request a week per ecosystem, so updates arrive together rather than one by one.
+  # Routine updates arrive together, one pull request a week per ecosystem.
+  # A new major version gets a pull request of its own, since those are the ones that break things.
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -8,6 +9,11 @@ updates:
     groups:
       npm:
         patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # svelte-check does not support TypeScript 7 yet; remove this once it does.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
