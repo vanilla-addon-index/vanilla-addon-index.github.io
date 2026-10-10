@@ -29,9 +29,9 @@
 	<svelte:element
 		this={preview ? 'span' : 'a'}
 		href={preview ? undefined : resolve('/addon/[slug]', { slug: addon.slug })}
-		class={['min-h-[1lh] truncate after:absolute after:inset-0 sm:max-w-64', !minor && 'font-bold']}
+		class="min-h-[1lh] truncate after:absolute after:inset-0 sm:max-w-64"
 	>
-		{addon.name}{#if owner}&nbsp;<span class="ml-1 font-normal text-accent/80">{owner}</span>{/if}
+		{addon.name}{#if owner}&nbsp;<span class="ml-1 text-accent/80">{owner}</span>{/if}
 	</svelte:element>
 	<span class="col-span-2 row-start-2 truncate text-muted sm:col-span-1 sm:row-start-auto">
 		{blurb}
