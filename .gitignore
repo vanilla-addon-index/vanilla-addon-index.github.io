@@ -1,0 +1,46 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Wiki import dry-run output
+/wiki-import
+
+# Local tooling and editor settings
+.claude/
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# File sync leftovers
+.stfolder
+.stversions
+.stignore
+*.sync-conflict-*
+
+# Supabase CLI local state
+supabase/.temp
+supabase/.branches

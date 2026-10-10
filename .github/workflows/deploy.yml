@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Daily: refreshes the snapshot and pre-rendered addon pages, and keeps Supabase active.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The database rules are tested on a throwaway copy; a failure stops the deploy.
+      - run: npm test
+
+      - name: Import from the wiki
+        # Nightly and manual runs only. Skips itself until the SUPABASE_SECRET_KEY secret exists.
+        if: github.event_name != 'push'
+        continue-on-error: true
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/nightly.mjs
+
+      - name: Export snapshot
+        # A database outage must not block the deploy; the previous snapshot is kept.
+        continue-on-error: true
+        run: node scripts/export.mjs
+
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/addons.json
+          git diff --cached --quiet || (git commit -m "Update addon snapshot" && git push)
+
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+      - id: deployment
+        uses: actions/deploy-pages@v4

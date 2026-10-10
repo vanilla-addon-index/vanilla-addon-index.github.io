@@ -1,0 +1,39 @@
+<script lang="ts">
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { auth } from '#lib/auth.svelte.ts';
+	import type { LayoutProps } from './$types';
+
+	let { children }: LayoutProps = $props();
+
+	const TABS = [
+		{ path: '/admin/import', label: 'Import' },
+		{ path: '/admin/groups', label: 'Groups' },
+		{ path: '/admin/log', label: 'Log' },
+		{ path: '/admin/trash', label: 'Trash' },
+		{ path: '/admin/users', label: 'Users' }
+	] as const;
+</script>
+
+{#if !auth.ready}
+	<p class="py-12 text-center text-muted">Loading…</p>
+{:else if !auth.isAdmin}
+	<div class="panel mx-auto mt-8 max-w-sm p-5 text-center">
+		<p class="text-muted">This part of the site is for admins.</p>
+	</div>
+{:else}
+	<nav class="mb-4 flex flex-wrap items-center gap-2" aria-label="Admin">
+		{#each TABS as tab (tab.path)}
+			{@const active = page.url.pathname.startsWith(resolve(tab.path))}
+			<a
+				href={resolve(tab.path)}
+				class={['btn', active && 'border-accent/60 text-accent']}
+				aria-current={active ? 'page' : undefined}
+			>
+				{tab.label}
+			</a>
+		{/each}
+		<span class="ml-auto text-sm text-muted">{auth.isOwner ? 'Owner' : 'Admin'} · {auth.username}</span>
+	</nav>
+	{@render children()}
+{/if}

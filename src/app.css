@@ -1,0 +1,163 @@
+@import 'tailwindcss';
+@import '@fontsource/pt-sans-narrow/latin-400.css';
+@import '@fontsource/pt-sans-narrow/latin-700.css';
+
+/* Shapes borrowed from pfUI: translucent black panels, 1px pixel borders, square corners
+   and its narrow font. Colours borrowed from the original game box: logo gold on the
+   browns and olive greens of the cover's map, ring and dwarf. Dark only, like the addon. */
+@theme {
+	--font-sans: 'PT Sans Narrow', 'Arial Narrow', system-ui, sans-serif;
+	--color-bg: #0c0a07;
+	/* Translucent, so the backdrop shows through the way the game world does in pfUI. */
+	--color-surface: rgb(8 6 3 / 0.42);
+	--color-raised: rgb(255 255 255 / 0.07);
+	--color-border: rgb(235 215 170 / 0.16);
+	--color-fg: #f3efe6;
+	--color-muted: #a59d8b;
+	--color-accent: #f5c32c;
+	--color-danger: #ff6b5e;
+}
+
+@layer base {
+	html {
+		color-scheme: dark;
+		/* The narrow face reads small; this brings it level with a regular 16px font. */
+		font-size: 112.5%;
+	}
+	body {
+		@apply bg-bg text-fg antialiased;
+	}
+	/* Stand-in for the game world behind the panels. A fixed layer scrolls cheaper than
+	   background-attachment: fixed. */
+	body::before {
+		content: '';
+		@apply fixed inset-0 -z-10;
+		background:
+			radial-gradient(60rem 40rem at 8% 0%, rgb(56 134 62 / 0.3), transparent 70%),
+			radial-gradient(50rem 40rem at 96% 12%, rgb(150 116 44 / 0.18), transparent 70%),
+			radial-gradient(60rem 36rem at 72% 110%, rgb(38 132 84 / 0.24), transparent 70%),
+			radial-gradient(40rem 30rem at 0% 105%, rgb(124 82 34 / 0.12), transparent 70%),
+			radial-gradient(44rem 34rem at 104% 62%, rgb(40 104 156 / 0.15), transparent 70%);
+	}
+	/* Native dropdown lists ignore alpha, so give them a solid backdrop. */
+	option {
+		@apply bg-bg;
+	}
+	:focus-visible {
+		@apply outline-1 outline-offset-0 outline-accent/40;
+	}
+	::selection {
+		@apply bg-accent text-black;
+	}
+}
+
+@layer components {
+	.panel {
+		@apply border border-border bg-surface;
+	}
+	.btn {
+		@apply inline-flex cursor-pointer items-center justify-center gap-2 border border-border bg-surface px-3 py-1.5 leading-tight transition-colors duration-100 hover:border-accent/40 hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply border-accent/30 text-accent hover:border-accent/60 hover:bg-accent/10;
+	}
+	.btn-danger {
+		@apply hover:border-danger/50 hover:bg-danger/10 hover:text-danger;
+	}
+	.input {
+		@apply w-full border border-border bg-surface px-2.5 py-1.5 placeholder:text-muted focus:border-accent/40 focus:outline-none;
+	}
+	/* Helper text steps back once the field is active; typing removes it. */
+	.input::placeholder {
+		@apply text-muted/60 transition-opacity duration-150;
+	}
+	.input:focus::placeholder {
+		@apply opacity-30;
+	}
+	/* Prompts sit halfway between the top of the window and its middle, where the eye
+	   lands first. They are capped so a tall one never runs off the top. */
+	.dialog {
+		@apply fixed top-1/4 left-1/2 m-0 max-h-[48vh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-accent/30 bg-bg text-fg backdrop:bg-black/70;
+		scrollbar-width: thin;
+		scrollbar-color: var(--color-border) transparent;
+		overscroll-behavior: contain;
+	}
+	/* Forms read in three levels: a section title, the name of each field, and the grey
+	   helper text. Without the steps between them a form is one wall of grey. */
+	.section-title {
+		@apply text-xl leading-tight font-bold;
+	}
+	.field-label {
+		@apply mb-1 block font-bold text-fg;
+	}
+	.label {
+		@apply mb-1 block text-xs font-bold tracking-widest text-muted uppercase;
+	}
+	.hint {
+		@apply mt-1 text-sm text-muted/80;
+	}
+	.chip {
+		@apply border border-border px-1.5 text-sm leading-snug text-muted transition-colors duration-100;
+	}
+	a.chip:hover {
+		@apply border-accent/40 text-fg;
+	}
+}
+
+/* Dropdown lists drawn by the page instead of the operating system, so the open list
+   matches the panels. Browsers without support keep their native list. */
+@supports (appearance: base-select) {
+	select.input,
+	select.input::picker(select) {
+		appearance: base-select;
+	}
+	select.input {
+		/* min-h keeps an empty dropdown as tall as a text field. */
+		@apply min-h-[calc(1lh+0.75rem+2px)] cursor-pointer items-center justify-between gap-3;
+	}
+	/* Same border as a focused text field while the list is open. */
+	select.input:open {
+		@apply border-accent/40;
+	}
+	select.input::picker-icon {
+		@apply text-[0.6rem] text-muted;
+	}
+	/* Translucent like the panels; the blur keeps the form underneath from showing through
+	   as readable text. */
+	select.input::picker(select) {
+		@apply mt-1 max-h-80 overflow-y-auto border border-border bg-surface p-0 backdrop-blur-md backdrop-brightness-50;
+		scrollbar-width: thin;
+		scrollbar-color: var(--color-border) transparent;
+		overscroll-behavior: contain;
+	}
+	/* An unset dropdown reads like a text field's placeholder. */
+	select.input:has(option[value='']:checked) {
+		@apply text-muted/60;
+	}
+	select.input:open:has(option[value='']:checked) {
+		@apply text-muted/20;
+	}
+	select.input option {
+		@apply text-fg;
+	}
+	select.input option {
+		@apply cursor-pointer border-l-2 border-transparent bg-transparent px-3 py-1 transition-colors duration-100;
+	}
+	select.input option::checkmark {
+		display: none;
+	}
+	select.input option:hover,
+	select.input option:focus-visible {
+		@apply bg-raised outline-none;
+	}
+	select.input option:checked {
+		@apply border-accent text-accent;
+	}
+	select.input option:disabled {
+		@apply cursor-default text-muted;
+	}
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 0.1s;
+}
