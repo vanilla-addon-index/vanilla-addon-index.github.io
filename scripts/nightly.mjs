@@ -33,7 +33,9 @@ async function db(path, init = {}) {
 		}
 	});
 	if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
-	return res.status === 204 ? null : res.json();
+	// A write that asks for nothing back (Prefer: return=minimal) answers 201 with an empty body.
+	const body = await res.text();
+	return body ? JSON.parse(body) : null;
 }
 
 // The API returns at most 1000 rows per request.
