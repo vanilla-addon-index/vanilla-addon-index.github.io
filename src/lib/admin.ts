@@ -1,5 +1,6 @@
 // Calls behind the admin panel's Log, Trash and Users tabs. The database checks the
 // caller's rights on every one of them; see supabase/moderation.sql.
+import { PROVIDER_NAMES } from './config';
 import { supabase } from './supabase';
 import type { Addon } from './types';
 
@@ -39,7 +40,12 @@ export interface UserRow {
 	banned: boolean;
 	role: 'owner' | 'admin' | 'member';
 	addons: number;
+	// What the account logs in with, e.g. ['github']. Missing until supabase/user-providers.sql has been run.
+	providers?: string[];
 }
+
+/** How an account logs in, for display: "GitHub", or "Discord, GitHub" once linked. */
+export const loginsOf = (user: UserRow) => (user.providers ?? []).map((p) => PROVIDER_NAMES[p] ?? p).join(', ');
 
 /** What each tab last loaded, kept while the site stays open. */
 export const remembered: { log?: LogEntry[]; trash?: TrashEntry[]; users?: UserRow[] } = {};

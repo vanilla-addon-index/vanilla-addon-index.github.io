@@ -9,6 +9,7 @@ export const REPO_URL = 'https://github.com/vanilla-addon-index/vanilla-addon-in
 
 // Login providers. Each one must also be enabled in Supabase under Authentication -> Sign In / Providers.
 export const OAUTH_PROVIDERS = ['discord', 'github'] as const;
+export const PROVIDER_NAMES: Record<string, string> = { discord: 'Discord', github: 'GitHub' };
 
 export const CATEGORIES = [
 	'Action Bars',

@@ -4,15 +4,13 @@
 	import { myAddons } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
-	import { SITE_NAME } from '#lib/config.ts';
+	import { PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
 	import { supabase } from '#lib/supabase.ts';
-
-	const PROVIDERS: Record<string, string> = { discord: 'Discord', github: 'GitHub' };
 
 	const mine = $derived(myAddons());
 	const user = $derived(auth.session?.user);
 	const logins = $derived(
-		(user?.app_metadata.providers as string[] | undefined)?.map((p) => PROVIDERS[p] ?? p).join(', ')
+		(user?.app_metadata.providers as string[] | undefined)?.map((p) => PROVIDER_NAMES[p] ?? p).join(', ')
 	);
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 

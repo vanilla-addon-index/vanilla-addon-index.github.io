@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { listUsers, remembered, setBanned, type UserRow } from '#lib/admin.ts';
+	import { listUsers, loginsOf, remembered, setBanned, type UserRow } from '#lib/admin.ts';
 	import { loadAddons } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
@@ -94,7 +94,7 @@
 						{#if user.banned}<span class="text-danger">{user.role === 'admin' ? 'Suspended' : 'Banned'}</span>{/if}
 					</p>
 					<p class="text-sm text-muted">
-						Joined {date(user.joined)} · {user.addons} addon{user.addons === 1 ? '' : 's'} posted
+						{#if loginsOf(user)}{loginsOf(user)} · {/if}Joined {date(user.joined)} · {user.addons} addon{user.addons === 1 ? '' : 's'} posted
 					</p>
 				</div>
 				{#if mayBan(user)}

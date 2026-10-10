@@ -478,8 +478,10 @@ end;
 $$;
 
 -- Accounts for the admin panel. Staff first.
-create or replace function public.list_users(search text)
-returns table (id uuid, username text, joined timestamptz, banned boolean, role text, addons bigint)
+-- Dropped first because "create or replace" cannot change the columns a function returns.
+drop function if exists public.list_users(text);
+create function public.list_users(search text)
+returns table (id uuid, username text, joined timestamptz, banned boolean, role text, addons bigint, providers text[])
 language sql stable security definer set search_path = '' as $$
 	select
 		p.id,
@@ -487,7 +489,9 @@ language sql stable security definer set search_path = '' as $$
 		p.created_at,
 		p.banned,
 		case when p.is_owner then 'owner' when public.is_staff(p.id) then 'admin' else 'member' end,
-		(select count(*) from public.addons a where a.owner = p.id)
+		(select count(*) from public.addons a where a.owner = p.id),
+		-- What the account logs in with: 'github', 'discord', or both once linked.
+		coalesce((select array_agg(i.provider order by i.provider) from auth.identities i where i.user_id = p.id), '{}')
 	from public.profiles p
 	where public.is_admin()
 		and (coalesce(search, '') = '' or p.username ilike '%' || search || '%')

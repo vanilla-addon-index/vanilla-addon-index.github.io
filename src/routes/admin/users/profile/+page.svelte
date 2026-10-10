@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { ACTION_TEXT, listUsers, loadLogAbout, setBanned, type LogEntry, type UserRow } from '#lib/admin.ts';
+	import {
+		ACTION_TEXT,
+		listUsers,
+		loadLogAbout,
+		loginsOf,
+		setBanned,
+		type LogEntry,
+		type UserRow
+	} from '#lib/admin.ts';
 	import { loadAddons, store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
@@ -112,6 +120,7 @@
 				<dl>
 					{@render fact('Addons posted', String(user.addons))}
 					{@render fact('Joined', date(user.joined))}
+					{#if loginsOf(user)}{@render fact('Logs in with', loginsOf(user))}{/if}
 				</dl>
 			</div>
 			{#if mayBan}

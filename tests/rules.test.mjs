@@ -54,6 +54,15 @@ describe('roles', () => {
 		assert.deepEqual(await call(admin, poster), [{ username: 'alice' }]);
 	});
 
+	test('admins see how each account logs in; members cannot list accounts at all', async () => {
+		await db.sql(`insert into auth.identities (user_id, provider, provider_id) values ($1, 'discord', '1')`, [alice.id]);
+		const list = 'select username, providers from public.list_users($1)';
+		assert.deepEqual(await call(admin, list, ['alice']), [{ username: 'alice', providers: ['discord'] }]);
+		assert.deepEqual(await call(admin, list, ['bob']), [{ username: 'bob', providers: [] }]);
+		assert.deepEqual(await call(owner, list, ['admin2']), [{ username: 'admin2', providers: ['github'] }]);
+		assert.deepEqual(await call(alice, list, ['']), []);
+	});
+
 	test('role and ban flags cannot be read from the profiles table', async () => {
 		await refused(() => call(alice, 'select banned from public.profiles'));
 		await refused(() => call(alice, 'select is_owner from public.profiles'));

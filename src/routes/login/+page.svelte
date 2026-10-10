@@ -2,13 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { auth } from '#lib/auth.svelte.ts';
-	import { OAUTH_PROVIDERS, SITE_NAME } from '#lib/config.ts';
+	import { OAUTH_PROVIDERS, PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
 	import { supabase } from '#lib/supabase.ts';
-
-	const LABELS: Record<(typeof OAUTH_PROVIDERS)[number], string> = {
-		discord: 'Discord',
-		github: 'GitHub'
-	};
 
 	let error = $state('');
 
@@ -44,7 +39,7 @@
 		<div class="mt-5 space-y-2">
 			{#each OAUTH_PROVIDERS as provider (provider)}
 				<button class="btn w-full py-2" onclick={() => login(provider)}>
-					Continue with {LABELS[provider]}
+					Continue with {PROVIDER_NAMES[provider]}
 				</button>
 			{/each}
 		</div>
