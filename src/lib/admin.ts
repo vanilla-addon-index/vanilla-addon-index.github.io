@@ -130,9 +130,8 @@ export const revertEdit = (logId: number) => call<null>('revert_addon', { log_id
 
 export const listUsers = (search: string) => call<UserRow[]>('list_users', { search });
 
-/** Bans or unbans. With trash, everything the account posted is moved to the trash too. */
-export const setBanned = (id: string, value: boolean, trash: boolean) =>
-	call<null>('set_banned', { target: id, value, trash });
+/** Bans or unbans. What the account posted or imported stays up either way. */
+export const setBanned = (id: string, value: boolean) => call<null>('set_banned', { target: id, value });
 
 export interface Suggestion {
 	id: number;

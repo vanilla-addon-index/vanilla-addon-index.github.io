@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { listUsers, loginsOf, remembered, setBanned, type UserRow } from '#lib/admin.ts';
-	import { loadAddons } from '#lib/addons.svelte.ts';
+	import { ownedBy, ownedText } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
@@ -32,7 +32,7 @@
 	const mayBan = (user: UserRow) =>
 		user.id !== auth.session?.user.id && user.role !== 'owner' && (user.role === 'member' || auth.isOwner);
 
-	async function ban(user: UserRow, value: boolean, trash = false) {
+	async function ban(user: UserRow, value: boolean) {
 		const verb = user.role === 'admin' ? 'Suspend' : 'Ban';
 		const question = !value
 			? {
@@ -42,17 +42,15 @@
 				}
 			: {
 					title: `${verb} ${user.username}?`,
-					body: trash
-						? `They can still browse but not post or edit, and the ${user.addons} ${user.addons === 1 ? 'addon' : 'addons'} they posted ${user.addons === 1 ? 'goes' : 'go'} to the trash.`
-						: 'They can still browse but not post or edit.',
-					action: trash ? `${verb} and trash` : verb,
+					body: 'They can still browse but not post or edit. What they posted stays up; delete any of it yourself if it has to go.',
+					action: verb,
 					danger: true
 				};
 		if (!(await ask(question))) return;
 		error = notice = '';
 		try {
-			await setBanned(user.id, value, trash);
-			await Promise.all([search(), trash ? loadAddons() : null]);
+			await setBanned(user.id, value);
+			await search();
 			notice = value ? `${user.username} is banned.` : `${user.username} can post again.`;
 		} catch (e) {
 			error = (e as Error).message;
@@ -94,7 +92,7 @@
 						{#if user.banned}<span class="text-danger">{user.role === 'admin' ? 'Suspended' : 'Banned'}</span>{/if}
 					</p>
 					<p class="text-sm text-muted">
-						{#if loginsOf(user)}{loginsOf(user)} · {/if}Joined {date(user.joined)} · {user.addons} addon{user.addons === 1 ? '' : 's'} posted
+						{#if loginsOf(user)}{loginsOf(user)} · {/if}Joined {date(user.joined)} · {ownedText(ownedBy(user.id)).join(' · ')}
 					</p>
 				</div>
 				{#if mayBan(user)}
@@ -105,11 +103,6 @@
 							<button class="btn btn-danger py-1" onclick={() => ban(user, true)}>
 								{user.role === 'admin' ? 'Suspend' : 'Ban'}
 							</button>
-							{#if user.addons}
-								<button class="btn btn-danger py-1" onclick={() => ban(user, true, true)}>
-									{user.role === 'admin' ? 'Suspend' : 'Ban'} and trash their addons
-								</button>
-							{/if}
 						{/if}
 					</div>
 				{/if}

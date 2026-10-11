@@ -96,7 +96,7 @@ create table if not exists public.activity_log (
 	actor uuid references public.profiles on delete set null,
 	actor_name text,
 	-- addon.create, addon.update, addon.delete, addon.merge, addon.restore, addon.revert,
-	-- addon.purge, import.approve, import.reject, import.requeue, user.ban, user.unban,
+	-- import.approve, import.reject, import.requeue, user.ban, user.unban,
 	-- user.autosuspend
 	action text not null,
 	-- The addon or account the line is about.
@@ -173,11 +173,7 @@ begin
 			);
 		end if;
 	else
-		kind := case
-			when public.doing('merge') then 'merge'
-			when public.doing('ban') then 'ban'
-			else 'delete'
-		end;
+		kind := case when public.doing('merge') then 'merge' else 'delete' end;
 		insert into public.addon_trash (addon, name, reason, deleted_by, deleted_by_name)
 		values (
 			to_jsonb(old) - 'link_keys',
@@ -188,7 +184,7 @@ begin
 		)
 		returning id into trashed;
 		perform public.log_action(
-			case kind when 'merge' then 'addon.merge' when 'ban' then 'addon.purge' else 'addon.delete' end,
+			case kind when 'merge' then 'addon.merge' else 'addon.delete' end,
 			old.name,
 			old.id,
 			jsonb_build_object('trash_id', trashed)
@@ -214,7 +210,7 @@ declare
 	recent integer;
 	why text;
 begin
-	if me is null or public.is_owner() or public.doing('ban') then
+	if me is null or public.is_owner() then
 		if tg_op = 'DELETE' then
 			return old;
 		end if;
@@ -439,8 +435,10 @@ end;
 $$;
 
 -- Bans or unbans an account. Admins can ban members; only the owner can suspend an admin.
--- With "trash", everything the account posted is moved to the trash as well.
-create or replace function public.set_banned(target uuid, value boolean, trash boolean) returns void
+-- What the account posted or imported stays up: taking any of it down is a separate
+-- decision, made addon by addon.
+drop function if exists public.set_banned(uuid, boolean, boolean);
+create or replace function public.set_banned(target uuid, value boolean) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
 	who text;
@@ -464,14 +462,7 @@ begin
 	end if;
 
 	update public.profiles set banned = value where id = target;
-	perform public.log_action(
-		case when value then 'user.ban' else 'user.unban' end, who, null, jsonb_build_object('trashed', value and trash)
-	);
-	if value and trash then
-		perform set_config('app.doing', 'ban', true);
-		delete from public.addons where owner = target;
-		perform set_config('app.doing', '', true);
-	end if;
+	perform public.log_action(case when value then 'user.ban' else 'user.unban' end, who, null, null);
 end;
 $$;
 
@@ -534,7 +525,7 @@ revoke all on function public.log_action(text, text, bigint, jsonb) from public,
 revoke all on function public.restore_addon(bigint) from public, anon;
 revoke all on function public.revert_addon(bigint) from public, anon;
 revoke all on function public.purge_trash(bigint[]) from public, anon;
-revoke all on function public.set_banned(uuid, boolean, boolean) from public, anon;
+revoke all on function public.set_banned(uuid, boolean) from public, anon;
 revoke all on function public.list_users(text) from public, anon;
 revoke all on function public.my_role() from public, anon;
 grant execute on function public.is_staff(uuid) to anon, authenticated;
@@ -545,5 +536,5 @@ grant execute on function public.my_role() to authenticated;
 grant execute on function public.restore_addon(bigint) to authenticated;
 grant execute on function public.revert_addon(bigint) to authenticated;
 grant execute on function public.purge_trash(bigint[]) to authenticated;
-grant execute on function public.set_banned(uuid, boolean, boolean) to authenticated;
+grant execute on function public.set_banned(uuid, boolean) to authenticated;
 grant execute on function public.list_users(text) to authenticated;

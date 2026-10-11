@@ -10,7 +10,7 @@
 		type LogEntry,
 		type UserRow
 	} from '#lib/admin.ts';
-	import { loadAddons, store } from '#lib/addons.svelte.ts';
+	import { ownedBy } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
@@ -42,7 +42,8 @@
 		load(name);
 	});
 
-	const posted = $derived(store.addons.filter((a) => a.owner === user?.id));
+	// Imports the account approved as an admin are listed apart from what it posted itself.
+	const owned = $derived(ownedBy(user?.id));
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 	const when = (iso: string) =>
 		new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -56,7 +57,7 @@
 	);
 	const verb = $derived(user?.role === 'admin' ? 'Suspend' : 'Ban');
 
-	async function ban(value: boolean, trash = false) {
+	async function ban(value: boolean) {
 		if (!user) return;
 		const question = !value
 			? {
@@ -66,16 +67,14 @@
 				}
 			: {
 					title: `${verb} ${user.username}?`,
-					body: trash
-						? `They can still browse but not post or edit, and the ${user.addons} ${user.addons === 1 ? 'addon' : 'addons'} they posted ${user.addons === 1 ? 'goes' : 'go'} to the trash.`
-						: 'They can still browse but not post or edit.',
-					action: trash ? `${verb} and trash` : verb,
+					body: 'They can still browse but not post or edit. What they posted stays up; delete any of it yourself if it has to go.',
+					action: verb,
 					danger: true
 				};
 		if (!(await ask(question))) return;
 		try {
-			await setBanned(user.id, value, trash);
-			await Promise.all([load(user.username), trash ? loadAddons() : null]);
+			await setBanned(user.id, value);
+			await load(user.username);
 			notice = value ? `${user?.username} is banned.` : `${user?.username} can post again.`;
 		} catch (e) {
 			error = (e as Error).message;
@@ -118,7 +117,8 @@
 					{/if}
 				</div>
 				<dl>
-					{@render fact('Addons posted', String(user.addons))}
+					{@render fact('Addons posted', String(owned.posted.length))}
+					{#if owned.imported.length}{@render fact('Imports approved', String(owned.imported.length))}{/if}
 					{@render fact('Joined', date(user.joined))}
 					{#if loginsOf(user)}{@render fact('Logs in with', loginsOf(user))}{/if}
 				</dl>
@@ -128,24 +128,34 @@
 					<button class="btn w-full" onclick={() => ban(false)}>Lift the ban</button>
 				{:else}
 					<button class="btn btn-danger w-full" onclick={() => ban(true)}>{verb}</button>
-					{#if user.addons}
-						<button class="btn btn-danger w-full" onclick={() => ban(true, true)}>
-							{verb} and trash their addons
-						</button>
-					{/if}
 				{/if}
 			{/if}
 		</aside>
 
 		<section>
-			<h2 class="label">Addons posted · {posted.length}</h2>
+			<h2 class="label">Addons posted · {owned.posted.length}</h2>
 			<div class="panel">
-				{#each posted as addon (addon.id)}
+				{#each owned.posted as addon (addon.id)}
 					<AddonCard {addon} />
 				{:else}
 					<p class="px-3 py-6 text-center text-muted">Nothing live. Deleted addons are in the Trash.</p>
 				{/each}
 			</div>
+
+			{#if owned.imported.length}
+				<!-- Closed until asked for: an admin can have approved hundreds. -->
+				<details class="group mt-5">
+					<summary class="label cursor-pointer hover:text-fg">
+						<span class="inline-block transition-transform group-open:rotate-90">▸</span>
+						Imports approved · {owned.imported.length}
+					</summary>
+					<div class="panel">
+						{#each owned.imported as addon (addon.id)}
+							<AddonCard {addon} />
+						{/each}
+					</div>
+				</details>
+			{/if}
 
 			<h2 class="label mt-5">Recent activity</h2>
 			<div class="panel">

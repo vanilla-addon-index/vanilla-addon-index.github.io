@@ -251,7 +251,6 @@ create or replace function public.addons_audit() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
 	changed text[];
-	kind text;
 	trashed bigint;
 begin
 	if tg_op = 'INSERT' then
@@ -278,22 +277,16 @@ begin
 			);
 		end if;
 	else
-		kind := case when public.doing('ban') then 'ban' else 'delete' end;
 		insert into public.addon_trash (addon, name, reason, deleted_by, deleted_by_name)
 		values (
 			to_jsonb(old) - 'link_keys',
 			old.name,
-			kind,
+			'delete',
 			auth.uid(),
 			(select username from public.profiles where id = auth.uid())
 		)
 		returning id into trashed;
-		perform public.log_action(
-			case kind when 'ban' then 'addon.purge' else 'addon.delete' end,
-			old.name,
-			old.id,
-			jsonb_build_object('trash_id', trashed)
-		);
+		perform public.log_action('addon.delete', old.name, old.id, jsonb_build_object('trash_id', trashed));
 		delete from public.addon_trash where deleted_at < now() - interval '90 days';
 	end if;
 	return null;

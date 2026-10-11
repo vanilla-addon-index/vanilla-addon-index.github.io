@@ -186,7 +186,7 @@ describe('links and versions', () => {
 describe('bans', () => {
 	test('a banned member can still read but not post, edit or delete', async () => {
 		const mine = await post(db, alice, addon('Atlas'));
-		await call(admin, 'select public.set_banned($1, true, false)', [alice.id]);
+		await call(admin, 'select public.set_banned($1, true)', [alice.id]);
 
 		assert.equal((await role(alice)).banned, true);
 		assert.equal((await call(alice, 'select name from public.addons')).length, 1);
@@ -194,45 +194,43 @@ describe('bans', () => {
 		assert.equal((await call(alice, `update public.addons set author = 'x' where id = $1 returning id`, [mine.id])).length, 0);
 		assert.equal((await call(alice, 'delete from public.addons where id = $1 returning id', [mine.id])).length, 0);
 
-		await call(admin, 'select public.set_banned($1, false, false)', [alice.id]);
+		await call(admin, 'select public.set_banned($1, false)', [alice.id]);
 		await post(db, alice, addon('Another'));
 	});
 
 	test('a member cannot ban anyone', async () => {
-		await refused(() => call(alice, 'select public.set_banned($1, true, false)', [bob.id]), /Only admins/);
+		await refused(() => call(alice, 'select public.set_banned($1, true)', [bob.id]), /Only admins/);
 	});
 
 	test('an admin cannot suspend another admin; the owner can', async () => {
-		await refused(() => call(admin, 'select public.set_banned($1, true, false)', [admin2.id]), /Only the owner/);
-		await call(owner, 'select public.set_banned($1, true, false)', [admin2.id]);
+		await refused(() => call(admin, 'select public.set_banned($1, true)', [admin2.id]), /Only the owner/);
+		await call(owner, 'select public.set_banned($1, true)', [admin2.id]);
 		assert.deepEqual(await role(admin2), { admin: false, owner: false, banned: true });
 	});
 
 	test('a suspended admin can no longer use admin powers', async () => {
 		const theirs = await post(db, alice, addon('Atlas'));
-		await call(owner, 'select public.set_banned($1, true, false)', [admin.id]);
+		await call(owner, 'select public.set_banned($1, true)', [admin.id]);
 		assert.equal((await call(admin, 'delete from public.addons where id = $1 returning id', [theirs.id])).length, 0);
-		await refused(() => call(admin, 'select public.set_banned($1, true, false)', [bob.id]), /Only admins/);
+		await refused(() => call(admin, 'select public.set_banned($1, true)', [bob.id]), /Only admins/);
 		assert.equal((await call(admin, 'select * from public.activity_log')).length, 0);
 	});
 
 	test('nobody can ban the owner, and nobody can ban themselves', async () => {
-		await refused(() => call(admin, 'select public.set_banned($1, true, false)', [owner.id]), /owner cannot be banned/);
-		await refused(() => call(owner, 'select public.set_banned($1, true, false)', [owner.id]), /cannot ban yourself/);
+		await refused(() => call(admin, 'select public.set_banned($1, true)', [owner.id]), /owner cannot be banned/);
+		await refused(() => call(owner, 'select public.set_banned($1, true)', [owner.id]), /cannot ban yourself/);
 	});
 
-	test('banning with "trash their addons" moves everything they posted to the trash', async () => {
+	test('a ban takes nothing down: what the account posted or imported stays up', async () => {
 		await post(db, alice, addon('Atlas'));
-		await post(db, alice, addon('Bagnon'));
-		await post(db, bob, addon('Cartographer'));
-		await call(admin, 'select public.set_banned($1, true, true)', [alice.id]);
+		await post(db, admin2, addon('Bagnon'));
+		await call(admin, 'select public.set_banned($1, true)', [alice.id]);
+		await call(owner, 'select public.set_banned($1, true)', [admin2.id]);
 
-		assert.deepEqual(await live(), ['Cartographer']);
-		const trash = await db.sql('select name, reason from public.addon_trash order by name');
-		assert.deepEqual(trash, [
-			{ name: 'Atlas', reason: 'ban' },
-			{ name: 'Bagnon', reason: 'ban' }
-		]);
+		assert.deepEqual(await live(), ['Atlas', 'Bagnon']);
+		assert.equal((await db.sql('select * from public.addon_trash')).length, 0);
+		// The version that could trash them is gone.
+		await refused(() => call(admin, 'select public.set_banned($1, true, true)', [bob.id]));
 	});
 });
 
@@ -355,19 +353,6 @@ describe('the brake', () => {
 		assert.equal((await role(owner)).banned, false);
 	});
 
-	test('banning a member and trashing their addons does not count against the admin', async () => {
-		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Spam${i}`));
-		const others = [];
-		for (let i = 0; i < 15; i++) others.push(await post(db, owner, addon(`Other${i}`)));
-
-		// Ten addons go to the trash with the ban, then fifteen ordinary deletes: 25 in all,
-		// but only the fifteen count towards the limit of 20.
-		await call(admin, 'select public.set_banned($1, true, true)', [alice.id]);
-		for (const row of others) await call(admin, 'delete from public.addons where id = $1', [row.id]);
-
-		assert.deepEqual(await live(), []);
-		assert.equal((await role(admin)).banned, false);
-	});
 });
 
 describe('groups', () => {
@@ -495,7 +480,7 @@ describe('groups', () => {
 			{ kind: 'auto', status: 'rejected' }
 		]);
 
-		await call(admin, 'select public.set_banned($1, true, false)', [bob.id]);
+		await call(admin, 'select public.set_banned($1, true)', [bob.id]);
 		await refused(() => call(bob, 'select public.suggest_group($1, $2)', [third.id, original.id]), /cannot suggest/);
 	});
 });
@@ -514,7 +499,7 @@ describe('reports', () => {
 		assert.deepEqual(await open(), ['bob: harmful']);
 
 		await refused(() => db.asVisitor((q) => q('select public.report_addon($1, $2, $3)', [row.id, 'broken', ''])));
-		await call(admin, 'select public.set_banned($1, true, false)', [bob.id]);
+		await call(admin, 'select public.set_banned($1, true)', [bob.id]);
 		await refused(() => report(bob, row), /logged in/);
 		await refused(() => report(alice, row, 'because'));
 		await refused(() => report(alice, { id: 999999 }), /no longer exists/);
