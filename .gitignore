@@ -53,3 +53,6 @@ supabase/snippets
 /playwright-report
 /blob-report
 /playwright/.cache
+
+# Full backups of the hosted database (scripts/backup.mjs). Private data: never commit.
+/backups

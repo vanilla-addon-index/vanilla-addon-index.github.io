@@ -4,7 +4,8 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 
 - **Site:** static SvelteKit app on GitHub Pages
 - **Accounts and data:** Supabase (free plan), protected by row-level security
-- **Backup:** `static/addons.json` is refreshed daily by the deploy workflow and served as a fallback if the database is unreachable
+- **Snapshot:** `static/addons.json` is refreshed daily by the deploy workflow; visitors read the list from it, and it stands in if the database is unreachable
+- **Backup:** a full, encrypted copy of the database is taken every night and kept for 90 days; see [Backups](#backups)
 
 ## Setup
 
@@ -29,6 +30,18 @@ npm run db:push                   # applies the ones it has not
 ```
 
 A migration that has reached the hosted database is never edited again: a later change goes in a new one. With the `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets set on the repository, the deploy applies pending migrations itself before the site goes out, and stops if one fails.
+
+## Backups
+
+The free Supabase plan keeps no backups, so the [Backup workflow](.github/workflows/backup.yml) takes a full copy of the hosted database every night: every table of the site, and the accounts. Because the copy holds private data and this repository is public, it is encrypted with the `BACKUP_PASSPHRASE` secret before GitHub stores it, and kept for 90 days. The table structure is not in it; the migrations are that.
+
+```sh
+npm run db:backup                       # a copy on this computer, in backups/ (ignored by git)
+npm run db:backup:check -- <file>       # loads a copy into the local backend, to show it restores
+gpg --decrypt backup.sql.gpg > backup.sql   # opens a nightly copy downloaded from GitHub
+```
+
+To recover from losing the hosted database: create a new project, `npx supabase link` it, build its tables with `npm run db:push`, then load the backup file into it with `psql`. Keep the passphrase somewhere other than GitHub: without it the nightly copies cannot be opened.
 
 ## Development
 

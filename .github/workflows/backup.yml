@@ -1,0 +1,67 @@
+name: Backup
+
+# A full copy of the hosted database every night: every table of the site and the accounts.
+# The free Supabase plan keeps no backups of its own. The copy holds private data and this
+# repository is public, so it is encrypted before it is stored; without the passphrase the
+# file kept here is of no use to anyone. GitHub keeps each night's copy for 90 days.
+#
+# To use one: download it from the run's page, then
+#   gpg --decrypt backup.sql.gpg > backup.sql
+# and see scripts/backup.mjs for checking and restoring it.
+on:
+  schedule:
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets
+        id: ready
+        # Skips the run until all three exist, so a fork or a fresh setup does not fail nightly.
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD or BACKUP_PASSPHRASE is not set, skipping the backup."
+          else
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.ready.outputs.go
+      - uses: actions/setup-node@v7
+        if: steps.ready.outputs.go
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.ready.outputs.go
+
+      - name: Back up and encrypt
+        if: steps.ready.outputs.go
+        # The plain file never leaves this step.
+        run: |
+          npx supabase link --project-ref mefmmugajnbbotioplfw
+          node scripts/backup.mjs backup.sql
+          gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" --output backup.sql.gpg backup.sql
+          rm backup.sql
+
+      - uses: actions/upload-artifact@v7
+        if: steps.ready.outputs.go
+        with:
+          name: backup-${{ github.run_id }}
+          path: backup.sql.gpg
+          retention-days: 90
+          if-no-files-found: error
