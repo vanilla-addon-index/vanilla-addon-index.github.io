@@ -103,9 +103,30 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 	return data as T;
 }
 
+/** What narrows the log down. The database does the searching, so it covers every line ever written. */
+export interface LogFilter {
+	// The first part of the action: 'addon', 'group', 'import', 'report', 'user' or 'trash'.
+	kind?: string;
+	// Lines about one addon: its history.
+	addonId?: number;
+	// Lines by one account, by its exact name.
+	by?: string;
+	// Part of an addon's or an account's name.
+	q?: string;
+}
+
 /** Newest first. Pass the id of the oldest line already shown to get the ones before it. */
-export async function loadLog(before?: number) {
+export async function loadLog(filter: LogFilter = {}, before?: number) {
 	let query = client().from('activity_log').select('*');
+	if (filter.kind) query = query.like('action', `${filter.kind}.%`);
+	if (filter.addonId) query = query.eq('addon_id', filter.addonId);
+	if (filter.by) query = query.eq('actor_name', filter.by);
+	const text = filter.q?.trim();
+	if (text) {
+		// Quoted, so a comma or bracket in what was typed is searched for, not read as syntax.
+		const pattern = `"*${text.replace(/[\\"]/g, '\\$&')}*"`;
+		query = query.or(`subject.ilike.${pattern},actor_name.ilike.${pattern}`);
+	}
 	if (before) query = query.lt('id', before);
 	const { data, error } = await query.order('id', { ascending: false }).limit(LOG_PAGE);
 	if (error) throw new Error(error.message);

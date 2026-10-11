@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import {
 		ACTION_TEXT,
 		LOG_PAGE,
@@ -12,7 +14,8 @@
 		unapproveImport,
 		unbanByName,
 		undoGrouping,
-		type LogEntry
+		type LogEntry,
+		type LogFilter
 	} from '#lib/admin.ts';
 	import { deleteAddon, loadAddons, store } from '#lib/addons.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
@@ -29,45 +32,79 @@
 		user: 'Accounts',
 		trash: 'Trash'
 	} as const;
-	type Group = keyof typeof GROUPS;
 
-	let entries = $state<LogEntry[]>(remembered.log ?? []);
-	let loaded = $state(Boolean(remembered.log));
+	// What the log is narrowed down to is in the address, so a view can be linked to: an
+	// addon's history from its page, an account's actions from its profile.
+	const filter = $derived.by<LogFilter>(() => {
+		const params = page.url.searchParams;
+		const kind = params.get('kind') ?? '';
+		return {
+			kind: kind in GROUPS && kind !== 'all' ? kind : undefined,
+			addonId: Number(params.get('addon')) || undefined,
+			by: params.get('by') || undefined,
+			q: params.get('q') || undefined
+		};
+	});
+	const filtered = $derived(Boolean(filter.kind || filter.addonId || filter.by || filter.q));
+
+	function narrow(change: Record<string, string | undefined>) {
+		const url = new URL(page.url.href);
+		for (const [key, value] of Object.entries(change)) {
+			if (value) url.searchParams.set(key, value);
+			else url.searchParams.delete(key);
+		}
+		goto(url, { replace: true, reset: false });
+	}
+
+	// The unfiltered log is remembered between visits to the tab; a narrowed one is fetched.
+	const start = page.url.search ? undefined : remembered.log;
+	let entries = $state<LogEntry[]>(start ?? []);
+	let loaded = $state(Boolean(start));
 	// False once a page comes back short: there is nothing older.
 	let more = $state(true);
-	let group = $state<Group>('all');
-	let query = $state('');
+	// What is in the search box. It reaches the address, and so the database, once typing pauses.
+	let query = $state(page.url.searchParams.get('q') ?? '');
+	let typing: ReturnType<typeof setTimeout>;
+	function search() {
+		clearTimeout(typing);
+		typing = setTimeout(() => narrow({ q: query.trim() || undefined }), 300);
+	}
 	let notice = $state('');
 	let error = $state('');
 	// What is still in the trash, so "Restore" is only offered for what can be restored.
 	let inTrash = $state(new Set<number>());
 
+	// Counts the requests, so an answer that arrives after a newer question is dropped.
+	let asked = 0;
 	async function load(older = false) {
+		const mine = ++asked;
+		const wanted = filter;
 		try {
-			const [next, trash] = await Promise.all([loadLog(older ? entries.at(-1)?.id : undefined), loadTrashIds()]);
+			const [next, trash] = await Promise.all([loadLog(wanted, older ? entries.at(-1)?.id : undefined), loadTrashIds()]);
+			if (mine !== asked) return;
 			entries = older ? [...entries, ...next] : next;
 			inTrash = trash;
-			remembered.log = entries;
+			if (!filtered) remembered.log = entries;
 			more = next.length === LOG_PAGE;
 			loaded = true;
 		} catch (e) {
-			error = (e as Error).message;
+			if (mine === asked) error = (e as Error).message;
 		}
 	}
-	load();
-
-	const visible = $derived.by(() => {
-		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-		return entries.filter((e) => {
-			if (group !== 'all' && !e.action.startsWith(`${group}.`)) return false;
-			const haystack = `${e.actor_name ?? ''} ${e.subject ?? ''} ${e.action}`.toLowerCase();
-			return words.every((w) => haystack.includes(w));
-		});
+	// Runs at once, and again whenever the log is narrowed differently.
+	$effect(() => {
+		void filter;
+		load();
 	});
+
 
 	const when = (iso: string) =>
 		new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 	const live = (id: number | null) => store.addons.find((a) => a.id === id);
+	// The addon whose history is shown, by the name it has now or had in its last line.
+	const historyOf = $derived(
+		filter.addonId ? (live(filter.addonId)?.name ?? entries.find((e) => e.subject)?.subject ?? 'this addon') : ''
+	);
 	const shown = (value: unknown) =>
 		typeof value === 'string' ? value || '(empty)' : JSON.stringify(value, null, 1);
 
@@ -235,13 +272,32 @@
 		placeholder="Search by person or addon"
 		aria-label="Search the log"
 		bind:value={query}
+		oninput={search}
 	/>
-	<select class="input w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Kind of action" bind:value={group}>
+	<select
+		class="input w-auto flex-1 sm:w-44 sm:flex-none"
+		aria-label="Kind of action"
+		value={filter.kind ?? 'all'}
+		onchange={(event) => narrow({ kind: event.currentTarget.value === 'all' ? undefined : event.currentTarget.value })}
+	>
 		{#each Object.entries(GROUPS) as [value, label] (value)}
 			<option {value}>{label}</option>
 		{/each}
 	</select>
 </div>
+
+{#if filter.addonId || filter.by}
+	<p class="mt-2">
+		{#if filter.addonId}History of <span class="font-bold">{historyOf}</span>{/if}
+		{#if filter.by}{filter.addonId ? ', by' : 'Everything done by'} <span class="font-bold">{filter.by}</span>{/if}
+		<button
+			class="ml-2 cursor-pointer text-sm text-muted hover:text-accent hover:underline"
+			onclick={() => narrow({ addon: undefined, by: undefined })}
+		>
+			Show the whole log
+		</button>
+	</p>
+{/if}
 
 <div aria-live="polite">
 	{#if error || notice}
@@ -252,12 +308,12 @@
 <div class="panel mt-2">
 	{#if !loaded}
 		<p class="px-3 py-8 text-center text-muted">Loading the log…</p>
-	{:else if !visible.length}
+	{:else if !entries.length}
 		<p class="px-3 py-8 text-center text-muted">
-			{entries.length ? 'No line matches.' : 'Nothing has been logged yet.'}
+			{filtered ? 'No line matches.' : 'Nothing has been logged yet.'}
 		</p>
 	{:else}
-		{#each visible as entry (entry.id)}
+		{#each entries as entry (entry.id)}
 			{@const addon = live(entry.addon_id)}
 			{@const actions = undos(entry, addon)}
 			<div class="border-b border-border px-3 py-2 last:border-b-0">
@@ -292,6 +348,15 @@
 							{action.label}
 						</button>
 					{/each}
+					<!-- Everything that ever happened to this addon, deleted or not. -->
+					{#if entry.addon_id && !filter.addonId}
+						<a
+							href={resolve(`/admin/log?addon=${entry.addon_id}`)}
+							class="shrink-0 text-sm text-muted hover:text-accent hover:underline"
+						>
+							History
+						</a>
+					{/if}
 					<span class="shrink-0 text-sm text-muted">{when(entry.at)}</span>
 				</div>
 

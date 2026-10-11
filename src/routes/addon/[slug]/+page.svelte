@@ -294,6 +294,8 @@
 				</div>
 			{/if}
 			{#if auth.isAdmin}
+				<!-- Every change ever made to this entry, each with its way back. -->
+				<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn w-full">History</a>
 				<!-- The addon found here joins this one's group; this one's main version stays main. -->
 				<AddonPicker
 					placeholder="Group with another addon…"

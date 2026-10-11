@@ -157,7 +157,15 @@
 				</details>
 			{/if}
 
-			<h2 class="label mt-5">Recent activity</h2>
+			<div class="mt-5 flex items-baseline justify-between">
+				<h2 class="label">Recent activity</h2>
+				<a
+					href={resolve(`/admin/log?by=${encodeURIComponent(user.username)}`)}
+					class="text-sm text-muted hover:text-accent hover:underline"
+				>
+					Everything they did, in the log
+				</a>
+			</div>
 			<div class="panel">
 				{#each activity as entry (entry.id)}
 					<div class="flex flex-wrap items-baseline gap-x-3 border-b border-border px-3 py-1.5 last:border-b-0">

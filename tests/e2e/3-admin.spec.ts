@@ -131,6 +131,46 @@ test('an edit is reverted, and a deleted addon restored to the same address, fro
 	await expect(page.getByText('The description as it should be.')).toBeVisible();
 });
 
+test('the log is searched in the database: by name, by kind, by addon and by account', async ({ page }) => {
+	await loginAs(page, 'admin');
+	const name = unique('Storied');
+	await postAddon(page, name);
+	await page.getByRole('link', { name: 'Edit' }).click();
+	await page.getByLabel('Addon author').fill('Somebody');
+	await page.getByRole('button', { name: 'Save changes' }).click();
+	await expect(page.getByText('Somebody')).toBeVisible();
+
+	// From the addon's page: its history, and nothing else.
+	await page.getByRole('link', { name: 'History' }).click();
+	await expect(page).toHaveURL(/\/admin\/log\?addon=\d+/);
+	await expect(page.getByText(`History of ${name}`)).toBeVisible();
+	const lines = page.locator('.panel > div');
+	await expect(lines).toHaveCount(2);
+	await expect(lines.nth(0)).toContainText(`edited ${name}`);
+	await expect(lines.nth(1)).toContainText(`posted ${name}`);
+
+	// Narrowed further by kind, then back to the whole log.
+	await page.getByLabel('Kind of action').selectOption('group');
+	await expect(page.getByText('No line matches.')).toBeVisible();
+	await page.getByLabel('Kind of action').selectOption('all');
+	await page.getByRole('button', { name: 'Show the whole log' }).click();
+	await expect(page.getByText(`History of ${name}`)).toHaveCount(0);
+
+	// By part of a name, typed into the search box.
+	await page.getByLabel('Search the log').fill(name.slice(0, -2));
+	await expect(lines).toHaveCount(2);
+	await expect(page).toHaveURL(/q=Storied/);
+	await page.getByLabel('Search the log').fill('no such addon, (at all)');
+	await expect(page.getByText('No line matches.')).toBeVisible();
+
+	// By account, from that account's page.
+	await page.goto('/admin/users/profile?name=member');
+	await page.getByRole('link', { name: 'Everything they did, in the log' }).click();
+	await expect(page.getByText('Everything done by member')).toBeVisible();
+	await expect(lines.first()).toContainText('member');
+	for (const line of await lines.all()) await expect(line.locator('.font-bold').first()).toHaveText('member');
+});
+
 test('a member is banned from the Users tab, with nothing trashed, and unbanned from the log', async ({ page }) => {
 	await loginAs(page, 'admin');
 	await page.goto('/admin/users/profile?name=member2');
