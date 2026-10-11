@@ -451,7 +451,9 @@ describe('groups', () => {
 		await call(bob, 'select public.suggest_group($1, $2)', [fork.id, original.id]);
 
 		assert.deepEqual(await groups(), []);
-		assert.equal((await call(bob, 'select * from public.group_suggestions')).length, 0);
+		// The poster can follow their own suggestion; other members see nothing.
+		assert.deepEqual(await call(bob, 'select status from public.group_suggestions'), [{ status: 'pending' }]);
+		assert.equal((await call(alice, 'select * from public.group_suggestions')).length, 0);
 		const [suggestion] = await call(admin, 'select id, kind, suggested_by_name, status from public.group_suggestions');
 		assert.deepEqual(suggestion, { id: suggestion.id, kind: 'user', suggested_by_name: 'bob', status: 'pending' });
 
@@ -459,6 +461,7 @@ describe('groups', () => {
 		await call(admin, 'select public.decide_suggestion($1, true)', [suggestion.id]);
 		// The addon that was suggested as a version joins the other one, which stays the main version.
 		assert.deepEqual(await groups(), ['pfUI, pfUI fork']);
+		assert.deepEqual(await call(bob, 'select status from public.group_suggestions'), [{ status: 'accepted' }]);
 	});
 
 	test('a rejected suggestion changes nothing and is not offered again', async () => {

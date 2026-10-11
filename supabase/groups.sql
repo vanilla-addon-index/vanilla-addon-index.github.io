@@ -171,9 +171,11 @@ create table if not exists public.group_suggestions (
 );
 
 alter table public.group_suggestions enable row level security;
+-- Admins read them all; whoever made a suggestion can follow what became of it.
 drop policy if exists "admins read group suggestions" on public.group_suggestions;
-create policy "admins read group suggestions" on public.group_suggestions for select to authenticated
-	using (public.is_admin());
+drop policy if exists "admins and the suggester read group suggestions" on public.group_suggestions;
+create policy "admins and the suggester read group suggestions" on public.group_suggestions for select to authenticated
+	using (public.is_admin() or suggested_by = auth.uid());
 revoke all on public.group_suggestions from anon, authenticated;
 grant select on public.group_suggestions to authenticated;
 

@@ -168,6 +168,26 @@ export async function suggestGroup(addonId: number, targetId: number) {
 	if (error) throw new Error(explain(error));
 }
 
+export interface OwnSuggestion {
+	// The addon this one was suggested as a version of.
+	target_id: number;
+	status: 'pending' | 'accepted' | 'rejected';
+}
+
+/**
+ * The poster's suggestions for an addon and what became of them. The database only shows
+ * them to whoever made them and to admins; anyone else gets an empty list.
+ */
+export async function suggestionsFor(addonId: number) {
+	if (!supabase) return [];
+	const { data } = await supabase
+		.from('group_suggestions')
+		.select('target_id, status')
+		.eq('addon_id', addonId)
+		.eq('kind', 'user');
+	return (data ?? []) as OwnSuggestion[];
+}
+
 /** An addon's whole group, main version first; just the addon itself when it has none. */
 export const groupOf = (addon: Addon) =>
 	addon.group_id === null

@@ -9,7 +9,9 @@
 		groupOf,
 		setMain,
 		store,
-		ungroupAddon
+		suggestionsFor,
+		ungroupAddon,
+		type OwnSuggestion
 	} from '#lib/addons.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
@@ -33,6 +35,20 @@
 
 	// The other versions of this addon, when it is in a group. Main version first.
 	const group = $derived(addon ? groupOf(addon) : []);
+
+	// What the poster suggested this addon is a version of, still waiting or turned down.
+	// An accepted suggestion needs no note: the two are grouped, which the Versions list shows.
+	let suggestions = $state<OwnSuggestion[]>([]);
+	const addonId = $derived(addon?.id);
+	$effect(() => {
+		suggestions = [];
+		const id = addonId;
+		// Only someone logged in can have made one.
+		if (id === undefined || !auth.session) return;
+		suggestionsFor(id).then((list) => {
+			if (id === addonId) suggestions = list.filter((s) => s.status !== 'accepted');
+		});
+	});
 
 	// Group changes are small and reversible, so they happen at once, with no prompt.
 	async function change(work: () => Promise<void>) {
@@ -242,6 +258,23 @@
 					>, CC BY-SA.
 				</p>
 			{/if}
+
+			{#each suggestions as suggestion (suggestion.target_id)}
+				{@const target = store.addons.find((a) => a.id === suggestion.target_id)}
+				{#if target}
+					<p class="panel px-3 py-2 text-sm">
+						Suggested as a version of
+						<a href={resolve('/addon/[slug]', { slug: target.slug })} class="text-accent hover:underline"
+							>{target.name}</a
+						>.
+						<span class="text-muted">
+							{suggestion.status === 'pending'
+								? 'Waiting for an admin to review it.'
+								: 'An admin decided to keep them separate.'}
+						</span>
+					</p>
+				{/if}
+			{/each}
 
 			{#if canEdit(addon.owner)}
 				<div class="grid grid-cols-2 gap-2">
