@@ -8,7 +8,10 @@ import type { Addon } from '#lib/types.ts';
 // browser, so without this every page would reach search engines and link previews empty.
 
 const addons = readSnapshot();
-const bySlug = new Map(addons.map((addon) => [addon.slug, addon]));
+// By its address, and by the addresses of addons merged into it. The page written for an
+// old address describes the addon as it is now and names its current address as the
+// canonical one, so a search engine moves over instead of dropping the link.
+const bySlug = new Map(addons.flatMap((addon) => [...(addon.aliases ?? []), addon.slug].map((slug) => [slug, addon])));
 
 // Pages that are of no use in search results.
 const PRIVATE = /^\/(admin|login|account|submit)(\/|$)/;
