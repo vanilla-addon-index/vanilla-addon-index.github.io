@@ -32,7 +32,7 @@ create table if not exists public.import_queue (
 );
 create index if not exists import_queue_status_idx on public.import_queue (status);
 
--- What GitHub says about a repository, refreshed by the nightly job.
+-- What GitHub says about a repository, refreshed by the nightly job. For admins only.
 create table if not exists public.repo_stats (
 	key text primary key,
 	stars integer not null default 0,
@@ -56,12 +56,13 @@ drop policy if exists "admins read the import queue" on public.import_queue;
 create policy "admins read the import queue" on public.import_queue for select to authenticated
 	using (public.is_admin());
 drop policy if exists "repo stats are public" on public.repo_stats;
-create policy "repo stats are public" on public.repo_stats for select using (true);
+drop policy if exists "admins read repo stats" on public.repo_stats;
+create policy "admins read repo stats" on public.repo_stats for select to authenticated
+	using (public.is_admin());
 
 -- The queue is changed through the functions below only.
 revoke all on public.import_queue, public.repo_stats from anon, authenticated;
-grant select on public.import_queue to authenticated;
-grant select on public.repo_stats to anon, authenticated;
+grant select on public.import_queue, public.repo_stats to authenticated;
 -- The nightly job signs in with the project's secret key, which still needs table rights.
 grant select on public.addons, public.import_queue to service_role;
 grant select, insert, update on public.repo_stats to service_role;

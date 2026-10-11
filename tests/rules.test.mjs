@@ -628,8 +628,15 @@ describe('import queue', () => {
 				 on conflict (key) do update set stars = excluded.stars`
 			);
 		});
-		assert.equal((await db.asVisitor((q) => q('select stars from public.repo_stats')))[0].stars, 5);
+		assert.equal((await call(admin, 'select stars from public.repo_stats'))[0].stars, 5);
 		await refused(() => call(admin, `insert into public.repo_stats (key) values ('github.com/a/b')`));
+	});
+
+	test('repository stats are for admins: visitors and members see none', async () => {
+		await db.sql(`insert into public.repo_stats (key, stars) values ('github.com/wiki/atlas', 5)`);
+		await refused(() => db.asVisitor((q) => q('select * from public.repo_stats')), /permission denied/);
+		assert.equal((await call(alice, 'select * from public.repo_stats')).length, 0);
+		assert.equal((await call(admin, 'select * from public.repo_stats')).length, 1);
 	});
 
 	test('a repository that was renamed is not queued under its new address', async () => {
