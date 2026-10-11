@@ -335,7 +335,7 @@ describe('bans', () => {
 });
 
 describe('deleting an account', () => {
-	const leave = (user, removeAddons = false) => call(user, 'select public.delete_account($1)', [removeAddons]);
+	const leave = (user) => call(user, 'select public.delete_account()');
 	const accounts = async () => (await db.sql('select username from public.profiles order by username')).map((r) => r.username);
 
 	test('a member deletes their account: the login goes, the addons stay with nobody', async () => {
@@ -377,21 +377,26 @@ describe('deleting an account', () => {
 		assert.equal(lines[0].actor, null);
 	});
 
-	test('the account can take its addons along, however many, and they go through the trash', async () => {
-		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Mine${i}`));
-		await post(db, bob, addon('Bagnon'));
-		await leave(alice, true);
-		assert.deepEqual(await live(), ['Bagnon']);
-		const trash = await db.sql('select deleted_by_name from public.addon_trash');
-		assert.equal(trash.length, 10);
-		assert.equal(trash.every((t) => t.deleted_by_name === 'deleted account'), true);
+	test('addons the account deleted itself beforehand are in the trash, without its name', async () => {
+		const mine = await post(db, alice, addon('Mine'));
+		await post(db, alice, addon('Kept'));
+		await call(alice, 'delete from public.addons where id = $1', [mine.id]);
+		await leave(alice);
+		assert.deepEqual(await live(), ['Kept']);
+		assert.deepEqual(await db.sql('select name, deleted_by_name from public.addon_trash'), [
+			{ name: 'Mine', deleted_by_name: 'deleted account' }
+		]);
+		// An admin can still bring it back, like any other delete.
+		const [{ id }] = await db.sql('select id from public.addon_trash');
+		await call(admin, 'select public.restore_addon($1)', [id]);
+		assert.deepEqual(await live(), ['Kept', 'Mine']);
 	});
 
 	test('an admin who leaves is forgotten as the approver of imports, which stay', async () => {
 		await db.queueImports([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
 		await call(admin, 'select public.approve_imports($1)', [[id]]);
-		await leave(admin, true);
+		await leave(admin);
 		assert.deepEqual(await db.sql('select name, owner, approved_by from public.addons'), [
 			{ name: 'pfUI', owner: null, approved_by: null }
 		]);
@@ -399,7 +404,7 @@ describe('deleting an account', () => {
 
 	test('the owner cannot delete their account, and nobody can delete another', async () => {
 		await refused(() => leave(owner), /owner's account cannot be deleted/);
-		await refused(() => db.asVisitor((q) => q('select public.delete_account(false)')));
+		await refused(() => db.asVisitor((q) => q('select public.delete_account()')));
 		await refused(() => call(alice, 'delete from auth.users where id = $1', [bob.id]));
 		await refused(() => call(alice, 'delete from public.profiles where id = $1', [bob.id]));
 		assert.equal((await accounts()).length, 5);
