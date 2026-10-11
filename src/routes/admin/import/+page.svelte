@@ -3,7 +3,7 @@
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
-	import { fetchFromWiki, imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
+	import { imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
 	import { linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
@@ -28,7 +28,6 @@
 	let shown = $state(PAGE);
 	// Position of the entry the keyboard shortcuts act on.
 	let current = $state(0);
-	let busy = $state(false);
 	let notice = $state('');
 	let error = $state('');
 
@@ -157,7 +156,7 @@
 	}
 
 	// Entries leave the list the moment they are decided, so several can be handled in a row
-	// without waiting. Only reading the wiki blocks, since it reloads the whole queue.
+	// without waiting.
 	// A decision that worked says nothing: the entry leaving the list is the confirmation.
 	// What an action does report stays until the next one.
 	async function run(action: () => Promise<string>) {
@@ -169,17 +168,6 @@
 			error = (e as Error).message;
 		}
 	}
-
-	const fetchWiki = () =>
-		run(async () => {
-			busy = true;
-			try {
-				const { found, added } = await fetchFromWiki();
-				return `The wiki lists ${found} addons; ${added} new ${added === 1 ? 'one' : 'ones'} added to the queue.`;
-			} finally {
-				busy = false;
-			}
-		});
 
 	const restoreOne = (item: QueueItem) =>
 		run(async () => {
@@ -306,10 +294,6 @@
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
 			</div>
 
-			<button class="btn w-full" disabled={busy} onclick={fetchWiki}>
-				{busy ? 'Working…' : 'Check the wiki now'}
-			</button>
-
 			<div class="panel px-3 py-2 text-sm text-muted">
 				<h2 class="label">Keys</h2>
 				<p>J / K or ↓ / ↑ to move</p>
@@ -366,7 +350,7 @@
 					<p class="px-3 py-8 text-center text-muted">
 						{imports.items.length
 							? 'Nothing in the queue matches.'
-							: 'The queue is empty. "Check the wiki now" looks for new addons.'}
+							: 'The queue is empty. New addons on the wiki are added every night.'}
 					</p>
 				{:else}
 					{#each page as { item, verdict, advice, notes, match }, index (item.id)}

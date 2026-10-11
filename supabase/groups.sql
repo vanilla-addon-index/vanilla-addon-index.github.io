@@ -330,7 +330,7 @@ declare
 	added integer;
 begin
 	if not public.may_import() then
-		raise exception 'Only admins can import addons.';
+		raise exception 'Only the nightly job can queue imports.';
 	end if;
 
 	insert into public.import_queue (
@@ -459,4 +459,5 @@ grant execute on function public.suggest_group(bigint, bigint) to authenticated;
 grant execute on function public.decide_suggestion(bigint, boolean) to authenticated;
 grant execute on function public.dismiss_pair(bigint, bigint) to authenticated;
 grant execute on function public.approve_into(bigint, bigint) to authenticated;
-grant execute on function public.queue_imports(jsonb) to authenticated, service_role;
+revoke all on function public.queue_imports(jsonb) from authenticated;
+grant execute on function public.queue_imports(jsonb) to service_role;

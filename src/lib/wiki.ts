@@ -1,5 +1,5 @@
 // Reads the addon list from the Turtle WoW wiki and turns each entry into a candidate
-// for the import queue. Runs in the browser (admin page) and in Node (scripts/).
+// for the import queue. Run by the nightly job and the dry run in scripts/.
 import { CATEGORIES, DEFAULT_CATEGORY, MAX_IMAGES } from './config.ts';
 import { linkKey } from './links.ts';
 

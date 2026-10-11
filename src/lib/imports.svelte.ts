@@ -1,7 +1,7 @@
 import { createAddon, groupAddons, loadAddons } from './addons.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
-import { type Candidate, readWiki } from './wiki';
+import type { Candidate } from './wiki';
 
 export interface QueueItem extends Candidate {
 	id: number;
@@ -89,14 +89,6 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 	const { data, error } = await client().rpc(name, args);
 	if (error) throw new Error(error.message);
 	return data as T;
-}
-
-/** Reads the wiki and queues every addon that is neither live nor already reviewed. */
-export async function fetchFromWiki() {
-	const { candidates } = await readWiki();
-	const added = await call<number>('queue_imports', { items: candidates });
-	await loadQueue();
-	return { found: candidates.length, added };
 }
 
 // Takes entries out of the list at once, so the page does not wait for the database or

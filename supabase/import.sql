@@ -89,10 +89,11 @@ create trigger addons_description
 	before insert or update on public.addons
 	for each row execute function public.addons_description();
 
--- Admins, and the nightly job with the project's secret key.
+-- The nightly job only, which signs in with the project's secret key. Admins review the
+-- queue but cannot add to it, so approving imports stays bounded by what the wiki lists.
 create or replace function public.may_import() returns boolean
 language sql stable security definer set search_path = '' as $$
-	select public.is_admin() or coalesce(auth.jwt() ->> 'role', '') = 'service_role';
+	select coalesce(auth.jwt() ->> 'role', '') = 'service_role';
 $$;
 
 -- Adds candidates whose link is neither live nor already in the queue. Returns how many.
@@ -102,7 +103,7 @@ declare
 	added integer;
 begin
 	if not public.may_import() then
-		raise exception 'Only admins can import addons.';
+		raise exception 'Only the nightly job can queue imports.';
 	end if;
 
 	insert into public.import_queue (key, url, name, description, images, alts, category, obsolete, parent)
@@ -246,12 +247,12 @@ begin
 end;
 $$;
 
-revoke all on function public.queue_imports(jsonb) from public, anon;
+revoke all on function public.queue_imports(jsonb) from public, anon, authenticated;
 revoke all on function public.approve_imports(bigint[]) from public, anon;
 revoke all on function public.mark_imported(bigint, bigint, boolean) from public, anon;
 revoke all on function public.decide_imports(bigint[], text) from public, anon;
 grant execute on function public.may_import() to anon, authenticated, service_role;
-grant execute on function public.queue_imports(jsonb) to authenticated, service_role;
+grant execute on function public.queue_imports(jsonb) to service_role;
 grant execute on function public.approve_imports(bigint[]) to authenticated;
 grant execute on function public.mark_imported(bigint, bigint, boolean) to authenticated;
 grant execute on function public.decide_imports(bigint[], text) to authenticated;
