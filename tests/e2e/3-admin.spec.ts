@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './test.ts';
 import { confirm, loginAs, logLine, postAddon, unique } from './helpers.ts';
 
 // An admin: reviews imports and reports, and can undo anything from the log.
