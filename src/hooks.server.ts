@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 
 // Runs at build time only, while the pages are written out. The fonts are announced in each
 // page's head, so the browser fetches them with the scripts instead of after the first text
