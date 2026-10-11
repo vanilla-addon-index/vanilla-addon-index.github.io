@@ -944,7 +944,7 @@ describe('import queue', () => {
 		await refused(() => call(alice, 'select public.approve_imports($1)', [[id]]), /Only admins/);
 		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [[id]]))[0].n, 1);
 
-		const [row] = await db.sql('select name, slug, description, category, author, source, owner, jsonb_array_length(versions) as links from public.addons');
+		const [row] = await db.sql('select name, slug, description, category, author, source, owner, approved_by, jsonb_array_length(versions) as links from public.addons');
 		assert.deepEqual(row, {
 			name: 'pfUI',
 			slug: 'pfui',
@@ -952,11 +952,69 @@ describe('import queue', () => {
 			category: 'Interface Suites',
 			author: 'brues-code',
 			source: 'Turtle WoW Wiki',
-			owner: admin.id,
+			// It belongs to nobody; who approved it is kept for the admin's profile.
+			owner: null,
+			approved_by: admin.id,
 			links: 1
 		});
 		assert.deepEqual(await waiting(), []);
 		assert.equal((await logged()).at(-1), 'import.approve');
+	});
+
+	test('an import belongs to nobody: only admins can change it, whoever approved it', async () => {
+		await queue([candidate('Atlas')]);
+		const [{ id }] = await db.sql('select id from public.import_queue');
+		await call(admin, 'select public.approve_imports($1)', [[id]]);
+		const [atlas] = await db.sql('select id from public.addons');
+		const edit = (user) => call(user, `update public.addons set description = 'Changed by someone, at some length.' where id = $1 returning id`, [atlas.id]);
+		const remove = (user) => call(user, 'delete from public.addons where id = $1 returning id', [atlas.id]);
+
+		assert.equal((await edit(alice)).length, 0);
+		assert.equal((await edit(admin2)).length, 1);
+		// An edit moves it to nobody else.
+		assert.deepEqual(await db.sql('select owner, approved_by from public.addons'), [{ owner: null, approved_by: admin.id }]);
+		await refused(() => call(alice, 'select public.suggest_group($1, $1)', [atlas.id]));
+		const mine = await post(db, alice, addon('Bagnon'));
+		await refused(() => call(alice, 'select public.suggest_group($1, $2)', [atlas.id, mine.id]), /an addon you posted/);
+
+		// The admin who approved it leaves the organization: it is not theirs to change.
+		await db.storeOrgMembers([]);
+		assert.equal((await edit(admin)).length, 0);
+		assert.equal((await remove(admin)).length, 0);
+		assert.deepEqual(await live(), ['Atlas', 'Bagnon']);
+	});
+
+	test('deleting the account that approved an import leaves the import up', async () => {
+		await queue([candidate('Atlas')]);
+		const [{ id }] = await db.sql('select id from public.import_queue');
+		await call(admin, 'select public.approve_imports($1)', [[id]]);
+		await post(db, admin, addon('Bagnon'));
+
+		await db.sql('delete from auth.users where id = $1', [admin.id]);
+		// What the account wrote itself goes with it; what it approved does not.
+		assert.deepEqual(await live(), ['Atlas']);
+	});
+
+	test('an import published with changes, or restored from the trash, belongs to nobody either', async () => {
+		await queue([candidate('Atlas')]);
+		const [{ id }] = await db.sql('select id from public.import_queue');
+		const made = await post(db, admin, addon('Atlas', 'https://github.com/wiki/Atlas'));
+		await call(admin, 'select public.mark_imported($1, $2, true)', [id, made.id]);
+		const owners = () => db.sql('select owner, approved_by from public.addons');
+		assert.deepEqual(await owners(), [{ owner: null, approved_by: admin.id }]);
+
+		await call(admin2, 'delete from public.addons where id = $1', [made.id]);
+		const [{ id: trashId }] = await db.sql('select id from public.addon_trash');
+		await call(admin2, 'select public.restore_addon($1)', [trashId]);
+		assert.equal((await owners())[0].owner, null);
+		// Something a member posted still comes back to that member.
+		const bagnon = await post(db, alice, addon('Bagnon'));
+		await call(admin, 'delete from public.addons where id = $1', [bagnon.id]);
+		const [{ id: second }] = await db.sql('select id from public.addon_trash order by id desc limit 1');
+		await call(admin, 'select public.restore_addon($1)', [second]);
+		assert.deepEqual(await db.sql(`select owner, approved_by from public.addons where name = 'Bagnon'`), [
+			{ owner: alice.id, approved_by: null }
+		]);
 	});
 
 	test('the wiki\'s other versions are queued as entries of their own and grouped once published', async () => {

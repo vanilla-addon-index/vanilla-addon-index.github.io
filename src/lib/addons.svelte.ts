@@ -5,7 +5,8 @@ import { tell } from './confirm.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 
-const CACHE_KEY = 'addons-v2';
+// v3: imports have no owner.
+const CACHE_KEY = 'addons-v3';
 
 export const store = $state({
 	addons: [] as Addon[],
@@ -22,6 +23,7 @@ const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	versions: row.versions?.length ? row.versions : [{ url: row.repo_url ?? '', note: '' }],
 	aliases: row.aliases ?? [],
 	source: row.source ?? '',
+	approved_by: row.approved_by ?? null,
 	group_id: row.group_id ?? null,
 	is_main: row.is_main ?? false
 });
@@ -292,14 +294,17 @@ export const findAddon = (slug: string | undefined) =>
 export interface Owned {
 	// Addons the account submitted itself.
 	posted: Addon[];
-	// Imports it approved as an admin: it keeps them, but did not write them.
+	// Imports it approved as an admin: they belong to nobody, and it did not write them.
 	imported: Addon[];
 }
 
 /** What an account has in the list, with its own posts apart from imports it approved. */
 export function ownedBy(id: string | undefined): Owned {
-	const all = id ? store.addons.filter((a) => a.owner === id) : [];
-	return { posted: all.filter((a) => !a.source), imported: all.filter((a) => a.source) };
+	if (!id) return { posted: [], imported: [] };
+	return {
+		posted: store.addons.filter((a) => a.owner === id),
+		imported: store.addons.filter((a) => a.approved_by === id)
+	};
 }
 
 /** ["3 addons posted", "120 imports approved"], leaving out the imports when there are none. */

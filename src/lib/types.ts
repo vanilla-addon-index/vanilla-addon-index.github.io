@@ -22,8 +22,11 @@ export interface Addon {
 	// Addresses of addons merged into this one.
 	aliases: string[];
 	images: string[];
-	owner: string;
+	// Who posted it. An import belongs to nobody: only admins can change it.
+	owner: string | null;
 	owner_name: string;
+	// The admin who approved it, for an import.
+	approved_by: string | null;
 	created_at: string;
 	updated_at: string;
 }

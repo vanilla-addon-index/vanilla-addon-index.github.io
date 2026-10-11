@@ -88,7 +88,8 @@ export function initAuth() {
 	});
 }
 
-export function canEdit(owner: string) {
+/** An import has no owner, so only admins can edit it. */
+export function canEdit(owner: string | null) {
 	if (!auth.session || auth.banned) return false;
 	return auth.isAdmin || auth.session.user.id === owner;
 }
