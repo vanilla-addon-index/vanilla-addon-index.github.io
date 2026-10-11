@@ -79,8 +79,19 @@ test('a group change is undone from its line in the log', async ({ page }) => {
 	await postAddon(page, two);
 	const address = await postAddon(page, one);
 
-	await page.getByPlaceholder('Group with another addon…').fill(two);
-	await page.getByRole('button', { name: new RegExp(`^${two}`) }).click();
+	// By keyboard alone: the arrow keys move through the matches, and Enter takes one.
+	const picker = page.getByPlaceholder('Group with another addon…');
+	await picker.fill('e');
+	const options = page.getByRole('option');
+	await expect(options.first()).toHaveAttribute('aria-selected', 'true');
+	await picker.press('ArrowDown');
+	await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+	await picker.press('ArrowUp');
+	await picker.press('ArrowUp');
+	await expect(options.last()).toHaveAttribute('aria-selected', 'true');
+	await picker.fill(two);
+	await expect(page.getByRole('option', { name: new RegExp(`^${two}`) })).toHaveAttribute('aria-selected', 'true');
+	await picker.press('Enter');
 	await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
 
 	await page.goto('/admin/log');

@@ -210,7 +210,7 @@
 					<ol>
 						{#each group as member (member.id)}
 							{@const here = member.id === addon.id}
-							<li class={['border-b border-border px-3 py-1.5 last:border-b-0', !member.is_main && !here && 'opacity-70']}>
+							<li class={['border-b border-border px-3 py-1.5 last:border-b-0', !member.is_main && !here && 'opacity-80']}>
 								<div class="flex items-baseline gap-2">
 									{#if here}
 										<span class="min-w-0 flex-1 truncate font-bold">{member.name}</span>
