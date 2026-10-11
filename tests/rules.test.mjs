@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CATEGORIES } from '../src/lib/config.ts';
+import { linkKey } from '../src/lib/links.ts';
 import { NIGHTLY_TOKEN, addon, createDb, post } from './db.mjs';
 
 let db;
@@ -189,6 +190,55 @@ describe('links and versions', () => {
 		assert.equal(await key('https://github.com/shagu/pfQuest.git'), 'github.com/shagu/pfquest');
 		assert.equal(await key('https://www.github.com/shagu/pfQuest/tree/master'), 'github.com/shagu/pfquest');
 		assert.equal(await key('https://gitlab.com/group/sub/addon/-/tree/main'), 'gitlab.com/group/sub/addon');
+	});
+
+	test('a folder of a repository is a link of its own, whichever branch it is read from', async () => {
+		const key = async (url) => (await db.sql('select public.link_key($1) as k', [url]))[0].k;
+		const atlas = 'github.com/someone/collection/a/atlas';
+		assert.equal(await key('https://github.com/Someone/Collection/tree/master/a/Atlas'), atlas);
+		assert.equal(await key('https://github.com/someone/collection/tree/main/a/Atlas/'), atlas);
+		assert.equal(await key('https://github.com/someone/collection/blob/238c6d6/a/Atlas?tab=readme'), atlas);
+		// A branch alone is still the repository.
+		assert.equal(await key('https://github.com/someone/collection/tree/vanilla'), 'github.com/someone/collection');
+
+		await post(db, alice, addon('Atlas', 'https://github.com/someone/collection/tree/master/a/Atlas'));
+		await post(db, bob, addon('Bagnon', 'https://github.com/someone/collection/tree/master/b/Bagnon'));
+		await post(db, bob, addon('Whole collection', 'https://github.com/someone/collection'));
+		await refused(
+			() => post(db, bob, addon('Atlas again', 'https://github.com/someone/collection/tree/main/a/atlas')),
+			/already listed under "Atlas"/
+		);
+	});
+
+	test('the site and the database make the same key from a link', async () => {
+		const links = [
+			'https://github.com/Shagu/pfQuest',
+			'https://github.com/shagu/pfQuest.git',
+			'http://www.github.com/shagu/pfQuest/',
+			'https://github.com/shagu/pfQuest?tab=readme-ov-file#install',
+			'https://github.com/shagu/pfQuest/tree/master',
+			'https://github.com/shagu/pfQuest/tree/master/',
+			'https://github.com/shagu/pfQuest/releases/download/v1/pfQuest.zip',
+			'https://github.com/shagu/pfQuest/archive/refs/heads/master.zip',
+			'https://github.com/shagu/pfQuest/issues/12',
+			'https://github.com/ericraio/vanilla-wow-addons/tree/238c6d633d5a5b8a0cc4ee7a8cbb548ea80da081/p/Parchment',
+			'https://github.com/xVitali2/Addons-for-Vanilla-1.12.1/tree/master/BGAssistRU',
+			'https://github.com/laytya/Vanilla-Addons/blob/master/Cryolysis.zip',
+			'https://github.com/Arthur-Helias/BetterCharacterPanel/tree/main?tab=readme-ov-file',
+			'https://github.com/someone/collection/tree/feature/x/Addon//',
+			'https://github.com/someone/collection/tree/',
+			'https://github.com/someone',
+			'  https://github.com/Someone/Addon  ',
+			'https://gitlab.com/group/sub/addon/-/tree/main',
+			'https://gitlab.com/group/addon.git',
+			'https://codeberg.org/someone/addon/',
+			'https://example.com/addons/thing.zip?download=1',
+			'https://legacy-wow.com/vanilla-addons/atlas/#comments'
+		];
+		for (const url of links) {
+			const [{ k }] = await db.sql('select public.link_key($1) as k', [url]);
+			assert.equal(linkKey(url), k, url);
+		}
 	});
 
 	test('a link that is already listed is refused, however it is spelled', async () => {
