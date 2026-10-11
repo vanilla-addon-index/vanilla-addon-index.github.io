@@ -1,14 +1,22 @@
 // Canonical form of a link, so different spellings of one repository compare equal.
-// public.link_key() in the versions migration has the same rules; keep the two in step.
+// public.link_key() in the folder links migration has the same rules, and a test compares
+// the two: change both or neither.
 export function linkKey(url: string): string {
 	const u = url
 		.trim()
 		.toLowerCase()
-		.replace(/^https?:\/\/(www\.)?/, '');
-	const github = /^github\.com\/[^/?#]+\/[^/?#]+/.exec(u);
-	if (github) return github[0].replace(/\.git$/, '');
+		.replace(/^https?:\/\/(www\.)?/, '')
+		.replace(/[?#].*$/, '');
+	const github = /^github\.com\/[^/]+\/[^/]+/.exec(u);
+	if (github) {
+		const repo = github[0].replace(/\.git$/, '');
+		// A link into a folder or file is that folder, since some repositories hold many
+		// addons. The branch it is read from is not part of it; a link to a branch alone
+		// is the repository.
+		const folder = /^\/(?:tree|blob)\/[^/]+\/(.*[^/])\/*$/.exec(u.slice(github[0].length))?.[1];
+		return folder ? `${repo}/${folder}` : repo;
+	}
 	return u
-		.replace(/[?#].*$/, '')
 		.replace(/\/-\/.*$/, '')
 		.replace(/\/+$/, '')
 		.replace(/\.git$/, '');

@@ -73,10 +73,11 @@ if (!githubToken) {
 	process.exit(0);
 }
 
+// A key is a repository, or a folder in one for a repository that holds many addons.
 const repos = (await db('nightly_repos'))
-	.map((key) => /^github\.com\/([\w.-]+)\/([\w.-]+)$/.exec(key))
+	.map((key) => /^github\.com\/([\w.-]+)\/([\w.-]+)(\/.+)?$/.exec(key))
 	.filter(Boolean)
-	.map(([key, owner, name]) => ({ key, owner, name }));
+	.map(([key, owner, name, folder = '']) => ({ key, owner, name, folder }));
 
 async function github(query) {
 	const res = await fetch('https://api.github.com/graphql', {
@@ -120,13 +121,16 @@ for (let i = 0; i < repos.length; i += BATCH) {
 			archived: repo?.isArchived ?? false,
 			fork_of: repo?.parent ? `github.com/${repo.parent.nameWithOwner.toLowerCase()}` : null,
 			// GitHub answers for an old address with the repository's current one.
-			canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}` : null,
+			canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}${r.folder}` : null,
 			interface: null,
 			missing: !repo
 		};
 		stats.push(row);
 
 		// An addon's .toc is at the top, or one folder down in a folder of the same name.
+		// For a folder of a collection the facts above are the whole repository's, and its
+		// .toc is not looked for: the key no longer has the folder's capital letters.
+		if (r.folder) return;
 		const entries = repo?.top?.entries ?? [];
 		const atTop = entries.filter((e) => e.type === 'blob' && /\.toc$/i.test(e.name)).map((e) => e.name);
 		const nested = entries
