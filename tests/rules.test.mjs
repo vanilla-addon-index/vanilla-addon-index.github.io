@@ -115,6 +115,20 @@ describe('posting and editing', () => {
 		await refused(() => call(alice, 'update public.addons set owner = $1 where id = $2', [bob.id, mine.id]));
 	});
 
+	test('the address comes from the name, whatever the poster sends', async () => {
+		const slugOf = async (fields) => (await post(db, alice, fields)).slug;
+		assert.equal(await slugOf(addon('Junk Entry', 'https://github.com/alice/junk', { slug: 'pfui' })), 'junk-entry');
+		assert.equal(await slugOf(addon('Big Wigs!', 'https://github.com/alice/bigwigs')), 'big-wigs');
+		// The same name again: told apart by who hosts it, then by a number.
+		assert.equal(await slugOf(addon('Big Wigs', 'https://github.com/Bob/BigWigs')), 'big-wigs-bob');
+		assert.equal(await slugOf(addon('Big Wigs', 'https://github.com/bob/other')), 'big-wigs-bob-2');
+		assert.equal(await slugOf(addon('Big Wigs', 'https://gitlab.com/carol/bigwigs')), 'big-wigs-gitlab-com');
+		// An address that still leads to an addon merged into another cannot be taken.
+		await db.sql(`update public.addons set aliases = '{old-name}' where slug = 'big-wigs'`);
+		assert.equal(await slugOf(addon('Old Name', 'https://github.com/dave/old')), 'old-name-dave');
+		await refused(() => call(alice, `update public.addons set slug = 'pfui' where slug = 'junk-entry'`));
+	});
+
 	test('a member needs a description of 15 characters; an admin does not', async () => {
 		await refused(() => post(db, alice, addon('Atlas', undefined, { description: 'Too short' })), /15 characters/);
 		await post(db, admin, addon('Atlas', undefined, { description: 'Maps' }));
@@ -593,7 +607,7 @@ describe('import queue', () => {
 		await queue(admin, [candidate('aDF', 'https://github.com/one/aDF'), candidate('aDF', 'https://github.com/two/aDF')]);
 		const ids = (await db.sql('select id from public.import_queue order by id')).map((r) => r.id);
 		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [ids]))[0].n, 2);
-		assert.deepEqual((await db.sql('select slug from public.addons order by slug')).map((r) => r.slug), ['adf', 'adf-2']);
+		assert.deepEqual((await db.sql('select slug from public.addons order by slug')).map((r) => r.slug), ['adf', 'adf-two']);
 	});
 
 	test('an entry that cannot be published stays in the queue with the reason', async () => {

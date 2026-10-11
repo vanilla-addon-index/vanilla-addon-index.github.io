@@ -10,6 +10,7 @@ create table public.profiles (
 
 create table public.addons (
 	id bigint generated always as identity primary key,
+	-- Made from the name by a trigger in slugs.sql; whatever the client sends is replaced.
 	slug text not null unique check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
 	name text not null check (char_length(name) between 2 and 60),
 	summary text not null default '' check (char_length(summary) <= 160),

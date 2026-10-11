@@ -380,9 +380,6 @@ create or replace function public.approve_imports(ids bigint[]) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
 	q public.import_queue;
-	base text;
-	new_slug text;
-	n integer;
 	made bigint;
 	published integer := 0;
 begin
@@ -392,20 +389,9 @@ begin
 
 	for q in select * from public.import_queue where id = any (ids) and status = 'pending' order by id loop
 		begin
-			base := btrim(regexp_replace(lower(q.name), '[^a-z0-9]+', '-', 'g'), '-');
-			if base = '' then
-				base := 'addon';
-			end if;
-			new_slug := base;
-			n := 1;
-			while exists (select 1 from public.addons a where a.slug = new_slug) loop
-				n := n + 1;
-				new_slug := base || '-' || n;
-			end loop;
-
-			insert into public.addons (slug, name, description, category, author, versions, images, source)
+			-- The address is made from the name by the database; see slugs.sql.
+			insert into public.addons (name, description, category, author, versions, images, source)
 			values (
-				new_slug,
 				left(q.name, 60),
 				btrim(q.description),
 				q.category,

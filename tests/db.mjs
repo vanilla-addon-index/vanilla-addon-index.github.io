@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
-const SQL_FILES = ['schema.sql', 'org-admins.sql', 'versions.sql', 'import.sql', 'moderation.sql', 'groups.sql'];
+const SQL_FILES = ['schema.sql', 'org-admins.sql', 'versions.sql', 'import.sql', 'moderation.sql', 'groups.sql', 'slugs.sql'];
 
 const SUPABASE_STAND_IN = `
 create role anon nologin;

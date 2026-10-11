@@ -1,7 +1,6 @@
 import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
 import { supabase } from './supabase';
-import { linkOwner } from './links';
 import type { Addon, AddonInput } from './types';
 
 const CACHE_KEY = 'addons-v2';
@@ -87,25 +86,15 @@ export const slugify = (name: string) =>
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '');
 
-const takenSlug = (error: { code?: string; message: string }) =>
-	error.code === '23505' && error.message.includes('slug');
-
 function explain(error: { code?: string; message: string }) {
-	if (takenSlug(error)) return 'An addon with this name already exists.';
 	if (error.code === '42501') return 'You are not allowed to do that.';
 	return error.message;
 }
 
 export async function createAddon(input: AddonInput) {
 	if (!supabase) throw new Error('Database is not configured.');
-	const insert = (slug: string) =>
-		supabase!.from('addons').insert({ ...input, slug }).select('*, profiles(username)').single();
-	const slug = slugify(input.name);
-	let { data, error } = await insert(slug);
-	// Another addon has this name: tell them apart by who hosts this one.
-	if (error && takenSlug(error)) {
-		({ data, error } = await insert(slugify(`${slug}-${linkOwner(input.versions[0].url)}`)));
-	}
+	// The database makes the address from the name; see supabase/slugs.sql.
+	const { data, error } = await supabase.from('addons').insert(input).select('*, profiles(username)').single();
 	if (error) throw new Error(explain(error));
 	const addon = toAddon(data as Row);
 	store.addons = [...store.addons, addon].sort((a, b) => a.name.localeCompare(b.name));
