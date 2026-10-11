@@ -60,6 +60,9 @@ $$;
 grant usage on schema public, auth, extensions to anon, authenticated, service_role;
 `;
 
+// What the nightly job signs its calls with; see the nightly token migration.
+export const NIGHTLY_TOKEN = 'the-nightly-token';
+
 let template;
 
 // Building the schema takes a second or two, so it is done once and copied for each test.
@@ -84,6 +87,7 @@ async function build() {
 export async function createDb() {
 	template ??= build();
 	const db = new PGlite({ loadDataDir: await template });
+	await db.query(`insert into public.nightly_token (hash) values (encode(sha256(convert_to($1, 'UTF8')), 'hex'))`, [NIGHTLY_TOKEN]);
 
 	// One call is one API request: its own transaction, as one caller.
 	async function request(role, claims, work) {
@@ -113,8 +117,16 @@ export async function createDb() {
 
 		as: (user, work) => request('authenticated', { sub: user.id, role: 'authenticated' }, work),
 		asVisitor: (work) => request('anon', { role: 'anon' }, work),
-		/** The nightly job, using the project's secret key. */
+		/** The project's secret key, which nothing of ours uses any more. */
 		asService: (work) => request('service_role', { role: 'service_role' }, work),
+
+		/** The nightly job adding wiki entries to the import queue. Returns how many were new. */
+		queueImports: async (items, token = NIGHTLY_TOKEN) =>
+			(
+				await request('anon', { role: 'anon' }, (q) =>
+					q('select public.queue_imports($1, $2::jsonb) as added', [token, JSON.stringify(items)])
+				)
+			)[0].added,
 
 		/**
 		 * Creates an account the way a first login does.

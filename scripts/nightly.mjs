@@ -4,53 +4,44 @@
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
 //
-// Needs SUPABASE_SECRET_KEY, and GITHUB_TOKEN for step 2. Without the secret key it does
-// nothing, so the deploy keeps working before the secret is configured.
-import { SUPABASE_URL } from '../src/lib/config.ts';
+// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 2. Without the token it does nothing, so
+// the deploy keeps working before the secret is configured.
+//
+// The job signs in like any visitor. The token is what lets it do these few things and
+// nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 
-const secret = process.env.SUPABASE_SECRET_KEY;
+const token = process.env.NIGHTLY_TOKEN;
 const githubToken = process.env.GITHUB_TOKEN;
-if (!secret || !SUPABASE_URL) {
-	console.log('SUPABASE_SECRET_KEY is not set, skipping the import job.');
+if (!token || !SUPABASE_URL) {
+	console.log('NIGHTLY_TOKEN is not set, skipping the import job.');
 	process.exit(0);
 }
 
-const PAGE = 1000;
 const BATCH = 50;
 // Each repository in the second pass asks for up to this many files.
 const TOC_BATCH = 25;
 const TOC_PATHS = 4;
 
-async function db(path, init = {}) {
-	const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-		...init,
+// Calls one of the job's three database functions. The token travels in the body.
+async function db(name, args = {}) {
+	const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+		method: 'POST',
 		headers: {
-			apikey: secret,
-			Authorization: `Bearer ${secret}`,
-			'Content-Type': 'application/json',
-			...init.headers
-		}
+			apikey: SUPABASE_ANON_KEY,
+			Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ token, ...args })
 	});
-	if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
-	// A write that asks for nothing back (Prefer: return=minimal) answers 201 with an empty body.
-	const body = await res.text();
-	return body ? JSON.parse(body) : null;
-}
-
-// The API returns at most 1000 rows per request.
-async function all(path) {
-	const rows = [];
-	for (let offset = 0; ; offset += PAGE) {
-		const page = await db(`${path}&limit=${PAGE}&offset=${offset}`);
-		rows.push(...page);
-		if (page.length < PAGE) return rows;
-	}
+	if (!res.ok) throw new Error(`${name}: ${res.status} ${await res.text()}`);
+	return res.json();
 }
 
 // 1. Wiki -> queue.
 const { candidates, revision } = await readWiki();
-const added = await db('rpc/queue_imports', { method: 'POST', body: JSON.stringify({ items: candidates }) });
+const added = await db('queue_imports', { items: candidates });
 console.log(`Wiki revision ${revision}: ${candidates.length} addons listed, ${added} new in the queue.`);
 
 // 2. GitHub -> repo_stats.
@@ -59,9 +50,7 @@ if (!githubToken) {
 	process.exit(0);
 }
 
-const queued = await all('import_queue?select=key&status=eq.pending&order=key');
-const live = await all('addons?select=link_keys&order=id');
-const repos = [...new Set([...queued.map((q) => q.key), ...live.flatMap((a) => a.link_keys)])]
+const repos = (await db('nightly_repos'))
 	.map((key) => /^github\.com\/([\w.-]+)\/([\w.-]+)$/.exec(key))
 	.filter(Boolean)
 	.map(([key, owner, name]) => ({ key, owner, name }));
@@ -110,8 +99,7 @@ for (let i = 0; i < repos.length; i += BATCH) {
 			// GitHub answers for an old address with the repository's current one.
 			canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}` : null,
 			interface: null,
-			missing: !repo,
-			checked_at: new Date().toISOString()
+			missing: !repo
 		};
 		stats.push(row);
 
@@ -152,13 +140,7 @@ for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 	});
 }
 
-for (let i = 0; i < stats.length; i += PAGE) {
-	await db('repo_stats', {
-		method: 'POST',
-		headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-		body: JSON.stringify(stats.slice(i, i + PAGE))
-	});
-}
+await db('store_repo_stats', { stats });
 console.log(
 	`Checked ${stats.length} repositories: ${stats.filter((s) => s.missing).length} no longer exist, ` +
 		`${stats.filter((s) => s.canonical && s.canonical !== s.key).length} have moved, ` +
