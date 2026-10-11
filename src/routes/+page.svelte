@@ -3,7 +3,8 @@
 	import { page } from '$app/state';
 	import { store } from '#lib/addons.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
-	import { CATEGORIES, SITE_NAME, SITE_TAGLINE } from '#lib/config.ts';
+	import { CATEGORIES } from '#lib/config.ts';
+	import { HOME_TITLE } from '#lib/seo.ts';
 	import { creditFor } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 
@@ -86,8 +87,7 @@
 </script>
 
 <svelte:head>
-	<title>{SITE_NAME}</title>
-	<meta name="description" content={SITE_TAGLINE} />
+	<title>{HOME_TITLE}</title>
 </svelte:head>
 
 {#snippet categoryButton(value: string, label: string, count: number)}

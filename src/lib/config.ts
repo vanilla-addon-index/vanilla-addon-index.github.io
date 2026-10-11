@@ -5,6 +5,8 @@ export const SUPABASE_ANON_KEY = 'sb_publishable_sqg1NI9Q496ChlukskE_GQ_FCQBtgvK
 
 export const SITE_NAME = 'Vanilla Addon Index';
 export const SITE_TAGLINE = 'Addons for the 1.12.1 client, in one place.';
+// Where the site is served, without a trailing slash.
+export const SITE_URL = 'https://vanilla-addon-index.github.io';
 export const REPO_URL = 'https://github.com/vanilla-addon-index/vanilla-addon-index.github.io';
 
 // Login providers. Each one must also be enabled in Supabase under Authentication -> Sign In / Providers.

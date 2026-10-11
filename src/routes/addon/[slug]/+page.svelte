@@ -17,6 +17,7 @@
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
 	import { linkOwner } from '#lib/links.ts';
+	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI, WIKI_PAGE } from '#lib/wiki.ts';
 
@@ -80,8 +81,7 @@
 </script>
 
 <svelte:head>
-	<title>{addon ? `${addon.name} · ${SITE_NAME}` : SITE_NAME}</title>
-	{#if addon?.summary}<meta name="description" content={addon.summary} />{/if}
+	<title>{addon ? addonTitle(addon) : SITE_NAME}</title>
 </svelte:head>
 
 {#snippet fact(label: string, value: string)}
