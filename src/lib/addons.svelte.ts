@@ -53,7 +53,8 @@ function writeCache() {
 }
 
 async function fetchSnapshot() {
-	const res = await fetch(asset('addons.json'));
+	// The file is written by the deploy and is not in the repository, hence the cast.
+	const res = await fetch(asset('addons.json' as Parameters<typeof asset>[0]));
 	if (!res.ok) throw new Error('snapshot unavailable');
 	return ((await res.json()) as Addon[]).map(withVersions);
 }

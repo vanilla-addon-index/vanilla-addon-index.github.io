@@ -4,7 +4,7 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 
 - **Site:** static SvelteKit app on GitHub Pages
 - **Accounts and data:** Supabase (free plan), protected by row-level security
-- **Snapshot:** `static/addons.json` is refreshed daily by the deploy workflow; visitors read the list from it, and it stands in if the database is unreachable
+- **Snapshot:** the deploy workflow writes the whole list to `addons.json` daily; visitors read the list from it, and it stands in if the database is unreachable. Its history is on the `snapshot` branch, so `main` only ever holds your own commits. `npm run snapshot` fetches one for a build on your computer
 - **Backup:** a full, encrypted copy of the database is taken every night and kept for 90 days; see [Backups](#backups)
 
 ## Setup

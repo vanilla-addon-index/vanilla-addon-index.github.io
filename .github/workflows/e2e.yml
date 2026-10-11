@@ -17,8 +17,6 @@ concurrency:
 
 jobs:
   e2e:
-    # The snapshot the deploy commits is data, not code.
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

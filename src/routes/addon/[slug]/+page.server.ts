@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readSnapshot } from '#lib/snapshot.server.ts';
 import type { EntryGenerator } from './$types';
 
 // Build time only: gives every addon in the daily snapshot a real page (HTTP 200)
@@ -6,6 +6,5 @@ import type { EntryGenerator } from './$types';
 export const prerender = 'auto';
 
 export const entries: EntryGenerator = () => {
-	const addons: { slug: string }[] = JSON.parse(readFileSync('static/addons.json', 'utf8'));
-	return addons.map(({ slug }) => ({ slug }));
+	return readSnapshot().map(({ slug }) => ({ slug }));
 };

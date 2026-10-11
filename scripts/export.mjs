@@ -1,6 +1,7 @@
-// Writes the full addon list to static/addons.json.
-// The daily run is a backup, the site's offline fallback, and the read that keeps
-// the free Supabase project from being paused for inactivity.
+// Writes the full addon list to static/addons.json, which the site is built with.
+// The daily run is a backup (kept on the "snapshot" branch by the deploy), the site's
+// offline fallback, and the read that keeps the free Supabase project from being paused
+// for inactivity.
 import { writeFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 

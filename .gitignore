@@ -23,6 +23,10 @@ desktop.ini
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
+# The daily snapshot of the addon list. The deploy keeps it on the "snapshot" branch;
+# `npm run snapshot` fetches one for this computer.
+/static/addons.json
+
 # Wiki import dry-run output
 /wiki-import
 

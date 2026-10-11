@@ -1,13 +1,13 @@
-import { readFileSync } from 'node:fs';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { SITE_NAME, SITE_URL } from '#lib/config.ts';
 import { HOME_DESCRIPTION, HOME_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
+import { readSnapshot } from '#lib/snapshot.server.ts';
 import type { Addon } from '#lib/types.ts';
 
 // Runs at build time only, while the pages are written out. The site draws itself in the
 // browser, so without this every page would reach search engines and link previews empty.
 
-const addons: Addon[] = JSON.parse(readFileSync('static/addons.json', 'utf8'));
+const addons = readSnapshot();
 const bySlug = new Map(addons.map((addon) => [addon.slug, addon]));
 
 // Pages that are of no use in search results.
