@@ -11,8 +11,9 @@
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
-	// Must match the check on addons.description in supabase/schema.sql.
+	// Must match the checks on addons.description in supabase/schema.sql and import.sql.
 	const DESCRIPTION_MIN = 15;
+	const DESCRIPTION_MAX = 5000;
 
 	const editSlug = page.url.searchParams.get('edit');
 	const editing = $derived(editSlug ? store.addons.find((a) => a.slug === editSlug) : undefined);
@@ -262,15 +263,20 @@
 				<div>
 					<div class="flex items-baseline justify-between">
 						<label class="field-label" for="description">Description</label>
-						<span class={['text-sm', descriptionLength >= DESCRIPTION_MIN ? 'text-accent' : 'text-muted']}>
-							{Math.min(descriptionLength, DESCRIPTION_MIN)} / {DESCRIPTION_MIN} characters{auth.isAdmin ? ' (optional for admins)' : ''}
+						<!-- What is still missing while it is too short, then how much room is left. -->
+						<span class="text-sm text-muted">
+							{#if descriptionLength < DESCRIPTION_MIN && !auth.isAdmin}
+								At least {DESCRIPTION_MIN} characters · {DESCRIPTION_MIN - descriptionLength} to go
+							{:else}
+								{descriptionLength} / {DESCRIPTION_MAX}{auth.isAdmin && !descriptionLength ? ' · optional for admins' : ''}
+							{/if}
 						</span>
 					</div>
 					<textarea
 						id="description"
 						class="input min-h-40"
 						required={!auth.isAdmin}
-						maxlength="5000"
+						maxlength={DESCRIPTION_MAX}
 						placeholder="What it does, main features, slash commands, installation notes…"
 						bind:value={form.description}
 					></textarea>
