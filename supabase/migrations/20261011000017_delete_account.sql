@@ -1,8 +1,9 @@
 -- An account can delete itself, from its own account page.
 --
 --   * Its login, email address, username and sessions are removed.
---   * The addons it posted stay in the list, belonging to nobody, unless it asks for them
---     to be deleted too. They describe other people's work, and the list is poorer without.
+--   * The addons it posted stay in the list, belonging to nobody. They describe other
+--     people's work, and the list is poorer without. Whoever wants theirs gone deletes
+--     them first, one by one like any other delete, where an admin can still restore them.
 --   * What it did stays in the admin log, as the work of "deleted account".
 --   * A banned account stays banned: a fingerprint of the login it was banned under is
 --     kept, and whoever logs in with that login again is banned from the start.
@@ -126,26 +127,7 @@ begin
 end;
 $$;
 
--- Replaces the version in the limits migration: taking your own addons with you when
--- you leave is not held to the hourly limit.
-create or replace function public.addons_delete_limit() returns trigger
-language plpgsql security definer set search_path = '' as $$
-begin
-	if auth.uid() is null or public.is_owner() or public.doing('rollback') or public.doing('leave') then
-		return old;
-	end if;
-	if (
-		select count(*)
-		from public.activity_log
-		where actor = auth.uid() and action = 'addon.delete' and at > now() - interval '1 hour'
-	) >= 20 then
-		raise exception 'You can delete at most 20 addons an hour. Try again later.' using errcode = 'LIMIT';
-	end if;
-	return old;
-end;
-$$;
-
-create or replace function public.delete_account(remove_addons boolean) returns void
+create or replace function public.delete_account() returns void
 language plpgsql security definer set search_path = '' as $$
 declare
 	me uuid := auth.uid();
@@ -164,12 +146,7 @@ begin
 
 	perform set_config('app.doing', 'leave', true);
 	select count(*) into posted from public.addons where owner = me;
-	if remove_addons then
-		-- Through the trash like any delete, where an admin can still restore them for 90 days.
-		delete from public.addons where owner = me;
-	else
-		update public.addons set owner = null where owner = me;
-	end if;
+	update public.addons set owner = null where owner = me;
 	update public.addons set approved_by = null where approved_by = me;
 
 	if was_banned then
@@ -189,7 +166,7 @@ begin
 		'deleted account',
 		'account.delete',
 		'their account',
-		jsonb_build_object('addons', posted, 'addons_deleted', remove_addons and posted > 0, 'banned', was_banned)
+		jsonb_build_object('addons', posted, 'banned', was_banned)
 	);
 
 	-- The profile, the logins and the sessions go with it.
@@ -197,5 +174,5 @@ begin
 end;
 $$;
 
-revoke all on function public.delete_account(boolean) from public, anon;
-grant execute on function public.delete_account(boolean) to authenticated;
+revoke all on function public.delete_account() from public, anon;
+grant execute on function public.delete_account() to authenticated;

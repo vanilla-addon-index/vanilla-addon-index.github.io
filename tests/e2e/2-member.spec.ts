@@ -99,7 +99,7 @@ test('a member deletes their own account, and what they posted stays in the list
 
 	await page.goto('/account');
 	await page.getByRole('button', { name: 'Delete account' }).click();
-	await expect(prompt(page).getByText('stays in the list, belonging to nobody')).toBeVisible();
+	await expect(prompt(page).getByText(/stays in the list, belonging to nobody/)).toBeVisible();
 	await prompt(page).getByRole('button', { name: 'Delete account' }).click();
 
 	// Logged out, on the home page, with the account gone for good.
