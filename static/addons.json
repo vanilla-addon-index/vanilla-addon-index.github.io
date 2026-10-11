@@ -56,5 +56,61 @@
 		"group_id": null,
 		"is_main": false,
 		"owner_name": ""
+	},
+	{
+		"id": 14,
+		"slug": "4hmhelper",
+		"name": "4HMHelper",
+		"summary": "",
+		"description": "Shows if you are in the safe zone, stacks you have and Zeliek chain range (/4hm).",
+		"category": "Boss Mods",
+		"author": "niclaseriksen",
+		"owner": "f0d18b34-3861-49be-9892-b5851f5fa933",
+		"created_at": "2026-10-11T09:36:12.984833+00:00",
+		"updated_at": "2026-10-11T09:36:13.148384+00:00",
+		"images": [],
+		"versions": [
+			{
+				"url": "https://github.com/NiclasEriksen/4HMHelper",
+				"note": ""
+			}
+		],
+		"repo_url": "https://github.com/NiclasEriksen/4HMHelper",
+		"link_keys": [
+			"github.com/niclaseriksen/4hmhelper"
+		],
+		"aliases": [],
+		"source": "Turtle WoW Wiki",
+		"group_id": null,
+		"is_main": false,
+		"owner_name": ""
+	},
+	{
+		"id": 15,
+		"slug": "abindings",
+		"name": "aBindings",
+		"summary": "",
+		"description": "Direct macrotext-to-key bindings",
+		"category": "Action Bars",
+		"author": "",
+		"owner": "f0d18b34-3861-49be-9892-b5851f5fa933",
+		"created_at": "2026-10-11T10:08:18.776444+00:00",
+		"updated_at": "2026-10-11T10:08:30.398088+00:00",
+		"images": [],
+		"versions": [
+			{
+				"url": "https://gitlab.com/aead/aBindings",
+				"note": ""
+			}
+		],
+		"repo_url": "https://gitlab.com/aead/aBindings",
+		"link_keys": [
+			"gitlab.com/aead/abindings"
+		],
+		"aliases": [],
+		"source": "Turtle WoW Wiki",
+		"group_id": null,
+		"is_main": false,
+		"owner_name": ""
 	}
 ]
