@@ -13,6 +13,7 @@ export const REPO_URL = 'https://github.com/vanilla-addon-index/vanilla-addon-in
 export const OAUTH_PROVIDERS = ['discord', 'github'] as const;
 export const PROVIDER_NAMES: Record<string, string> = { discord: 'Discord', github: 'GitHub' };
 
+// Must match the check on addons.category in supabase/validation.sql; a test compares the two.
 export const CATEGORIES = [
 	'Action Bars',
 	'Auction & Economy',

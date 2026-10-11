@@ -1,8 +1,6 @@
 export interface Version {
 	url: string;
 	note: string;
-	// Set when an admin merged this version in from another user's entry.
-	added_by?: string;
 }
 
 export interface Addon {

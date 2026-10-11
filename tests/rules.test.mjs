@@ -5,6 +5,7 @@
 // Every test gets its own throwaway database with dummy accounts; see db.mjs.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { CATEGORIES } from '../src/lib/config.ts';
 import { addon, createDb, post } from './db.mjs';
 
 let db;
@@ -142,6 +143,20 @@ describe('posting and editing', () => {
 		await post(db, alice, { ...rest, category });
 	});
 
+	test('the category is one from the site\'s list, for admins too', async () => {
+		await refused(() => post(db, alice, addon('Atlas', undefined, { category: 'Cheats' })));
+		await refused(() => post(db, admin, addon('Atlas', undefined, { category: 'x'.repeat(5000) })));
+		// Every category the site offers is one the database accepts.
+		for (const [i, category] of CATEGORIES.entries()) await post(db, admin, addon(`Addon${i}`, undefined, { category }));
+	});
+
+	test('the name is tidied, and cannot be blank', async () => {
+		const row = await post(db, alice, addon('Atlas', undefined, { name: '  Big\n\tWigs  ', author: ' Some\nOne ' }));
+		assert.deepEqual([row.name, row.author], ['Big Wigs', 'Some One']);
+		await refused(() => post(db, alice, addon('Blank', undefined, { name: '      ' })));
+		await refused(() => call(alice, `update public.addons set name = E' \n ' where id = $1`, [row.id]));
+	});
+
 	test('a member can post at most 10 addons a day; an admin has no limit', async () => {
 		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Addon${i}`));
 		await refused(() => post(db, alice, addon('OneTooMany')), /at most 10 addons a day/);
@@ -164,6 +179,23 @@ describe('links and versions', () => {
 			() => post(db, bob, addon('pfQuest copy', 'https://github.com/Shagu/pfquest.git')),
 			/already listed under "pfQuest"/
 		);
+	});
+
+	test('a link keeps its address and note only, and links and screenshots have a length limit', async () => {
+		const versions = JSON.stringify([
+			{ url: 'https://github.com/a/atlas', note: 'main', added_by: 'owner', junk: 'x'.repeat(10000) },
+			{ url: 'https://gitlab.com/a/atlas' }
+		]);
+		const row = await post(db, alice, addon('Atlas', undefined, { versions }));
+		assert.deepEqual(row.versions, [
+			{ url: 'https://github.com/a/atlas', note: 'main' },
+			{ url: 'https://gitlab.com/a/atlas', note: '' }
+		]);
+
+		const long = (length) => `https://example.com/${'a'.repeat(length)}`;
+		await refused(() => post(db, alice, addon('Long', long(300))), /at most 300/);
+		await refused(() => post(db, alice, addon('Shots', undefined, { images: `{${long(500)}}` })), /at most 500/);
+		await post(db, alice, addon('Shots', undefined, { images: `{${long(200)}}` }));
 	});
 
 	test('the first version is the main link', async () => {
