@@ -8,6 +8,7 @@
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
 	import { linkKey } from '#lib/links.ts';
+	import { loginHref } from '#lib/return.ts';
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
@@ -196,7 +197,7 @@
 	<div class="panel mx-auto mt-8 max-w-sm p-5 text-center">
 		<p class="text-muted">{blocked}</p>
 		{#if auth.ready && !auth.session}
-			<a href={resolve('/login')} class="btn btn-primary mt-4">Log in</a>
+			<a href={loginHref(page.url)} class="btn btn-primary mt-4">Log in</a>
 		{/if}
 	</div>
 {:else}

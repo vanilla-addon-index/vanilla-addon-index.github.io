@@ -1,13 +1,15 @@
 <script lang="ts">
 	import '../app.css';
 	import logo from '#lib/assets/logo.png';
-	import { onNavigate } from '$app/navigation';
+	import { goto, onNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { loadAddons, readCache, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
 	import { countReports, reports } from '#lib/reports.svelte.ts';
+	import { loginHref, takeReturn } from '#lib/return.ts';
 	import { configured } from '#lib/supabase.ts';
 	import type { LayoutProps } from './$types';
 
@@ -22,6 +24,15 @@
 	$effect(() => {
 		void userId;
 		if (auth.known) loadAddons();
+	});
+
+	// GitHub and Discord send everyone back to the front page after a login. Whoever
+	// arrives there newly logged in is taken on to the page they logged in from. The login
+	// page does the same itself, for a login that never leaves the site.
+	$effect(() => {
+		if (!userId || page.url.pathname === resolve('/login')) return;
+		const next = takeReturn();
+		if (next) goto(next, { replaceState: true });
 	});
 
 	// Admins see how many reports wait, next to "Admin", on every page.
@@ -75,7 +86,7 @@
 				{:else if auth.session}
 					<a href={resolve('/account')} class="btn">Account</a>
 				{:else}
-					<a href={resolve('/login')} class="btn">Log in</a>
+					<a href={loginHref(page.url)} class="btn">Log in</a>
 				{/if}
 			</nav>
 		</div>

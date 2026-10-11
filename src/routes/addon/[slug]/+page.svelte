@@ -21,6 +21,7 @@
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
 	import { linkOwner } from '#lib/links.ts';
+	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI, WIKI_PAGE } from '#lib/wiki.ts';
@@ -314,7 +315,7 @@
 							Report this addon
 						</button>
 					{:else}
-						<a href={resolve('/login')} class="text-muted hover:text-accent hover:underline">Log in to report this addon</a>
+						<a href={loginHref(page.url)} class="text-muted hover:text-accent hover:underline">Log in to report this addon</a>
 					{/if}
 				</p>
 			{/if}

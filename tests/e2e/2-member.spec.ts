@@ -26,6 +26,39 @@ test('a member posts an addon, edits it and deletes it', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'Addon not found' })).toBeVisible();
 });
 
+test('logging in brings you back to the page you logged in from', async ({ page }) => {
+	const member = page.getByRole('button', { name: 'Log in as a member', exact: true });
+
+	// From an addon's page, to report it.
+	await page.goto('/addon/raidhelper');
+	await page.getByRole('link', { name: 'Log in to report this addon' }).click();
+	await expect(page).toHaveURL('/login?next=%2Faddon%2Fraidhelper');
+	await member.click();
+	await expect(page).toHaveURL('/addon/raidhelper');
+	await expect(page.getByRole('button', { name: 'Report this addon' })).toBeVisible();
+
+	// From the submit page, keeping what it was asked to edit.
+	await page.goto('/account');
+	await page.getByRole('button', { name: 'Log out' }).click();
+	await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+	await page.goto('/submit?edit=raidhelper');
+	await page.getByRole('main').getByRole('link', { name: 'Log in' }).click();
+	await member.click();
+	await expect(page).toHaveURL('/submit?edit=raidhelper');
+});
+
+test('a login link cannot send you to another site', async ({ page }) => {
+	for (const next of ['https://example.com/', '//example.com/', '/\\example.com', '/login?next=/login']) {
+		await page.goto(`/login?next=${encodeURIComponent(next)}`);
+		await page.getByRole('button', { name: 'Log in as a member', exact: true }).click();
+		await expect(page.getByRole('navigation').getByRole('link', { name: 'member', exact: true })).toBeVisible();
+		await expect(page).toHaveURL('/');
+		await page.goto('/account');
+		await page.getByRole('button', { name: 'Log out' }).click();
+		await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+	}
+});
+
 test('the form refuses a description that is too short, and a link that is already listed', async ({ page }) => {
 	await loginAs(page, 'member');
 	await page.goto('/submit');
