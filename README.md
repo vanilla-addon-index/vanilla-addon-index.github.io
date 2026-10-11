@@ -29,6 +29,20 @@ npm run dev
 
 `npm test` checks what each kind of account may and may not do: posting, editing, merging, bans, the log, the trash and the import queue. It applies the files in `supabase/` to a throwaway Postgres running inside Node, with dummy owner, admin and member accounts, and never touches the hosted database.
 
+### Browser tests and a local copy of the backend
+
+`npm run test:e2e` drives the real site in a real browser as a visitor, a member, an admin and the owner: posting, the import review, reports, limits, and undoing things from the log. It needs Docker running. It starts a copy of the whole backend on this computer (Postgres, the API and the login service), applies the files in `supabase/`, fills it with test addons, a full import queue and one account of each kind, and runs the tests in `tests/e2e/` against it. The hosted database is never involved.
+
+The same copy is there for trying things out by hand:
+
+```sh
+npm run local       # start it, or wipe and refill it
+npm run dev:local   # the site against it, on http://localhost:5174
+npm run local:stop  # stop it
+```
+
+On that address the login page offers the test accounts, one click each: the owner, two admins, two members and a banned member. `npm run dev` still uses the hosted database, where everything you do is real.
+
 ## Wiki import
 
 `node scripts/wiki-import.mjs` reads the addon list from the Turtle WoW wiki and writes a report and the parsed candidates to `wiki-import/`. It is a dry run and changes nothing in the database.

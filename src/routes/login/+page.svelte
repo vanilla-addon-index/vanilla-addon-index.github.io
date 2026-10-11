@@ -19,6 +19,10 @@
 		});
 		if (e) error = e.message;
 	}
+
+	// True only under `npm run dev:local`. Written out in full so that the build of the real
+	// site can tell it is never true there, and leaves the test accounts out altogether.
+	const local = import.meta.env.MODE === 'localdb';
 </script>
 
 <svelte:head>
@@ -37,11 +41,17 @@
 			you log in.
 		</p>
 		<div class="mt-5 space-y-2">
-			{#each OAUTH_PROVIDERS as provider (provider)}
-				<button class="btn w-full py-2" onclick={() => login(provider)}>
-					Continue with {PROVIDER_NAMES[provider]}
-				</button>
-			{/each}
+			{#if local}
+				{#await import('#lib/components/LocalLogin.svelte') then { default: LocalLogin }}
+					<LocalLogin onerror={(message) => (error = message)} />
+				{/await}
+			{:else}
+				{#each OAUTH_PROVIDERS as provider (provider)}
+					<button class="btn w-full py-2" onclick={() => login(provider)}>
+						Continue with {PROVIDER_NAMES[provider]}
+					</button>
+				{/each}
+			{/if}
 		</div>
 		{#if error}<p class="mt-4 text-danger">{error}</p>{/if}
 		<p class="mt-5 text-sm text-muted">

@@ -1,0 +1,93 @@
+import { expect, test } from '@playwright/test';
+import { confirm, loginAs, postAddon, prompt, unique } from './helpers.ts';
+
+// An ordinary account: posts, edits and deletes its own addons, reports others, and gets
+// no further.
+
+test('a member posts an addon, edits it and deletes it', async ({ page }) => {
+	await loginAs(page, 'member');
+	const name = unique('Posted');
+	const address = await postAddon(page, name);
+
+	await page.goto('/account');
+	await expect(page.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
+
+	await page.goto(address);
+	await page.getByRole('link', { name: 'Edit' }).click();
+	await page.getByLabel('Addon author').fill('Someone Else');
+	await page.getByRole('button', { name: 'Save changes' }).click();
+	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+	await expect(page.getByText('Someone Else')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Delete' }).click();
+	await confirm(page, 'Delete');
+	await expect(page).toHaveURL('/');
+	await page.goto(address);
+	await expect(page.getByRole('heading', { name: 'Addon not found' })).toBeVisible();
+});
+
+test('the form refuses a description that is too short, and a link that is already listed', async ({ page }) => {
+	await loginAs(page, 'member');
+	await page.goto('/submit');
+	await page.getByLabel('Name', { exact: true }).fill(unique('Short'));
+	await page.getByLabel('Link to the addon').fill('https://gitlab.com/e2e/short');
+	await page.getByLabel('Category', { exact: true }).selectOption('Combat');
+	await page.getByLabel('Description', { exact: true }).fill('Too short');
+	await expect(page.getByText(/At least 15 characters · 6 to go/)).toBeVisible();
+	await page.getByRole('button', { name: 'Post addon' }).click();
+	await expect(page.getByText('The description needs at least 15 characters.')).toBeVisible();
+
+	// The link of an addon that is already live, spelled differently.
+	await page.getByLabel('Link to the addon').fill('https://github.com/Member/member-bags.git');
+	await expect(page.getByText('This link is already listed as')).toBeVisible();
+});
+
+test('a member cannot edit what someone else posted, or reach the admin pages', async ({ page }) => {
+	await loginAs(page, 'member');
+	await expect(page.getByRole('link', { name: 'Admin' })).toHaveCount(0);
+
+	await page.goto('/addon/second-member-chat');
+	await expect(page.getByRole('heading', { level: 1, name: 'Second Member Chat' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+
+	await page.goto('/submit?edit=second-member-chat');
+	await expect(page.getByText('Only the person who posted this addon can edit it.')).toBeVisible();
+	await page.goto('/admin/log');
+	await expect(page.getByText('This part of the site is for admins.')).toBeVisible();
+});
+
+test('the eleventh edit within an hour is refused with a pop-up', async ({ page }) => {
+	await loginAs(page, 'member2');
+	const address = await postAddon(page, unique('Edited'));
+	const slug = address.split('/').pop();
+	for (let i = 1; i <= 11; i++) {
+		await page.goto(`/submit?edit=${slug}`);
+		await page.getByLabel('Addon author').fill(`Draft ${i}`);
+		await page.getByRole('button', { name: 'Save changes' }).click();
+		if (i <= 10) await expect(page.getByText(`Draft ${i}`, { exact: true })).toBeVisible();
+	}
+	await expect(prompt(page).getByRole('heading', { name: 'Limit reached' })).toBeVisible();
+	await expect(prompt(page).getByText('You can make at most 10 edits an hour. Try again later.')).toBeVisible();
+	await confirm(page, 'OK');
+});
+
+test('a member reports an addon', async ({ page }) => {
+	await loginAs(page, 'member');
+	await page.goto('/addon/questhelper');
+	await page.getByRole('button', { name: 'Report this addon' }).click();
+	await prompt(page).getByLabel('What is wrong with it?').selectOption('harmful');
+	await prompt(page).getByLabel('Details').fill('Reported by a browser test.');
+	await prompt(page).getByRole('button', { name: 'Send report' }).click();
+	await expect(prompt(page).getByText('Thank you. An admin will take a look.')).toBeVisible();
+});
+
+test('a banned member can browse but not post', async ({ page }) => {
+	await loginAs(page, 'banned');
+	await expect(page.getByText('Your account is suspended. You can browse, but not post or edit.')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Submit addon' })).toHaveCount(0);
+	await page.goto('/addon/banned-tooltip');
+	await expect(page.getByRole('heading', { level: 1, name: 'Banned Tooltip' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Report this addon' })).toHaveCount(0);
+});

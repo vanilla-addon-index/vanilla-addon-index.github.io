@@ -1,5 +1,6 @@
 import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
+import { LOCAL } from './config';
 import { tell } from './confirm.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
@@ -95,6 +96,7 @@ const MAX_CHANGED = 400;
  */
 async function fetchLive() {
 	if (!supabase) throw new Error('not configured');
+	if (LOCAL) return fetchAll();
 	const [snapshot, outline] = await Promise.all([
 		fetchSnapshot().catch(() => [] as Addon[]),
 		fetchPaged<Outline>('id, updated_at, group_id, is_main, profiles(username)')
@@ -128,7 +130,7 @@ const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
  * brought up to date by the database. Each source stands in for the other when it fails.
  */
 export async function loadAddons() {
-	const live = Boolean(auth.session);
+	const live = LOCAL || Boolean(auth.session);
 	try {
 		store.addons = await (live ? fetchLive() : fetchSnapshot());
 		store.stale = false;

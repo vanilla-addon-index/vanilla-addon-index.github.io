@@ -1,7 +1,16 @@
 // Both values are public by design (they ship in the browser bundle).
 // Access control is enforced by row-level security, see supabase/schema.sql.
-export const SUPABASE_URL = 'https://mefmmugajnbbotioplfw.supabase.co';
-export const SUPABASE_ANON_KEY = 'sb_publishable_sqg1NI9Q496ChlukskE_GQ_FCQBtgvK';
+//
+// `npm run dev:local` points the site at the copy of the backend running on this computer
+// instead (see scripts/local.mjs), through these two settings in .env.localdb.
+const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+export const SUPABASE_URL = env.VITE_SUPABASE_URL ?? 'https://mefmmugajnbbotioplfw.supabase.co';
+export const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY ?? 'sb_publishable_sqg1NI9Q496ChlukskE_GQ_FCQBtgvK';
+
+// True when the site runs against that local copy. The login page then offers the test
+// accounts, one click each, and the list is read from the database for everyone: the daily
+// snapshot is of the real site.
+export const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(SUPABASE_URL);
 
 export const SITE_NAME = 'Vanilla Addon Index';
 export const SITE_TAGLINE = 'Addons for the 1.12.1 client, in one place.';

@@ -1,0 +1,51 @@
+import { expect, test } from '@playwright/test';
+
+// Someone who is not logged in: can read everything public, and nothing else.
+
+test('the list loads, and search and categories narrow it', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByText(/^\d+ of \d+ addons$/)).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+
+	await page.getByLabel('Search addons').fill('member bags');
+	await expect(page.getByRole('link', { name: /^Member Bags/ })).toBeVisible();
+	await expect(page.getByText(/^1 of \d+ addons$/)).toBeVisible();
+	// The search is in the address, so it can be shared.
+	await expect(page).toHaveURL(/q=member\+bags/);
+
+	await page.getByLabel('Search addons').fill('');
+	await page.getByRole('button', { name: /^Tooltip/ }).click();
+	await expect(page.getByRole('link', { name: /^Banned Tooltip/ })).toBeVisible();
+	await expect(page).toHaveURL(/cat=Tooltip/);
+});
+
+test('an addon page shows the addon, its group and no admin controls', async ({ page }) => {
+	await page.goto('/addon/raidhelper');
+	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'RaidTracker' })).toBeVisible();
+
+	await expect(page.getByRole('link', { name: 'Log in to report this addon' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Remove from group' })).toHaveCount(0);
+	// Who posted an entry is for admins.
+	await expect(page.getByText('Posted by')).toHaveCount(0);
+});
+
+test('an address that does not exist says so', async ({ page }) => {
+	await page.goto('/addon/no-such-addon');
+	await expect(page.getByRole('heading', { name: 'Addon not found' })).toBeVisible();
+});
+
+test('posting needs a login, and the admin pages are closed', async ({ page }) => {
+	await page.goto('/submit');
+	await expect(page.getByText('You need to log in to post or edit addons.')).toBeVisible();
+
+	for (const tab of ['import', 'reports', 'groups', 'log', 'trash', 'users']) {
+		await page.goto(`/admin/${tab}`);
+		await expect(page.getByText('This part of the site is for admins.')).toBeVisible();
+	}
+	await page.goto('/account');
+	await expect(page.getByText('You are not logged in.')).toBeVisible();
+});

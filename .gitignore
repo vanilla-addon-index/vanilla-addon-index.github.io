@@ -41,6 +41,15 @@ npm-debug.log*
 .stignore
 *.sync-conflict-*
 
-# Supabase CLI local state
+# Local copy of the backend (scripts/local.mjs). The database itself lives in Docker,
+# outside this folder; these are the command-line tool's own leftovers. The address and
+# key of the local copy are in .env.localdb, covered by .env.* above.
 supabase/.temp
 supabase/.branches
+supabase/snippets
+
+# Browser test output: traces, screenshots and reports
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
