@@ -1,0 +1,46 @@
+name: Nightly
+
+# Once a day: reads the wiki into the import queue and asks GitHub about every repository,
+# then deploys, which refreshes the snapshot and the pre-rendered addon pages. The daily
+# read of the database is also what keeps the free Supabase project from being paused.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: Import from the wiki
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # The script uses nothing that needs installing.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Import from the wiki
+        # Skips itself until the SUPABASE_SECRET_KEY secret exists. This is the only job
+        # that is given that key.
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/nightly.mjs
+
+  deploy:
+    # The site goes out even when the import failed; the failed job still shows.
+    needs: import
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

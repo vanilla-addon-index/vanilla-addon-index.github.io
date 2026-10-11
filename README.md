@@ -17,6 +17,17 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 6. **Owner:** after your first login, run `update public.profiles set is_owner = true where username = 'your-username';`. The owner can suspend admins and empty the trash.
 7. **Admins:** anyone who is a *public* member of the GitHub organization and logs in with GitHub can edit or delete any addon. To make someone else an admin, tick `is_admin` on their row in Table Editor → `profiles`.
 
+## How a change goes out
+
+`main` is protected: a change reaches it through a pull request, and only once both jobs of the [CI workflow](.github/workflows/ci.yml) have passed.
+
+| Workflow | Runs | Does |
+|---|---|---|
+| [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
+| [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | rule tests and type check again, pending migrations, a fresh snapshot, then builds and publishes the site |
+| [Nightly](.github/workflows/nightly.yml) | once a day | reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
+| [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
+
 ## Changing the database
 
 The database is described by the numbered files in [supabase/migrations](supabase/migrations). Each one is applied once, in order, and Supabase remembers which have run, so nothing is pasted into the SQL editor by hand and no file is ever run twice.
