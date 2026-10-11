@@ -9,12 +9,22 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 	process.exit(0);
 }
 
-const res = await fetch(`${SUPABASE_URL}/rest/v1/addons?select=*,profiles(username)&order=name`, {
-	headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
-});
-if (!res.ok) throw new Error(`Export failed: ${res.status} ${await res.text()}`);
+// The API returns at most 1000 rows per request.
+const PAGE = 1000;
+const rows = [];
+for (let offset = 0; ; offset += PAGE) {
+	const res = await fetch(
+		// Names repeat; the id keeps the order fixed from one page to the next.
+		`${SUPABASE_URL}/rest/v1/addons?select=*,profiles(username)&order=name,id&limit=${PAGE}&offset=${offset}`,
+		{ headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+	);
+	if (!res.ok) throw new Error(`Export failed: ${res.status} ${await res.text()}`);
+	const page = await res.json();
+	rows.push(...page);
+	if (page.length < PAGE) break;
+}
 
-const addons = (await res.json()).map(({ profiles, ...row }) => ({
+const addons = rows.map(({ profiles, ...row }) => ({
 	...row,
 	owner_name: profiles?.username ?? ''
 }));

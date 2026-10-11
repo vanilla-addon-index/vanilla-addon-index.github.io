@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import {
 		deleteAddon,
+		fetchAddon,
 		findAddon,
 		groupAddons,
 		groupOf,
@@ -32,6 +33,15 @@
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 
 	let error = $state('');
+
+	// An addon the list does not have may have been posted since the daily snapshot was
+	// taken: the database is asked for just that one before the page says "not found".
+	let lookedUp = $state('');
+	$effect(() => {
+		const slug = page.params.slug;
+		if (!slug || found || leaving || !store.loaded || lookedUp === slug) return;
+		fetchAddon(slug).finally(() => (lookedUp = slug));
+	});
 
 	// The other versions of this addon, when it is in a group. Main version first.
 	const group = $derived(addon ? groupOf(addon) : []);
@@ -293,7 +303,7 @@
 			{#if error}<p class="text-danger">{error}</p>{/if}
 		</aside>
 	</article>
-{:else if store.loaded}
+{:else if store.loaded && lookedUp === page.params.slug}
 	<div class="py-16 text-center">
 		<h1 class="text-2xl font-bold">Addon not found</h1>
 		<p class="mt-2 text-muted">It may have been renamed or removed.</p>

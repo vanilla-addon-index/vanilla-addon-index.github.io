@@ -8,7 +8,7 @@ const CACHE_KEY = 'addons-v2';
 export const store = $state({
 	addons: [] as Addon[],
 	loaded: false,
-	// True when the list came from the daily snapshot because the database was unreachable.
+	// True when someone logged in got the daily snapshot because the database was unreachable.
 	stale: false
 });
 
@@ -29,7 +29,8 @@ const toAddon = ({ profiles, ...row }: Row): Addon => ({
 	owner_name: profiles?.username ?? ''
 });
 
-function readCache() {
+/** Shows the list saved by the last visit, so the first paint does not wait for the network. */
+export function readCache() {
 	try {
 		const cached = localStorage.getItem(CACHE_KEY);
 		if (cached) {
@@ -55,28 +56,107 @@ async function fetchSnapshot() {
 	return ((await res.json()) as Addon[]).map(withVersions);
 }
 
-export async function loadAddons() {
-	// The saved copy is only for the very first paint; later calls are refreshes.
-	if (!store.loaded) readCache();
-	try {
-		if (!supabase) throw new Error('not configured');
+const PAGE = 1000;
+
+// The API returns at most 1000 rows per request.
+async function fetchPaged<T>(columns: string) {
+	if (!supabase) throw new Error('not configured');
+	const rows: T[] = [];
+	for (let from = 0; ; from += PAGE) {
+		const { data, error } = await supabase
+			.from('addons')
+			.select(columns)
+			// Names repeat; the id keeps the order fixed from one page to the next.
+			.order('name')
+			.order('id')
+			.range(from, from + PAGE - 1);
+		if (error) throw error;
+		rows.push(...(data as T[]));
+		if (data.length < PAGE) return rows;
+	}
+}
+
+const fetchAll = async () => (await fetchPaged<Row>('*, profiles(username)')).map(toAddon);
+
+// What tells a snapshot row apart from the row as it is now, without sending its text.
+// Grouping leaves "updated_at" alone, and the snapshot does not know who posted what.
+type Outline = Pick<Addon, 'id' | 'updated_at' | 'group_id' | 'is_main'> & { profiles: { username: string } | null };
+
+// Ids per request when fetching changed rows, and how many changed rows are still worth
+// fetching one by one rather than reading the whole table.
+const CHUNK = 200;
+const MAX_CHANGED = 400;
+
+/**
+ * The list as it is now, for the price of an outline: the text of every addon comes from
+ * the daily snapshot and from earlier loads, and the database sends in full only the ones
+ * posted or edited since.
+ */
+async function fetchLive() {
+	if (!supabase) throw new Error('not configured');
+	const [snapshot, outline] = await Promise.all([
+		fetchSnapshot().catch(() => [] as Addon[]),
+		fetchPaged<Outline>('id, updated_at, group_id, is_main, profiles(username)')
+	]);
+	// What this browser already holds counts too: rows loaded earlier in the visit or saved
+	// by the last one. An admin approving imports by the hundred fetches each row once.
+	const rows = new Map([...snapshot, ...store.addons].map((a) => [a.id, a]));
+	const changed = outline.filter((o) => rows.get(o.id)?.updated_at !== o.updated_at).map((o) => o.id);
+	if (changed.length > MAX_CHANGED) return fetchAll();
+
+	for (let from = 0; from < changed.length; from += CHUNK) {
 		const { data, error } = await supabase
 			.from('addons')
 			.select('*, profiles(username)')
-			.order('name');
+			.in('id', changed.slice(from, from + CHUNK));
 		if (error) throw error;
-		store.addons = (data as Row[]).map(toAddon);
+		for (const row of data as Row[]) rows.set(row.id, toAddon(row));
+	}
+	// The outline decides what exists and in which order; a deleted addon is not in it.
+	return outline.flatMap(({ id, group_id, is_main, profiles }) => {
+		const row = rows.get(id);
+		return row ? [{ ...row, group_id, is_main, owner_name: profiles?.username ?? '' }] : [];
+	});
+}
+
+const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
+
+/**
+ * Visitors read the daily snapshot, a static file that costs the database nothing. Someone
+ * logged in posts, edits and reviews, so they get the list as it is now: the snapshot,
+ * brought up to date by the database. Each source stands in for the other when it fails.
+ */
+export async function loadAddons() {
+	const live = Boolean(auth.session);
+	try {
+		store.addons = await (live ? fetchLive() : fetchSnapshot());
 		store.stale = false;
 	} catch {
 		try {
-			store.addons = await fetchSnapshot();
-			store.stale = true;
+			store.addons = await (live ? fetchSnapshot() : fetchAll());
+			store.stale = live;
 		} catch {
 			// Keep whatever the cache gave us.
 		}
 	}
 	store.loaded = true;
 	writeCache();
+}
+
+/**
+ * Asks the database for one addon by its address. The snapshot is up to a day old, so a
+ * link to an addon posted since then would otherwise lead visitors to "not found".
+ */
+export async function fetchAddon(slug: string) {
+	if (!supabase || !/^[a-z0-9-]+$/.test(slug)) return;
+	const { data } = await supabase
+		.from('addons')
+		.select('*, profiles(username)')
+		.or(`slug.eq.${slug},aliases.cs.{${slug}}`)
+		.limit(1);
+	const row = (data as Row[] | null)?.[0];
+	if (!row) return;
+	store.addons = [...store.addons.filter((a) => a.id !== row.id), toAddon(row)].sort(byName);
 }
 
 export const slugify = (name: string) =>
@@ -97,7 +177,7 @@ export async function createAddon(input: AddonInput) {
 	const { data, error } = await supabase.from('addons').insert(input).select('*, profiles(username)').single();
 	if (error) throw new Error(explain(error));
 	const addon = toAddon(data as Row);
-	store.addons = [...store.addons, addon].sort((a, b) => a.name.localeCompare(b.name));
+	store.addons = [...store.addons, addon].sort(byName);
 	writeCache();
 	return addon;
 }

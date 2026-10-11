@@ -11,6 +11,8 @@ export const auth = $state({
 	isOwner: false,
 	// A banned account stays logged in but cannot post or edit.
 	banned: false,
+	// False until it is known whether anyone is logged in at all.
+	known: false,
 	ready: false
 });
 
@@ -39,6 +41,7 @@ function writeCache(profile: Profile | null) {
 function applySession(session: Session | null) {
 	const cached = session && readCache(session.user.id);
 	auth.session = session;
+	auth.known = true;
 	auth.username = cached?.username ?? '';
 	auth.isAdmin = cached?.isAdmin ?? false;
 	auth.isOwner = cached?.isOwner ?? false;
@@ -78,6 +81,7 @@ async function refreshProfile(session: Session) {
 
 export function initAuth() {
 	if (!supabase) {
+		auth.known = true;
 		auth.ready = true;
 		return;
 	}

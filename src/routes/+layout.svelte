@@ -3,7 +3,7 @@
 	import logo from '#lib/assets/logo.png';
 	import { onNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { loadAddons, store } from '#lib/addons.svelte.ts';
+	import { loadAddons, readCache, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
@@ -13,7 +13,15 @@
 	let { children }: LayoutProps = $props();
 
 	initAuth();
-	loadAddons();
+	readCache();
+
+	// The list comes from the daily snapshot for visitors and from the database for anyone
+	// logged in, so it is loaded once that is known, and again on logging in or out.
+	const userId = $derived(auth.session?.user.id);
+	$effect(() => {
+		void userId;
+		if (auth.known) loadAddons();
+	});
 
 	onNavigate((navigation) => {
 		if (!document.startViewTransition) return;
