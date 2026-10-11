@@ -1,0 +1,47 @@
+name: CI
+
+# Pull requests are not deployed; these two jobs are what tell you one is safe to merge,
+# and main only takes a pull request that passed both. Their names are the ones the
+# protection of main asks for: change them there too.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Tests, types and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run build
+
+  browser:
+    # The real site in a real browser, as a visitor, a member, an admin and the owner,
+    # against a copy of the backend started inside this run. It never touches the hosted
+    # database.
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

@@ -1,4 +1,4 @@
-// Nightly import job, run by .github/workflows/deploy.yml.
+// Nightly import job, run by .github/workflows/nightly.yml.
 //   1. Reads the wiki and queues addons that are neither live nor already reviewed.
 //   2. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
