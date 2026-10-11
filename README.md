@@ -24,7 +24,7 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 | Workflow | Runs | Does |
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
-| [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | rule tests and type check again, pending migrations, a fresh snapshot, then builds and publishes the site |
+| [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | three jobs in turn: rule tests and type check again; pending migrations; then a fresh snapshot, the build and the publish. Only the middle one is given the database password, and it installs nothing but the Supabase tool |
 | [Nightly](.github/workflows/nightly.yml) | once a day | reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 

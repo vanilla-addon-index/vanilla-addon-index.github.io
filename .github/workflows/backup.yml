@@ -41,19 +41,22 @@ jobs:
 
       - uses: actions/checkout@v7
         if: steps.ready.outputs.go
+      # The site's dependencies are not installed: the job that holds the database password
+      # runs the Supabase tool, in the version the lockfile names, and our own script.
       - uses: actions/setup-node@v7
         if: steps.ready.outputs.go
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
+      - uses: supabase/setup-cli@v3
         if: steps.ready.outputs.go
 
       - name: Back up and encrypt
         if: steps.ready.outputs.go
         # The plain file never leaves this step.
+        env:
+          SUPABASE_CLI: supabase
         run: |
-          npx supabase link --project-ref mefmmugajnbbotioplfw
+          supabase link --project-ref mefmmugajnbbotioplfw
           node scripts/backup.mjs backup.sql
           gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" --output backup.sql.gpg backup.sql
           rm backup.sql
