@@ -8,7 +8,7 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 
 ## Setup
 
-1. **Supabase:** create a project, open the SQL editor and run [supabase/schema.sql](supabase/schema.sql), then [supabase/versions.sql](supabase/versions.sql), [supabase/import.sql](supabase/import.sql), [supabase/moderation.sql](supabase/moderation.sql), [supabase/groups.sql](supabase/groups.sql), [supabase/slugs.sql](supabase/slugs.sql), [supabase/reports.sql](supabase/reports.sql) and [supabase/validation.sql](supabase/validation.sql).
+1. **Supabase:** create a project, open the SQL editor and run [supabase/schema.sql](supabase/schema.sql), then [supabase/versions.sql](supabase/versions.sql), [supabase/import.sql](supabase/import.sql), [supabase/moderation.sql](supabase/moderation.sql), [supabase/groups.sql](supabase/groups.sql), [supabase/slugs.sql](supabase/slugs.sql), [supabase/reports.sql](supabase/reports.sql), [supabase/validation.sql](supabase/validation.sql) and [supabase/limits.sql](supabase/limits.sql).
 2. **Config:** put the project URL and anon key in [src/lib/config.ts](src/lib/config.ts).
 3. **Login providers:** in Supabase under Authentication → Sign In / Providers, enable Discord and GitHub with an OAuth app from each, and turn the Email provider off.
 4. **Auth URLs:** in Supabase under Authentication → URL Configuration, set the site URL to `https://vanilla-addon-index.github.io` and add `http://localhost:5173` as a redirect URL.

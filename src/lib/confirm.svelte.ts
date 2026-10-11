@@ -9,6 +9,8 @@ export interface Question {
 	action: string;
 	// Marks the confirming button as destructive.
 	danger?: boolean;
+	// Nothing to decide: one button that closes it.
+	notice?: boolean;
 }
 
 export const prompt = $state({
@@ -22,3 +24,6 @@ export function ask(question: Question) {
 		prompt.open = { ...question, answer };
 	});
 }
+
+/** Tells the user something they need to know before going on, with a single button. */
+export const tell = (title: string, body: string) => ask({ title, body, action: 'OK', notice: true });

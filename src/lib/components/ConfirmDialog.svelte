@@ -34,7 +34,7 @@
 			<p class="mt-2 break-words whitespace-pre-line text-muted">{prompt.open.body}</p>
 		{/if}
 		<div class="mt-4 flex justify-end gap-2">
-			<button class="btn" onclick={() => answer(false)}>Cancel</button>
+			{#if !prompt.open.notice}<button class="btn" onclick={() => answer(false)}>Cancel</button>{/if}
 			<button class={['btn', prompt.open.danger ? 'btn-danger' : 'btn-primary']} onclick={() => answer(true)}>
 				{prompt.open.action}
 			</button>

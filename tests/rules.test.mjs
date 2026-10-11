@@ -157,11 +157,6 @@ describe('posting and editing', () => {
 		await refused(() => call(alice, `update public.addons set name = E' \n ' where id = $1`, [row.id]));
 	});
 
-	test('a member can post at most 10 addons a day; an admin has no limit', async () => {
-		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Addon${i}`));
-		await refused(() => post(db, alice, addon('OneTooMany')), /at most 10 addons a day/);
-		for (let i = 0; i < 12; i++) await post(db, admin, addon(`Admin${i}`));
-	});
 });
 
 describe('links and versions', () => {
@@ -347,44 +342,87 @@ describe('log, trash and undo', () => {
 	});
 });
 
-describe('the brake', () => {
-	test('an admin who deletes more than 20 addons in an hour is suspended and stopped', async () => {
-		const posters = [alice, bob, owner];
-		const rows = [];
-		for (let i = 0; i < 25; i++) rows.push(await post(db, posters[i % 3], addon(`Addon${i}`)));
+describe('limits', () => {
+	const edit = (user, row, text) => call(user, 'update public.addons set author = $1 where id = $2', [text, row.id]);
+	const remove = (user, row) => call(user, 'delete from public.addons where id = $1', [row.id]);
+	// Posts as the database owner, past every limit, to set a scene quickly.
+	const seed = async (count, poster) => {
+		await db.sql(
+			`insert into public.addons (slug, name, description, category, versions, owner)
+			 select 'seed' || i, 'Seed' || i, 'A description that is long enough.', 'Miscellaneous',
+				jsonb_build_array(jsonb_build_object('url', 'https://github.com/seed/addon' || i, 'note', '')), $2
+			 from generate_series(1, $1::int) i`,
+			[count, poster.id]
+		);
+		return db.sql('select id from public.addons order by id');
+	};
 
-		for (const row of rows) await call(admin, 'delete from public.addons where id = $1', [row.id]);
+	test('reaching a limit refuses the action and suspends nobody', async () => {
+		const rows = await seed(25, alice);
+		for (const row of rows.slice(0, 20)) await remove(admin, row);
+		await refused(() => remove(admin, rows[20]), /at most 20 addons an hour/);
 
 		assert.equal((await live()).length, 5);
-		assert.deepEqual(await role(admin), { admin: false, owner: false, banned: true });
-		assert.ok((await logged()).includes('user.autosuspend'));
+		assert.deepEqual(await role(admin), { admin: true, owner: false, banned: false });
+		// An hour later it works again.
+		await db.sql(`update public.activity_log set at = at - interval '2 hours'`);
+		await remove(admin, rows[20]);
 	});
 
-	test('an admin who rewrites more than 100 addons posted by others in an hour is suspended', async () => {
-		const row = await post(db, alice, addon('Atlas'));
-		for (let i = 0; i < 105; i++) {
-			await call(admin, 'update public.addons set author = $1 where id = $2', [`Defaced ${i}`, row.id]);
-		}
-		assert.deepEqual(await role(admin), { admin: false, owner: false, banned: true });
-		assert.equal((await db.sql('select author from public.addons'))[0].author, 'Defaced 99');
+	test('a member can make 10 edits an hour and 50 a day', async () => {
+		const mine = await post(db, alice, addon('Atlas'));
+		for (let i = 0; i < 10; i++) await edit(alice, mine, `Draft ${i}`);
+		await refused(() => edit(alice, mine, 'One too many'), /at most 10 edits an hour/);
+		// A save that changes nothing is not an edit, and is not counted or refused.
+		await edit(alice, mine, 'Draft 9');
+		await db.sql(`update public.activity_log set at = at - interval '2 hours' where action = 'addon.update'`);
+		await edit(alice, mine, 'Next hour');
+
+		// Spread over a day, the hourly limit is never reached but the daily one is.
+		await db.sql(
+			`insert into public.activity_log (actor, action, at)
+			 select $1, 'addon.update', now() - interval '3 hours' from generate_series(1, 39)`,
+			[alice.id]
+		);
+		await refused(() => edit(alice, mine, 'Too many today'), /at most 50 edits a day/);
 	});
 
-	test('editing your own addons never trips the brake', async () => {
-		const row = await post(db, admin, addon('Mine'));
-		for (let i = 0; i < 105; i++) {
-			await call(admin, 'update public.addons set author = $1 where id = $2', [`Draft ${i}`, row.id]);
-		}
+	test('an admin can make 100 edits an hour, whoever posted the addon', async () => {
+		const own = await post(db, admin, addon('Mine'));
+		const theirs = await post(db, alice, addon('Theirs'));
+		for (let i = 0; i < 50; i++) await edit(admin, own, `Draft ${i}`);
+		for (let i = 0; i < 50; i++) await edit(admin, theirs, `Draft ${i}`);
+		await refused(() => edit(admin, own, 'One too many'), /at most 100 edits an hour/);
+		await refused(() => edit(admin, theirs, 'One too many'), /at most 100 edits an hour/);
 		assert.equal((await role(admin)).banned, false);
+
+		// Grouping and reverting are not edits, and still work at the limit.
+		await call(admin, 'select public.group_addons($1)', [[own.id, theirs.id]]);
+		const [{ id }] = await db.sql(`select id from public.activity_log where action = 'addon.update' order by id limit 1`);
+		await call(admin, 'select public.revert_addon($1)', [id]);
 	});
 
-	test('the owner is not subject to the brake', async () => {
-		const rows = [];
-		for (let i = 0; i < 25; i++) rows.push(await post(db, [alice, bob, admin][i % 3], addon(`Addon${i}`)));
-		for (const row of rows) await call(owner, 'delete from public.addons where id = $1', [row.id]);
+	test('a member can post 10 addons a day and an admin 50; approved imports do not count', async () => {
+		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Addon${i}`));
+		await refused(() => post(db, alice, addon('OneTooMany')), /at most 10 addons a day/);
+
+		for (let i = 0; i < 50; i++) await post(db, admin, addon(`Admin${i}`));
+		await refused(() => post(db, admin, addon('OneTooMany')), /at most 50 addons a day/);
+
+		const items = Array.from({ length: 5 }, (_, i) => ({ name: `Wiki${i}`, url: `https://github.com/wiki/addon${i}` }));
+		await db.asService((q) => q('select public.queue_imports($1::jsonb)', [JSON.stringify(items)]));
+		const ids = (await db.sql('select id from public.import_queue')).map((r) => r.id);
+		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [ids]))[0].n, 5);
+	});
+
+	test('the owner has no limits', async () => {
+		const rows = await seed(25, alice);
+		for (const row of rows) await remove(owner, row);
 		assert.deepEqual(await live(), []);
-		assert.equal((await role(owner)).banned, false);
+		const mine = await post(db, owner, addon('Mine'));
+		for (let i = 0; i < 105; i++) await edit(owner, mine, `Draft ${i}`);
+		for (let i = 0; i < 55; i++) await post(db, owner, addon(`Owner${i}`));
 	});
-
 });
 
 describe('groups', () => {
@@ -594,18 +632,20 @@ describe('import queue', () => {
 		parent: null,
 		...extra
 	});
-	const queue = (user, items) =>
-		call(user, 'select public.queue_imports($1::jsonb) as added', [JSON.stringify(items)]).then((r) => r[0].added);
+	// As the nightly job, the only one that can add to the queue.
+	const queue = (items) =>
+		db
+			.asService((q) => q('select public.queue_imports($1::jsonb) as added', [JSON.stringify(items)]))
+			.then((r) => r[0].added);
 	const waiting = async () =>
 		(await db.sql(`select name from public.import_queue where status = 'pending' order by name`)).map((r) => r.name);
 
-	test('only admins and the nightly job can queue, and only admins can see the queue', async () => {
-		await refused(() => queue(alice, [candidate('Atlas')]), /Only admins/);
-		assert.equal(await queue(admin, [candidate('Atlas')]), 1);
-		assert.equal(
-			await db.asService((q) => q('select public.queue_imports($1::jsonb) as added', [JSON.stringify([candidate('Bagnon')])])).then((r) => r[0].added),
-			1
-		);
+	test('only the nightly job can queue, not even an admin, and only admins can see the queue', async () => {
+		const byHand = (user) => call(user, 'select public.queue_imports($1::jsonb)', [JSON.stringify([candidate('Cheat')])]);
+		await refused(() => byHand(alice));
+		await refused(() => byHand(admin));
+		await refused(() => byHand(owner));
+		assert.equal(await queue([candidate('Atlas'), candidate('Bagnon')]), 2);
 		assert.equal((await call(alice, 'select * from public.import_queue')).length, 0);
 		assert.equal((await call(admin, 'select * from public.import_queue')).length, 2);
 	});
@@ -614,18 +654,18 @@ describe('import queue', () => {
 		await post(db, alice, addon('Atlas', 'https://github.com/someone/Atlas'));
 		const items = [candidate('Atlas', 'https://github.com/Someone/atlas.git'), candidate('Bagnon')];
 
-		assert.equal(await queue(admin, items), 1);
+		assert.equal(await queue(items), 1);
 		assert.deepEqual(await waiting(), ['Bagnon']);
-		assert.equal(await queue(admin, items), 0);
+		assert.equal(await queue(items), 0);
 
 		const [{ id }] = await db.sql('select id from public.import_queue');
 		await call(admin, `select public.decide_imports($1, 'rejected')`, [[id]]);
-		assert.equal(await queue(admin, items), 0);
+		assert.equal(await queue(items), 0);
 		assert.deepEqual(await waiting(), []);
 	});
 
 	test('approving publishes the entry as written on the wiki, with credit', async () => {
-		await queue(admin, [
+		await queue([
 			candidate('pfUI', 'https://github.com/brues-code/pfUI', {
 				description: 'UI',
 				alts: ['https://github.com/shagu/pfUI'],
@@ -653,7 +693,7 @@ describe('import queue', () => {
 	});
 
 	test('the wiki\'s other versions are queued as entries of their own and grouped once published', async () => {
-		await queue(admin, [
+		await queue([
 			candidate('pfUI', 'https://github.com/brues-code/pfUI'),
 			candidate('pfUI', 'https://github.com/shagu/pfUI', { group_key: 'github.com/brues-code/pfui' })
 		]);
@@ -673,7 +713,7 @@ describe('import queue', () => {
 
 	test('a queued entry can be published straight into the group of a live addon', async () => {
 		const liveOne = await post(db, alice, addon('Atlas', 'https://github.com/a/Atlas'));
-		await queue(admin, [candidate('Atlas', 'https://github.com/b/Atlas')]);
+		await queue([candidate('Atlas', 'https://github.com/b/Atlas')]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
 
 		await refused(() => call(alice, 'select public.approve_into($1, $2)', [id, liveOne.id]), /Only admins/);
@@ -686,14 +726,14 @@ describe('import queue', () => {
 	});
 
 	test('two entries with the same name both publish, at different addresses', async () => {
-		await queue(admin, [candidate('aDF', 'https://github.com/one/aDF'), candidate('aDF', 'https://github.com/two/aDF')]);
+		await queue([candidate('aDF', 'https://github.com/one/aDF'), candidate('aDF', 'https://github.com/two/aDF')]);
 		const ids = (await db.sql('select id from public.import_queue order by id')).map((r) => r.id);
 		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [ids]))[0].n, 2);
 		assert.deepEqual((await db.sql('select slug from public.addons order by slug')).map((r) => r.slug), ['adf', 'adf-two']);
 	});
 
 	test('an entry that cannot be published stays in the queue with the reason', async () => {
-		await queue(admin, [candidate('X')]);
+		await queue([candidate('X')]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
 		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [[id]]))[0].n, 0);
 		const [row] = await db.sql('select status, problem from public.import_queue');
@@ -702,7 +742,7 @@ describe('import queue', () => {
 	});
 
 	test('a rejected entry can be put back, and both decisions are logged', async () => {
-		await queue(admin, [candidate('Atlas')]);
+		await queue([candidate('Atlas')]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
 		await refused(() => call(alice, `select public.decide_imports($1, 'rejected')`, [[id]]), /Only admins/);
 
@@ -715,7 +755,7 @@ describe('import queue', () => {
 
 	test('the nightly job can read what it needs and store repository stats', async () => {
 		await post(db, alice, addon('Atlas'));
-		await queue(admin, [candidate('Bagnon')]);
+		await queue([candidate('Bagnon')]);
 		await db.asService(async (q) => {
 			assert.equal((await q(`select key from public.import_queue where status = 'pending'`)).length, 1);
 			assert.equal((await q('select link_keys from public.addons')).length, 1);
@@ -740,6 +780,6 @@ describe('import queue', () => {
 		await db.sql(
 			`insert into public.repo_stats (key, canonical) values ('github.com/old-owner/atlas', 'github.com/new-owner/atlas')`
 		);
-		assert.equal(await queue(admin, [candidate('Atlas', 'https://github.com/new-owner/Atlas')]), 0);
+		assert.equal(await queue([candidate('Atlas', 'https://github.com/new-owner/Atlas')]), 0);
 	});
 });

@@ -1,5 +1,6 @@
 import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
+import { tell } from './confirm.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 
@@ -167,6 +168,9 @@ export const slugify = (name: string) =>
 		.replace(/^-+|-+$/g, '');
 
 function explain(error: { code?: string; message: string }) {
+	// An hourly or daily limit; see supabase/limits.sql. Said in a pop-up, since it is not
+	// something wrong with what was typed.
+	if (error.code === 'LIMIT') tell('Limit reached', error.message);
 	if (error.code === '42501') return 'You are not allowed to do that.';
 	return error.message;
 }
