@@ -65,6 +65,20 @@ describe('roles', () => {
 		assert.deepEqual(await call(alice, list, ['']), []);
 	});
 
+	test('nobody can ask whether another account is an admin', async () => {
+		const ask = 'select public.is_staff($1) as staff';
+		await refused(() => db.asVisitor((q) => q(ask, [admin.id])), /permission denied/);
+		await refused(() => call(alice, ask, [admin.id]), /permission denied/);
+		await refused(() => call(admin, ask, [admin2.id]), /permission denied/);
+		// The rules that depend on it still hold: an admin cannot suspend another admin.
+		await refused(() => call(admin, 'select public.set_banned($1, true)', [admin2.id]), /Only the owner/);
+		const roles = await call(admin, `select username, role from public.list_users('') order by username`);
+		assert.deepEqual(
+			roles.map((r) => `${r.username}:${r.role}`),
+			['admin:admin', 'admin2:admin', 'alice:member', 'bob:member', 'owner:owner']
+		);
+	});
+
 	test('role and ban flags cannot be read from the profiles table', async () => {
 		await refused(() => call(alice, 'select banned from public.profiles'));
 		await refused(() => call(alice, 'select is_owner from public.profiles'));
@@ -152,6 +166,16 @@ describe('posting and editing', () => {
 		await db.sql(`update public.addons set aliases = '{old-name}' where slug = 'big-wigs'`);
 		assert.equal(await slugOf(addon('Old Name', 'https://github.com/dave/old')), 'old-name-dave');
 		await refused(() => call(alice, `update public.addons set slug = 'pfui' where slug = 'junk-entry'`));
+	});
+
+	test('any number of addons can share a name, each at an address of its own', async () => {
+		const slugs = [];
+		for (const repo of ['atlas', 'atlas-fork', 'atlas-3', 'atlas-4']) {
+			slugs.push((await post(db, alice, addon('Atlas', `https://github.com/someone/${repo}`))).slug);
+		}
+		slugs.push((await post(db, bob, addon('Atlas', 'https://gitlab.com/else/atlas'))).slug);
+		// The name, then who hosts it, then a number for as long as that is still taken.
+		assert.deepEqual(slugs, ['atlas', 'atlas-someone', 'atlas-someone-2', 'atlas-someone-3', 'atlas-gitlab-com']);
 	});
 
 	test('a member needs a description of 15 characters; an admin does not', async () => {
