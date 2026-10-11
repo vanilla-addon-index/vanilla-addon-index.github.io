@@ -22,6 +22,28 @@
 		await goto(resolve('/'));
 		await supabase?.auth.signOut();
 	}
+
+	let leaving = $state<HTMLDialogElement>();
+	let removeAddons = $state(false);
+	let busy = $state(false);
+	let error = $state('');
+
+	async function deleteAccount() {
+		if (!supabase) return;
+		busy = true;
+		error = '';
+		const { error: refused } = await supabase.rpc('delete_account', { remove_addons: removeAddons });
+		if (refused) {
+			error = refused.message;
+			busy = false;
+			return;
+		}
+		leaving?.close();
+		await goto(resolve('/'));
+		// The account is gone, so there is nothing to tell the login service: only this
+		// browser's copy of the session is left to clear.
+		await supabase.auth.signOut({ scope: 'local' });
+	}
 </script>
 
 <svelte:head>
@@ -60,6 +82,10 @@
 				</dl>
 			</div>
 			<button class="btn w-full" onclick={signOut}>Log out</button>
+			<!-- The owner looks after the admins; the site must not be left without one. -->
+			{#if !auth.isOwner}
+				<button class="btn btn-danger w-full" onclick={() => leaving?.showModal()}>Delete account</button>
+			{/if}
 		</aside>
 
 		<section>
@@ -88,4 +114,33 @@
 			{/if}
 		</section>
 	</div>
+
+	<!-- Cancel is first, so it has the focus: pressing Enter by reflex deletes nothing. -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+	<dialog
+		bind:this={leaving}
+		class="dialog w-[min(28rem,92vw)] p-4"
+		aria-labelledby="leave-title"
+		onclick={(event) => event.target === leaving && leaving?.close()}
+	>
+		<h2 id="leave-title" class="text-xl leading-tight font-bold">Delete your account?</h2>
+		<p class="mt-2 text-muted">
+			Your login, email address and username are removed for good. This cannot be undone.
+		</p>
+		{#if mine.length}
+			<p class="mt-2 text-muted">
+				The {mine.length === 1 ? 'addon' : `${mine.length} addons`} you posted
+				{mine.length === 1 ? 'stays' : 'stay'} in the list, belonging to nobody, unless you tick the box.
+			</p>
+			<label class="mt-3 flex cursor-pointer items-baseline gap-2">
+				<input type="checkbox" bind:checked={removeAddons} />
+				Also delete {mine.length === 1 ? 'the addon' : 'the addons'} I posted
+			</label>
+		{/if}
+		{#if error}<p class="mt-3 text-danger">{error}</p>{/if}
+		<div class="mt-4 flex justify-end gap-2">
+			<button class="btn" onclick={() => leaving?.close()}>Cancel</button>
+			<button class="btn btn-danger" disabled={busy} onclick={deleteAccount}>Delete account</button>
+		</div>
+	</dialog>
 {/if}

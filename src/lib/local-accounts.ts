@@ -19,5 +19,7 @@ export const LOCAL_ACCOUNTS: LocalAccount[] = [
 	{ username: 'admin2', email: 'admin2@local.test', label: 'a second admin', role: 'admin' },
 	{ username: 'member', email: 'member@local.test', label: 'a member', role: 'member' },
 	{ username: 'member2', email: 'member2@local.test', label: 'a second member', role: 'member' },
+	// Deletes its own account in the browser tests, so nothing else may depend on it.
+	{ username: 'leaver', email: 'leaver@local.test', label: 'a member who leaves', role: 'member' },
 	{ username: 'banned', email: 'banned@local.test', label: 'a banned member', role: 'member', banned: true }
 ];
