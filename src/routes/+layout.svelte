@@ -1,6 +1,5 @@
 <script lang="ts">
 	import '../app.css';
-	import favicon from '#lib/assets/favicon.svg';
 	import logo from '#lib/assets/logo.png';
 	import { onNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -32,10 +31,6 @@
 		});
 	});
 </script>
-
-<svelte:head>
-	<link rel="icon" href={favicon} />
-</svelte:head>
 
 <div class="flex min-h-screen flex-col">
 	<header class="border-b border-border bg-surface">
