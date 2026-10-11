@@ -34,29 +34,42 @@ export interface WikiRead {
 	repeated: number;
 }
 
-// First match wins, so the specific rules come before the broad ones.
+// First match wins, so the specific rules come before the broad ones: an addon for one
+// class is filed under Class even though it is also about combat. The rules are tried on
+// the name, the name with its joined-up words apart ("RaidSummon" is also "Raid Summon"),
+// and the description. tests/wiki.test.mjs pins what they make of the whole wiki page.
 const CATEGORY_RULES: [(typeof CATEGORIES)[number], RegExp][] = [
-	['Libraries', /\b(library|libraries|lib[A-Z]\w+|ace2|ace ?addon|embedded)\b/],
-	['Boss Mods', /\b(boss ?mod|bigwigs|dbm|deadly boss|encounter|raid warning)/i],
-	['Unit Frames', /\b(unit ?frames?|unitframes|raid ?frames?|party ?frames?|target frame|player frame|nameplates?)\b/i],
-	['Action Bars', /\b(action ?bars?|actionbar|bar mod|keybind|bindings?|buttons?)\b/i],
-	['Bags & Inventory', /\b(bags?|inventory|bank|container|sort(s|ing)? (your )?items?)\b/i],
-	['Auction & Economy', /\b(auction|ah\b|vendor|gold|money|cash|price|sell|mail(box)?)\b/i],
-	['Map & Minimap', /\b(mini-?map|world ?map|map\b|coordinates?|waypoints?|gather(er|ing)? nodes?)\b/i],
-	['Quests & Leveling', /\b(quests?|questing|leveling|xp\b|experience)\b/i],
-	['Buffs & Debuffs', /\b(buffs?|debuffs?|auras?|dots?\b|hots?\b)\b/i],
-	['Chat & Social', /\b(chat|whisper|guild|friends?|social|emotes?|invite)\b/i],
-	['Tooltip', /\btool-?tips?\b/i],
-	['Professions', /\b(profession|trade ?skill|crafting|recipes?|fishing|herbalism|mining|enchanting|alchemy|cooking)\b/i],
-	['PvP', /\b(pvp|battlegrounds?|arena|honor|enemy players?)\b/i],
-	['Raid & Party', /\b(raid|party|loot|dkp|group|healing assignments?|ready check)\b/i],
-	['Combat', /\b(combat|damage|dps|threat|aggro|cast ?bars?|swing timer|cooldowns?|meter)\b/i],
-	['Class', /\b(warrior|paladin|hunter|rogue|priest|shaman|mage|warlock|druid|totems?|pet\b|stance|shapeshift)\b/i],
-	['Interface Suites', /\b(full (ui|interface)|ui replacement|replacement for the original|complete ui|interface suite)\b/i]
+	['Libraries', /\b[Ll]ib[A-Z]\w+/],
+	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
+	['Boss Mods', /\b(boss ?mods?|boss(es)?\b|bigwigs|dbm|deadly boss|encounters?\b|raid warnings?\b|loatheb|c'?thun|nefarian|four horsemen|4hm)/i],
+	['Unit Frames', /\b(unit ?frames?|unitframes|raid ?frames?|party ?frames?|target ?frames?|player ?frames?|focus ?frames?|pet ?frames?|name ?plates?|plates|portraits?|health ?bars?)\b/i],
+	['Action Bars', /\b(action ?bars?|action ?buttons?|bar mod|bongos|keybind(s|ings?)?|bindings?|buttons?)\b/i],
+	['Bags & Inventory', /\b(bags?|inventory|bank|containers?|sort(s|ing)? (your )?items?|equipment|outfits?|outfitter|trinkets?|durability)\b/i],
+	['Auction & Economy', /\b(auctions?|auctioneer|auctionator|ah|vendors?|vending|merchants?|gold|money|cash|prices?|sell(s|er)?|buy(s|ing)?|market|mail(box|s)?)\b/i],
+	['Map & Minimap', /\b(mini-?maps?|world ?maps?|maps?|coordinates?|waypoints?|compass|flight|gather(er|ing)? nodes?)\b/i],
+	['Quests & Leveling', /\b(quests?|questing|questie|leveling|level(s|ed)? ?up|xp|exp|experience|reputation|guides?|attune(ment)?s?|achievements?)\b/i],
+	['Buffs & Debuffs', /\b(buffs?|debuffs?|auras?|dots?|hots?|crowd control|absor(b|ption)s?)\b/i],
+	['Chat & Social', /\b(chat|chan(nel)?s?|whispers?|messenger|guild|friends?|social|emotes?|invites?|ignore|anti-?spam|spammers|goldspam|lfm|lfg|bulletin|translat(e|ion|or)|rp|role-?play(ing)?)\b/i],
+	['Tooltip', /\b(game ?)?tool-?tips?\b/i],
+	['Professions', /\b(professions?|trade ?skills?|craft(s|ing)?|recipes?|fishing|herbs?|herbalism|minerals?|mining|enchanting|disenchant(s|ing)?|alchemy|cooking)\b/i],
+	['PvP', /\b(pvp|battlegrounds?|battlefield|bg|arena|honor|flags?|enemy players?)\b/i],
+	['Class', /\b(warriors?|paladins?|pally|hunters?|rogues?|priests?|shamans?|mages?|warlocks?|druids?|feral|totems?|pets?|stance|shapeshift(ed|ing)?|shift|talents?|brainwash(er|ing)?|poisons?|shards?|soulstones?|curses?|librams?|combo points?|feign)\b/i],
+	['Raid & Party', /\b(raids?|raider|party|loot(ing)?|rolls?|dkp|epgp|groups?|assignments?|ready check|heal(s|er|ers|ing)?|tanks?)\b/i],
+	['Combat', /\b(combat|damage|dps|threat|aggro|cast(s|ing)? ?bars?|cast(s|ing)?|spells?|swing ?timers?|cooldowns?|meter|crit|attack|interrupts?|procs?|rage|energy|mana|kills?|taunts?)\b/i],
+	// Late, so that an addon that only mentions macros is filed by what it is for.
+	['Action Bars', /\bmacros?\b/i],
+	['Interface Suites', /\b(full (ui|interface)|ui (replacement|overhaul|compilation|pack)|replacement for the original|complete (vanilla )?ui|comprehensive ui|interface suite|collection of interface)\b/i],
+	// ElvUI, pfUI, SpartanUI: a name that ends in a capital "UI".
+	['Interface Suites', /[a-zI]UI\b/]
 ];
 
-const guessCategory = (text: string) =>
-	CATEGORY_RULES.find(([, rule]) => rule.test(text))?.[0] ?? DEFAULT_CATEGORY;
+// "AdvancedTradeSkillWindow2" -> "Advanced Trade Skill Window 2"
+const apart = (name: string) => name.replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/[_-]+/g, ' ');
+
+const guessCategory = (name: string, description: string) => {
+	const text = `${name} ${apart(name)} ${description}`;
+	return CATEGORY_RULES.find(([, rule]) => rule.test(text))?.[0] ?? DEFAULT_CATEGORY;
+};
 
 const plain = (wikitext: string) =>
 	wikitext
@@ -68,7 +81,8 @@ const plain = (wikitext: string) =>
 
 // [url label], [[url label]] and [url [label]] are all external links on this page.
 const EXTERNAL = /\[+\s*(https?:\/\/[^\s\]]+)\s*((?:<nowiki>)?\s*\[?[^[\]]*\]?\s*(?:<\/nowiki>)?)\]+/g;
-const INTERNAL = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/;
+// A link to another page of the wiki. "[[https://… label]]" is not one: see EXTERNAL.
+const INTERNAL = /^\[\[(?!https?:)([^\]|]+)(?:\|([^\]]+))?\]\]/;
 //   |[url Name]
 //   |Description
 const TABLE_ROW = /^\|?\s*\[(https?:\/\/[^\s\]]+)\s+([^\]]+)\]/;
@@ -134,7 +148,7 @@ function parseBullet(line: string): Parsed {
 			description,
 			images: httpsOnly(images).slice(0, MAX_IMAGES),
 			alts: httpsOnly(alts),
-			category: guessCategory(`${name} ${description}`),
+			category: guessCategory(name, description),
 			obsolete,
 			parent: null,
 			group_key: null,
@@ -202,7 +216,7 @@ export function parseWiki(wikitext: string): Omit<WikiRead, 'revision'> {
 				description,
 				images: [],
 				alts: [],
-				category: guessCategory(`${name} ${description}`),
+				category: guessCategory(name, description),
 				obsolete: false,
 				parent: null,
 				group_key: null

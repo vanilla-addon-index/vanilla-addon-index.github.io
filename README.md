@@ -38,6 +38,8 @@ npm run nightly:token   # makes a token, and prints where its two halves go
 
 The token goes to GitHub as the `NIGHTLY_TOKEN` secret, and its hash into the database with the one statement the command prints. Doing it again replaces the token; the old one stops working at once. Until the secret exists the import skips itself and the site still deploys.
 
+The wiki page is hand-written, so the import guards against reading it badly: a page that lists far fewer addons than the queue has ever seen is refused whole, and the run fails so that it is noticed. [tests/wiki.test.mjs](tests/wiki.test.mjs) pins what the parser makes of a saved copy of the page; `node scripts/wiki-import.mjs` shows what it makes of the page as it is now, without touching anything.
+
 ## Changing the database
 
 The database is described by the numbered files in [supabase/migrations](supabase/migrations). Each one is applied once, in order, and Supabase remembers which have run, so nothing is pasted into the SQL editor by hand and no file is ever run twice.

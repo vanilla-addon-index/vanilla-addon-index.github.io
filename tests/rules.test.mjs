@@ -1225,6 +1225,32 @@ describe('import queue', () => {
 		assert.match(row.problem, /name/);
 	});
 
+	test('a wiki page that lists far fewer addons than before is refused whole', async () => {
+		const many = Array.from({ length: 120 }, (_, i) => candidate(`Addon${i}`));
+		assert.equal(await queue(many), 120);
+		// A fifth fewer is a wiki that changed; half is a page that was not read properly.
+		assert.equal(await queue([...many.slice(0, 100), candidate('Newcomer')]), 1);
+		await refused(() => queue([...many.slice(0, 60), candidate('Another')]), /far fewer than the 121 seen so far/);
+		assert.equal((await db.sql('select count(*)::int as n from public.import_queue'))[0].n, 121);
+	});
+
+	test('a waiting entry takes the category the job guesses now; a decided one keeps its own', async () => {
+		await queue([candidate('Atlas'), candidate('Bagnon'), candidate('Cartographer')]);
+		const ids = Object.fromEntries((await db.sql('select name, id from public.import_queue')).map((r) => [r.name, r.id]));
+		await call(admin, 'select public.approve_imports($1)', [[ids.Bagnon]]);
+		await call(admin, `select public.decide_imports($1, 'rejected')`, [[ids.Cartographer]]);
+
+		const again = ['Atlas', 'Bagnon', 'Cartographer'].map((name) => candidate(name, undefined, { category: 'Map & Minimap' }));
+		// Nothing is new, so nothing is counted as added.
+		assert.equal(await queue(again), 0);
+		assert.deepEqual(await db.sql('select name, category, status from public.import_queue order by name'), [
+			{ name: 'Atlas', category: 'Map & Minimap', status: 'pending' },
+			{ name: 'Bagnon', category: 'Miscellaneous', status: 'approved' },
+			{ name: 'Cartographer', category: 'Miscellaneous', status: 'rejected' }
+		]);
+		assert.deepEqual(await db.sql('select category from public.addons'), [{ category: 'Miscellaneous' }]);
+	});
+
 	test('a rejected entry can be put back, and both decisions are logged', async () => {
 		await queue([candidate('Atlas')]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
