@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { myAddons } from '#lib/addons.svelte.ts';
+	import { ownedBy } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
 	import { supabase } from '#lib/supabase.ts';
 
-	const mine = $derived(myAddons());
+	// An admin who approves imports becomes their keeper, but did not post them: they are
+	// listed apart, so "Your addons" stays what the account itself submitted.
+	const owned = $derived(ownedBy(auth.session?.user.id));
+	const mine = $derived(owned.posted);
+	const imported = $derived(owned.imported);
 	const user = $derived(auth.session?.user);
 	const logins = $derived(
 		(user?.app_metadata.providers as string[] | undefined)?.map((p) => PROVIDER_NAMES[p] ?? p).join(', ')
@@ -50,6 +54,7 @@
 				</div>
 				<dl>
 					{@render fact('Addons posted', String(mine.length))}
+					{#if imported.length}{@render fact('Imports approved', String(imported.length))}{/if}
 					{#if logins}{@render fact('Linked account', logins)}{/if}
 					{@render fact('Joined', date(user.created_at))}
 				</dl>
@@ -66,6 +71,21 @@
 					<p class="px-3 py-8 text-center text-muted">You have not posted anything yet.</p>
 				{/each}
 			</div>
+
+			{#if imported.length}
+				<!-- Closed until asked for: an admin can have approved hundreds. -->
+				<details class="group mt-4">
+					<summary class="label cursor-pointer hover:text-fg">
+						<span class="inline-block transition-transform group-open:rotate-90">▸</span>
+						Imports you approved · {imported.length}
+					</summary>
+					<div class="panel">
+						{#each imported as addon (addon.id)}
+							<AddonCard {addon} />
+						{/each}
+					</div>
+				</details>
+			{/if}
 		</section>
 	</div>
 {/if}

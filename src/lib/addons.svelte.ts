@@ -282,4 +282,24 @@ export function searchAddons(query: string, exclude: (addon: Addon) => boolean, 
 export const findAddon = (slug: string | undefined) =>
 	store.addons.find((a) => a.slug === slug) ?? store.addons.find((a) => slug && a.aliases.includes(slug));
 
-export const myAddons = () => store.addons.filter((a) => a.owner === auth.session?.user.id);
+export interface Owned {
+	// Addons the account submitted itself.
+	posted: Addon[];
+	// Imports it approved as an admin: it keeps them, but did not write them.
+	imported: Addon[];
+}
+
+/** What an account has in the list, with its own posts apart from imports it approved. */
+export function ownedBy(id: string | undefined): Owned {
+	const all = id ? store.addons.filter((a) => a.owner === id) : [];
+	return { posted: all.filter((a) => !a.source), imported: all.filter((a) => a.source) };
+}
+
+/** ["3 addons posted", "120 imports approved"], leaving out the imports when there are none. */
+export function ownedText({ posted, imported }: Owned) {
+	const count = (n: number, word: string, verb: string) => `${n} ${word}${n === 1 ? '' : 's'} ${verb}`;
+	return [
+		posted.length || !imported.length ? count(posted.length, 'addon', 'posted') : '',
+		imported.length ? count(imported.length, 'import', 'approved') : ''
+	].filter(Boolean);
+}
