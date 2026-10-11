@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { LOCAL_ACCOUNTS } from '../../src/lib/local-accounts.ts';
 
-export type Who = 'owner' | 'admin' | 'admin2' | 'member' | 'member2' | 'banned';
+export type Who = 'owner' | 'admin' | 'admin2' | 'member' | 'member2' | 'leaver' | 'banned';
 
 /** Logs in as one of the seeded test accounts, through the login page like anyone would. */
 export async function loginAs(page: Page, who: Who) {

@@ -91,3 +91,23 @@ test('a banned member can browse but not post', async ({ page }) => {
 	await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Report this addon' })).toHaveCount(0);
 });
+
+test('a member deletes their own account, and what they posted stays in the list', async ({ page }) => {
+	await loginAs(page, 'leaver');
+	const name = unique('Leaver Bars');
+	const address = await postAddon(page, name);
+
+	await page.goto('/account');
+	await page.getByRole('button', { name: 'Delete account' }).click();
+	await expect(prompt(page).getByText('stays in the list, belonging to nobody')).toBeVisible();
+	await prompt(page).getByRole('button', { name: 'Delete account' }).click();
+
+	// Logged out, on the home page, with the account gone for good.
+	await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+	await page.goto(address);
+	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+	await page.goto('/login');
+	await page.getByRole('button', { name: 'Log in as a member who leaves', exact: true }).click();
+	await expect(page.getByText(/invalid login/i)).toBeVisible();
+});

@@ -93,13 +93,24 @@
 		</ul>
 		<p class="mt-3">None of it is sold, shared or used for anything but running this list.</p>
 
-		<h3 class="field-label mt-5">Seeing, correcting or removing your data</h3>
+		<h3 class="field-label mt-5">Deleting your account</h3>
+		<p>
+			The <a href={resolve('/account')} class="text-accent hover:underline">account page</a> has a
+			"Delete account" button. It removes your login, email address, username and sessions at
+			once. The addons you posted stay in the list, belonging to nobody, unless you choose to
+			delete them too. What you did stays in the admins' log without your name.
+		</p>
+		<p class="mt-3">
+			If the account was banned, a fingerprint of the login it used is kept, so that the ban
+			still holds if that login comes back. The fingerprint cannot be turned back into the login.
+		</p>
+
+		<h3 class="field-label mt-5">Seeing or correcting your data</h3>
 		<p>
 			You can edit and delete your own addons at any time. To get a copy of what is stored about
-			you, to have something corrected, or to have your account removed,
-			{@render out(ISSUES, 'open an issue on GitHub')} and give the username shown on your
-			<a href={resolve('/account')} class="text-accent hover:underline">account page</a>. An issue
-			is public, so put nothing else personal in it.
+			you, or to have something corrected, {@render out(ISSUES, 'open an issue on GitHub')} and
+			give the username shown on your account page. An issue is public, so put nothing else
+			personal in it.
 		</p>
 	</section>
 
