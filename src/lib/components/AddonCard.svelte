@@ -8,7 +8,8 @@
 		preview?: boolean;
 		// Who hosts it, shown when another addon in the list has the same name.
 		owner?: string;
-		// Another version in a group: indented and dimmed under the group's main version.
+		// Another version in a group: indented, smaller and a little dimmed under the group's main
+		// version. No fainter than this: its grey text still has to be readable.
 		minor?: boolean;
 	};
 	let { addon, preview = false, owner, minor = false }: Props = $props();
@@ -22,7 +23,7 @@
 	class={[
 		'relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-b border-l-2 border-border border-l-transparent px-3 py-2 last:border-b-0 sm:grid-cols-[minmax(0,auto)_minmax(0,1fr)_minmax(0,auto)_auto]',
 		!preview && 'transition-colors duration-100 hover:border-l-accent/60 hover:bg-raised',
-		minor && 'pl-8 text-sm opacity-60 hover:opacity-100'
+		minor && 'pl-8 text-sm opacity-80 hover:opacity-100'
 	]}
 >
 	<!-- The name's link is stretched over the whole row; the addon link sits above it. -->

@@ -43,8 +43,10 @@
 	option {
 		@apply bg-bg;
 	}
+	/* Where the keyboard is: shown only when it is the keyboard that moved there, so it can
+	   afford to be plain to see. */
 	:focus-visible {
-		@apply outline-1 outline-offset-0 outline-accent/40;
+		@apply outline-2 outline-offset-0 outline-accent;
 	}
 	::selection {
 		@apply bg-accent text-black;
@@ -65,11 +67,12 @@
 		@apply hover:border-danger/50 hover:bg-danger/10 hover:text-danger;
 	}
 	.input {
-		@apply w-full border border-border bg-surface px-2.5 py-1.5 placeholder:text-muted focus:border-accent/40 focus:outline-none;
+		@apply w-full border border-border bg-surface px-2.5 py-1.5 placeholder:text-muted focus:border-accent/80 focus:outline-none;
 	}
-	/* Helper text steps back once the field is active; typing removes it. */
+	/* Helper text steps back once the field is active; typing removes it. Before that it
+	   is still text to be read, so it is only a little fainter than the rest. */
 	.input::placeholder {
-		@apply text-muted/60 transition-opacity duration-150;
+		@apply text-muted/80 transition-opacity duration-150;
 	}
 	.input:focus::placeholder {
 		@apply opacity-30;
@@ -117,7 +120,7 @@
 	}
 	/* Same border as a focused text field while the list is open. */
 	select.input:open {
-		@apply border-accent/40;
+		@apply border-accent/80;
 	}
 	select.input::picker-icon {
 		@apply text-[0.6rem] text-muted;
@@ -132,7 +135,7 @@
 	}
 	/* An unset dropdown reads like a text field's placeholder. */
 	select.input:has(option[value='']:checked) {
-		@apply text-muted/60;
+		@apply text-muted/80;
 	}
 	select.input:open:has(option[value='']:checked) {
 		@apply text-muted/20;
