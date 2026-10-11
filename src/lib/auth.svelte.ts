@@ -57,15 +57,9 @@ async function refreshProfile(session: Session) {
 	const id = session.user.id;
 	const [{ data }, answer] = await Promise.all([
 		supabase.from('profiles').select('username').eq('id', id).maybeSingle(),
-		// Also refreshes the list of organization members, see the org-admins migration.
 		supabase.rpc('my_role')
 	]);
-	let role = answer.data as Partial<Role> | null;
-	if (!role) {
-		// A database without the moderation migration only knows admin or not.
-		const { data: admin } = await supabase.rpc('refresh_admin');
-		role = { admin: Boolean(admin) };
-	}
+	const role = (answer.data ?? {}) as Partial<Role>;
 	// The user may have logged out or switched account while this was loading.
 	if (auth.session?.user.id !== id) return;
 	if (data) {

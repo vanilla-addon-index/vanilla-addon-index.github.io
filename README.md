@@ -15,7 +15,7 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 4. **Auth URLs:** in Supabase under Authentication → URL Configuration, set the site URL to `https://vanilla-addon-index.github.io` and add `http://localhost:5173` as a redirect URL.
 5. **GitHub Pages:** push to a repository named `vanilla-addon-index.github.io` and set Settings → Pages → Source to "GitHub Actions".
 6. **Owner:** after your first login, run `update public.profiles set is_owner = true where username = 'your-username';`. The owner can suspend admins and empty the trash.
-7. **Admins:** anyone who is a *public* member of the GitHub organization and logs in with GitHub can edit or delete any addon. To make someone else an admin, tick `is_admin` on their row in Table Editor → `profiles`.
+7. **Admins:** anyone who is a *public* member of the GitHub organization and logs in with GitHub can edit or delete any addon. The nightly job reads who the members are, so joining or leaving takes effect at its next run; start the Nightly workflow by hand to apply a change at once. To make someone else an admin, tick `is_admin` on their row in Table Editor → `profiles`.
 
 ## How a change goes out
 
@@ -25,12 +25,12 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | three jobs in turn: rule tests and type check again; pending migrations; then a fresh snapshot, the build and the publish. Only the middle one is given the database password, and it installs nothing but the Supabase tool |
-| [Nightly](.github/workflows/nightly.yml) | once a day | reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
+| [Nightly](.github/workflows/nightly.yml) | once a day | reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
 ## The nightly import
 
-The [Nightly workflow](.github/workflows/nightly.yml) reads the wiki into the import queue and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else; the project's secret key is not used anywhere.
+The [Nightly workflow](.github/workflows/nightly.yml) reads who the organization's public members are, reads the wiki into the import queue and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else; the project's secret key is not used anywhere.
 
 ```sh
 npm run nightly:token   # makes a token, and prints where its two halves go

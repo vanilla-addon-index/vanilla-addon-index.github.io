@@ -16,6 +16,8 @@ export const SITE_NAME = 'Vanilla Addon Index';
 export const SITE_TAGLINE = 'Addons for the 1.12.1 client, in one place.';
 // Where the site is served, without a trailing slash.
 export const SITE_URL = 'https://vanilla-addon-index.github.io';
+// Its public members are admins; the nightly job reads who they are.
+export const GITHUB_ORG = 'vanilla-addon-index';
 export const REPO_URL = 'https://github.com/vanilla-addon-index/vanilla-addon-index.github.io';
 
 // Login providers. Each one must also be enabled in Supabase under Authentication -> Sign In / Providers.
