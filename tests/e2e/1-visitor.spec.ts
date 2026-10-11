@@ -33,6 +33,14 @@ test('an addon page shows the addon, its group and no admin controls', async ({ 
 	await expect(page.getByText('Posted by')).toHaveCount(0);
 });
 
+test('the footer leads to what the site is and what it stores', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('link', { name: 'About and privacy' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'About' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'open an issue on GitHub' }).first()).toHaveAttribute('href', /\/issues$/);
+});
+
 test('an address that does not exist says so', async ({ page }) => {
 	await page.goto('/addon/no-such-addon');
 	await expect(page.getByRole('heading', { name: 'Addon not found' })).toBeVisible();

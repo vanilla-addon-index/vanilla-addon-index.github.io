@@ -57,6 +57,7 @@
 		<p class="mt-5 text-sm text-muted">
 			GitHub and Discord will ask to share your email address. The login service requires it; this
 			site never displays it, publishes it or sends you email.
+			<a href={resolve('/about#privacy')} class="underline hover:text-accent">What is stored</a>
 		</p>
 	{/if}
 </div>

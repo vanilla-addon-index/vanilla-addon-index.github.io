@@ -101,7 +101,8 @@
 	<footer class="border-t border-border">
 		<div class="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-sm text-muted">
 			<span>Interface\AddOns, indexed. Free and open source.</span>
-			<a href={REPO_URL} class="ml-auto hover:text-accent">Source on GitHub</a>
+			<a href={resolve('/about')} class="ml-auto hover:text-accent">About and privacy</a>
+			<a href={REPO_URL} class="hover:text-accent">Source on GitHub</a>
 		</div>
 	</footer>
 </div>

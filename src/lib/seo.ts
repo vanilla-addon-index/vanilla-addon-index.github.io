@@ -14,6 +14,9 @@ function clip(text: string) {
 export const HOME_TITLE = `${SITE_NAME} – addons for WoW 1.12.1 (Vanilla)`;
 export const HOME_DESCRIPTION = `${SITE_TAGLINE} Browse and search community addons for World of Warcraft 1.12.1 (Vanilla), each with a link to its source.`;
 
+export const ABOUT_TITLE = `About and privacy · ${SITE_NAME}`;
+export const ABOUT_DESCRIPTION = `What ${SITE_NAME} is, who runs it, and what it stores about visitors and accounts.`;
+
 // The words people search with: the addon's name, the game and its version.
 export const addonTitle = (addon: Pick<Addon, 'name'>) => `${addon.name} – WoW 1.12.1 addon · ${SITE_NAME}`;
 
