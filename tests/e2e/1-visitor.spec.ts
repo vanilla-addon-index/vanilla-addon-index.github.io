@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test.ts';
 
 // Someone who is not logged in: can read everything public, and nothing else.
 

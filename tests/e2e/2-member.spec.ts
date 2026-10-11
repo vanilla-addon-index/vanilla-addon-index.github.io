@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test.ts';
 import { confirm, loginAs, postAddon, prompt, unique } from './helpers.ts';
 
 // An ordinary account: posts, edits and deletes its own addons, reports others, and gets
