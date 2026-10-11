@@ -8,6 +8,7 @@ export function GET() {
 	const addons = readSnapshot();
 	const pages = [
 		`<url><loc>${SITE_URL}/</loc></url>`,
+		`<url><loc>${SITE_URL}/about</loc></url>`,
 		...addons.map(
 			(a) => `<url><loc>${SITE_URL}/addon/${a.slug}</loc><lastmod>${a.updated_at.slice(0, 10)}</lastmod></url>`
 		)

@@ -1,6 +1,6 @@
 import type { Handle } from '@sveltejs/kit/hooks';
 import { SITE_NAME, SITE_URL } from '#lib/config.ts';
-import { HOME_DESCRIPTION, HOME_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
+import { ABOUT_DESCRIPTION, ABOUT_TITLE, HOME_DESCRIPTION, HOME_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
 import { readSnapshot } from '#lib/snapshot.server.ts';
 import type { Addon } from '#lib/types.ts';
 
@@ -74,6 +74,7 @@ function describe(path: string, slug: string | undefined) {
 	const addon = slug === undefined ? undefined : bySlug.get(slug);
 	if (addon) return addonPage(addon);
 	if (path === '/') return homePage();
+	if (path === '/about') return { head: head({ title: ABOUT_TITLE, description: ABOUT_DESCRIPTION, path }), body: '' };
 	// Everything else, the fallback page for unknown addresses included.
 	return {
 		head: `<title>${esc(SITE_NAME)}</title>${PRIVATE.test(path) ? '<meta name="robots" content="noindex">' : ''}`,
