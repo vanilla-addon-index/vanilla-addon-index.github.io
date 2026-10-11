@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CATEGORIES } from '../src/lib/config.ts';
-import { addon, createDb, post } from './db.mjs';
+import { NIGHTLY_TOKEN, addon, createDb, post } from './db.mjs';
 
 let db;
 let owner, admin, admin2, alice, bob;
@@ -410,7 +410,7 @@ describe('limits', () => {
 		await refused(() => post(db, admin, addon('OneTooMany')), /at most 50 addons a day/);
 
 		const items = Array.from({ length: 5 }, (_, i) => ({ name: `Wiki${i}`, url: `https://github.com/wiki/addon${i}` }));
-		await db.asService((q) => q('select public.queue_imports($1::jsonb)', [JSON.stringify(items)]));
+		await db.queueImports(items);
 		const ids = (await db.sql('select id from public.import_queue')).map((r) => r.id);
 		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [ids]))[0].n, 5);
 	});
@@ -713,9 +713,7 @@ describe('undoing from the log', () => {
 	});
 
 	test('an approved import can be sent back to the queue', async () => {
-		await db.asService((q) =>
-			q('select public.queue_imports($1::jsonb)', [JSON.stringify([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }])])
-		);
+		await db.queueImports([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
 		await call(admin, 'select public.approve_imports($1)', [[id]]);
 		const [made] = await db.sql(`select id from public.addons where name = 'pfUI'`);
@@ -732,9 +730,7 @@ describe('undoing from the log', () => {
 	});
 
 	test('an import published with changes is logged as an approval, not as an edit', async () => {
-		await db.asService((q) =>
-			q('select public.queue_imports($1::jsonb)', [JSON.stringify([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }])])
-		);
+		await db.queueImports([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
 		const made = await post(db, admin, addon('pfUI', 'https://github.com/shagu/pfUI'));
 		await call(admin, 'select public.mark_imported($1, $2, true)', [id, made.id]);
@@ -804,14 +800,10 @@ describe('rolling an account back', () => {
 		const one = await post(db, alice, addon('One'));
 		const two = await post(db, bob, addon('Two'));
 		const three = await post(db, bob, addon('Three'));
-		await db.asService((q) =>
-			q('select public.queue_imports($1::jsonb)', [
-				JSON.stringify([
-					{ name: 'Wiki one', url: 'https://github.com/wiki/one' },
-					{ name: 'Wiki two', url: 'https://github.com/wiki/two' }
-				])
-			])
-		);
+		await db.queueImports([
+			{ name: 'Wiki one', url: 'https://github.com/wiki/one' },
+			{ name: 'Wiki two', url: 'https://github.com/wiki/two' }
+		]);
 		const queue = await db.sql('select id from public.import_queue order by id');
 		await backdate();
 
@@ -881,18 +873,22 @@ describe('import queue', () => {
 		...extra
 	});
 	// As the nightly job, the only one that can add to the queue.
-	const queue = (items) =>
-		db
-			.asService((q) => q('select public.queue_imports($1::jsonb) as added', [JSON.stringify(items)]))
-			.then((r) => r[0].added);
+	const queue = (items) => db.queueImports(items);
+	// One of the job's calls, made by a visitor holding this token.
+	const nightly = (sql, token, ...params) => db.asVisitor((q) => q(sql, [token, ...params]));
+	const stats = (...rows) => JSON.stringify(rows);
 	const waiting = async () =>
 		(await db.sql(`select name from public.import_queue where status = 'pending' order by name`)).map((r) => r.name);
 
 	test('only the nightly job can queue, not even an admin, and only admins can see the queue', async () => {
-		const byHand = (user) => call(user, 'select public.queue_imports($1::jsonb)', [JSON.stringify([candidate('Cheat')])]);
-		await refused(() => byHand(alice));
-		await refused(() => byHand(admin));
-		await refused(() => byHand(owner));
+		// Without the token nobody can, and the token is of no use to an account.
+		const cheat = JSON.stringify([candidate('Cheat')]);
+		for (const user of [alice, admin, owner]) {
+			await refused(() => call(user, 'select public.queue_imports($1, $2::jsonb)', ['a guess', cheat]));
+			await refused(() => call(user, 'select public.queue_imports($1, $2::jsonb)', [NIGHTLY_TOKEN, cheat]), /permission denied/);
+		}
+		await refused(() => db.queueImports([candidate('Cheat')], 'a guess'), /Only the nightly job/);
+		await refused(() => db.queueImports([candidate('Cheat')], null), /Only the nightly job/);
 		assert.equal(await queue([candidate('Atlas'), candidate('Bagnon')]), 2);
 		assert.equal((await call(alice, 'select * from public.import_queue')).length, 0);
 		assert.equal((await call(admin, 'select * from public.import_queue')).length, 2);
@@ -1001,19 +997,49 @@ describe('import queue', () => {
 		assert.deepEqual(await logged(), ['import.reject', 'import.requeue']);
 	});
 
-	test('the nightly job can read what it needs and store repository stats', async () => {
-		await post(db, alice, addon('Atlas'));
+	test('the nightly job gets the repositories to check and stores what GitHub said about them', async () => {
+		await post(db, alice, addon('Atlas', 'https://github.com/wiki/Atlas'));
 		await queue([candidate('Bagnon')]);
-		await db.asService(async (q) => {
-			assert.equal((await q(`select key from public.import_queue where status = 'pending'`)).length, 1);
-			assert.equal((await q('select link_keys from public.addons')).length, 1);
-			await q(
-				`insert into public.repo_stats (key, stars, interface, canonical) values ('github.com/wiki/bagnon', 5, 11200, 'github.com/wiki/bagnon')
-				 on conflict (key) do update set stars = excluded.stars`
-			);
-		});
-		assert.equal((await call(admin, 'select stars from public.repo_stats'))[0].stars, 5);
+		const [{ repos }] = await nightly('select public.nightly_repos($1) as repos', NIGHTLY_TOKEN);
+		assert.deepEqual(repos, ['github.com/wiki/atlas', 'github.com/wiki/bagnon']);
+
+		const store = 'select public.store_repo_stats($1, $2::jsonb) as n';
+		const bagnon = { key: 'github.com/wiki/bagnon', stars: 5, interface: 11200, canonical: 'github.com/wiki/bagnon' };
+		// A repository that is neither queued nor live is left out.
+		const [{ n }] = await nightly(store, NIGHTLY_TOKEN, stats(bagnon, { key: 'github.com/someone/else', stars: 1 }));
+		assert.equal(n, 1);
+		await nightly(store, NIGHTLY_TOKEN, stats({ ...bagnon, stars: 6, archived: true }));
+		assert.deepEqual(await call(admin, 'select key, stars, archived, missing, interface from public.repo_stats'), [
+			{ key: 'github.com/wiki/bagnon', stars: 6, archived: true, missing: false, interface: 11200 }
+		]);
 		await refused(() => call(admin, `insert into public.repo_stats (key) values ('github.com/a/b')`));
+	});
+
+	test('the nightly token is needed for each of its calls, and cannot be read back', async () => {
+		await refused(() => nightly('select public.nightly_repos($1)', 'a guess'), /Only the nightly job/);
+		await refused(() => nightly('select public.store_repo_stats($1, $2::jsonb)', 'a guess', stats()), /Only the nightly job/);
+		for (const read of [db.asVisitor, (work) => db.as(owner, work), db.asService]) {
+			await refused(() => read((q) => q('select * from public.nightly_token')), /permission denied/);
+			await refused(() => read((q) => q('select public.is_nightly($1)', [NIGHTLY_TOKEN])), /permission denied/);
+		}
+	});
+
+	test('a new token replaces the old one', async () => {
+		await db.sql(
+			`insert into public.nightly_token (hash) values (encode(sha256('a new one'::bytea), 'hex'))
+			 on conflict (id) do update set hash = excluded.hash`
+		);
+		await refused(() => queue([candidate('Atlas')]), /Only the nightly job/);
+		assert.equal(await db.queueImports([candidate('Atlas')], 'a new one'), 1);
+	});
+
+	test('the secret key opens nothing: not the queue, the stats or the job\'s calls', async () => {
+		await refused(() => db.asService((q) => q('select * from public.import_queue')), /permission denied/);
+		await refused(() => db.asService((q) => q(`insert into public.repo_stats (key) values ('github.com/a/b')`)), /permission denied/);
+		await refused(
+			() => db.asService((q) => q('select public.queue_imports($1, $2::jsonb)', [NIGHTLY_TOKEN, '[]'])),
+			/permission denied/
+		);
 	});
 
 	test('repository stats are for admins: visitors and members see none', async () => {

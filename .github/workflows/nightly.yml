@@ -27,10 +27,10 @@ jobs:
         with:
           node-version: 24
       - name: Import from the wiki
-        # Skips itself until the SUPABASE_SECRET_KEY secret exists. This is the only job
-        # that is given that key.
+        # Skips itself until the NIGHTLY_TOKEN secret exists. The token is good for this
+        # job's three database calls and nothing else; `npm run nightly:token` makes one.
         env:
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NIGHTLY_TOKEN: ${{ secrets.NIGHTLY_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/nightly.mjs
 

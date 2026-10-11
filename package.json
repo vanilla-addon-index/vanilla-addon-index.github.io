@@ -15,6 +15,7 @@
 		"dev:local": "vite dev --mode localdb --port 5174 --strictPort",
 		"test:e2e": "node scripts/local.mjs up && playwright test",
 		"snapshot": "node scripts/export.mjs",
+		"nightly:token": "node scripts/nightly-token.mjs",
 		"db:new": "supabase migration new",
 		"db:status": "supabase migration list --linked",
 		"db:push": "supabase db push --linked",

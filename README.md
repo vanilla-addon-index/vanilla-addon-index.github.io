@@ -28,6 +28,16 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 | [Nightly](.github/workflows/nightly.yml) | once a day | reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
+## The nightly import
+
+The [Nightly workflow](.github/workflows/nightly.yml) reads the wiki into the import queue and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else; the project's secret key is not used anywhere.
+
+```sh
+npm run nightly:token   # makes a token, and prints where its two halves go
+```
+
+The token goes to GitHub as the `NIGHTLY_TOKEN` secret, and its hash into the database with the one statement the command prints. Doing it again replaces the token; the old one stops working at once. Until the secret exists the import skips itself and the site still deploys.
+
 ## Changing the database
 
 The database is described by the numbered files in [supabase/migrations](supabase/migrations). Each one is applied once, in order, and Supabase remembers which have run, so nothing is pasted into the SQL editor by hand and no file is ever run twice.
