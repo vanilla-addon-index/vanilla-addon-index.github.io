@@ -170,7 +170,7 @@ export const slugify = (name: string) =>
 		.replace(/^-+|-+$/g, '');
 
 function explain(error: { code?: string; message: string }) {
-	// An hourly or daily limit; see supabase/limits.sql. Said in a pop-up, since it is not
+	// An hourly or daily limit; see the limits migration. Said in a pop-up, since it is not
 	// something wrong with what was typed.
 	if (error.code === 'LIMIT') tell('Limit reached', error.message);
 	if (error.code === '42501') return 'You are not allowed to do that.';
@@ -179,7 +179,7 @@ function explain(error: { code?: string; message: string }) {
 
 export async function createAddon(input: AddonInput) {
 	if (!supabase) throw new Error('Database is not configured.');
-	// The database makes the address from the name; see supabase/slugs.sql.
+	// The database makes the address from the name; see the slugs migration.
 	const { data, error } = await supabase.from('addons').insert(input).select('*, profiles(username)').single();
 	if (error) throw new Error(explain(error));
 	const addon = toAddon(data as Row);
@@ -229,7 +229,7 @@ async function groupCall(name: string, args: Record<string, unknown>) {
 	await loadAddons();
 }
 
-// Admins only; the database enforces it. See supabase/groups.sql.
+// Admins only; the database enforces it. See the groups migration.
 
 /** Puts addons in one group. The first decides which group, and which version stays main. */
 export const groupAddons = (ids: number[]) => groupCall('group_addons', { ids });

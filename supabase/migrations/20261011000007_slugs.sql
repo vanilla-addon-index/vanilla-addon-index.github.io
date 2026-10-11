@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after groups.sql. Safe to run again.
---
 -- An addon's address (/addon/<slug>) is made by the database from its name. The site used
 -- to send it, which let anyone with an account claim any free address, such as that of a
 -- well-known addon not listed yet, for an entry with a different name.

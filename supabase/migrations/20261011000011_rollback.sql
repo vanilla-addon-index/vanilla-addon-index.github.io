@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after limits.sql. Safe to run again.
---
 -- Undoes everything one account did since a given moment, in one go: what a wiki calls
 -- rolling a user back. Limits only slow a script or a rogue admin down; this is how the
 -- damage done within them is cleared up without going through the log line by line.

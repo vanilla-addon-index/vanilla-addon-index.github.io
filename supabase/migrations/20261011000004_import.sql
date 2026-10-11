@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after versions.sql. Safe to run again.
---
 -- The import queue: addons read from the Turtle WoW wiki wait here until an admin
 -- approves, rejects or merges them. A link that is live or was ever queued is never
 -- queued again.

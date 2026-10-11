@@ -1,5 +1,5 @@
 // Canonical form of a link, so different spellings of one repository compare equal.
-// public.link_key() in supabase/versions.sql has the same rules; keep the two in step.
+// public.link_key() in the versions migration has the same rules; keep the two in step.
 export function linkKey(url: string): string {
 	const u = url
 		.trim()

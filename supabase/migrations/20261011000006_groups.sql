@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after moderation.sql. Safe to run again.
---
 -- Groups replace merging. Versions (forks) of one addon each stay a full entry and are
 -- linked into a group, with one of them marked as the main version. Grouping deletes
 -- nothing and can always be undone.
@@ -16,7 +14,7 @@ alter table public.addons add column if not exists is_main boolean not null defa
 create index if not exists addons_group_idx on public.addons (group_id);
 create sequence if not exists public.addon_group_seq;
 
--- Replaces the version in schema.sql: grouping an addon is not an edit of it, so it
+-- Replaces the version in the schema migration: grouping an addon is not an edit of it, so it
 -- leaves the "updated" date alone.
 create or replace function public.addons_before_update() returns trigger
 language plpgsql as $$
@@ -58,7 +56,7 @@ end;
 $$;
 
 -- Every group change records how the addons involved were grouped before, so that it can
--- be undone from its log line. How many an admin can make in an hour is in limits.sql.
+-- be undone from its log line. How many an admin can make in an hour is in the limits migration.
 
 -- The group, if any, and main flag of the given addons and of everything grouped with them.
 create or replace function public.groups_of(ids bigint[]) returns jsonb
@@ -329,7 +327,7 @@ begin
 end;
 $$;
 
--- Replaces the version in moderation.sql: grouping and the wiki credit have their own log
+-- Replaces the version in the moderation migration: grouping and the wiki credit have their own log
 -- lines, so neither is also logged as an edit.
 create or replace function public.addons_audit() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -412,7 +410,7 @@ begin
 end;
 $$;
 
--- Replaces the version in import.sql: stores which entry a candidate is a version of.
+-- Replaces the version in the import migration: stores which entry a candidate is a version of.
 create or replace function public.queue_imports(items jsonb) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -456,7 +454,7 @@ begin
 end;
 $$;
 
--- Replaces the version in import.sql: the wiki's other versions are entries of their own
+-- Replaces the version in the import migration: the wiki's other versions are entries of their own
 -- now, so they are no longer attached as extra links; the new addon joins their group.
 create or replace function public.approve_imports(ids bigint[]) returns integer
 language plpgsql security definer set search_path = '' as $$
@@ -471,7 +469,7 @@ begin
 
 	for q in select * from public.import_queue where id = any (ids) and status = 'pending' order by id loop
 		begin
-			-- The address is made from the name by the database; see slugs.sql.
+			-- The address is made from the name by the database; see the slugs migration.
 			insert into public.addons (name, description, category, author, versions, images, source)
 			values (
 				left(q.name, 60),
@@ -498,7 +496,7 @@ begin
 end;
 $$;
 
--- Replaces the version in import.sql: an entry published through the form joins its
+-- Replaces the version in the import migration: an entry published through the form joins its
 -- wiki group too, and is logged as an approved import.
 create or replace function public.mark_imported(queue_id bigint, target bigint, credit boolean) returns void
 language plpgsql security definer set search_path = '' as $$

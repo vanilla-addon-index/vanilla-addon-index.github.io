@@ -1,8 +1,8 @@
 // Reports about live addons: anyone logged in sends them, admins read and close them.
-// The database checks the caller's rights on every call; see supabase/reports.sql.
+// The database checks the caller's rights on every call; see the reports migration.
 import { supabase } from './supabase';
 
-// Must match the check on reports.reason in supabase/reports.sql.
+// Must match the check on reports.reason in the reports migration.
 export const REASONS = {
 	broken: 'The link is dead or broken',
 	'wrong-client': 'Not an addon for 1.12',

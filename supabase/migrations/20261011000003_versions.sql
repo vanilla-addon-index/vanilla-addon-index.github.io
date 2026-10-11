@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after schema.sql and org-admins.sql. Safe to run again.
---
 -- One addon can list several versions (forks) of itself, in an order its owner or an
 -- admin chooses. The first one is the main link. No link can be listed under two addons.
 

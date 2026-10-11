@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after reports.sql. Safe to run again.
---
 -- The form on the site checks what is typed into it, but anyone with an account can also
 -- write to the database directly. These rules hold whichever way an addon arrives:
 --   * the category is one from the site's list

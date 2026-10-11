@@ -33,6 +33,21 @@ jobs:
       # The database rules are tested on a throwaway copy; a failure stops the deploy.
       - run: npm test
 
+      - name: Apply database migrations
+        # Brings the hosted database up to supabase/migrations before the site that needs it
+        # goes out. A failure stops the deploy, so the site is never ahead of its database.
+        # Skips itself until both secrets exist; `npm run db:push` does the same by hand.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "SUPABASE_ACCESS_TOKEN or SUPABASE_DB_PASSWORD is not set, skipping migrations."
+            exit 0
+          fi
+          npx supabase link --project-ref mefmmugajnbbotioplfw
+          npx supabase db push --linked
+
       - name: Import from the wiki
         # Nightly and manual runs only. Skips itself until the SUPABASE_SECRET_KEY secret exists.
         if: github.event_name != 'push'

@@ -1,4 +1,12 @@
--- Run once in the Supabase SQL editor (Dashboard -> SQL Editor -> New query).
+-- What a new table, function or sequence may be used for by the API's roles before anything
+-- is granted. A hosted Supabase project starts out this strict; the copy of the backend
+-- that runs on a developer's computer starts out giving these roles everything. Setting it
+-- here makes both the same, so a missing grant shows up in the tests and not on the site.
+alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke all on functions from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+	grant maintain, references, trigger, truncate on tables to anon, authenticated, service_role;
 
 -- Profiles: one row per account, created automatically on sign-up.
 create table public.profiles (
@@ -10,10 +18,10 @@ create table public.profiles (
 
 create table public.addons (
 	id bigint generated always as identity primary key,
-	-- Made from the name by a trigger in slugs.sql; whatever the client sends is replaced.
+	-- Made from the name by a trigger in the slugs migration; whatever the client sends is replaced.
 	slug text not null unique check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
 	name text not null check (char_length(name) between 2 and 60),
-	-- The 15 character minimum for non-admins is enforced by a trigger in import.sql.
+	-- The 15 character minimum for non-admins is enforced by a trigger in the import migration.
 	description text not null default '' check (char_length(description) <= 5000),
 	category text not null check (category <> ''),
 	author text not null default '' check (char_length(author) <= 60),

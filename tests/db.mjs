@@ -1,15 +1,17 @@
 // A throwaway copy of the database for tests: real Postgres running inside Node (PGlite),
-// with the project's own SQL files applied in the order the README gives. Nothing here
+// with the project's own migrations applied in order. Nothing here
 // touches the hosted Supabase project.
 //
 // Supabase provides a few things the SQL files rely on. They are stood in for below:
 // the three API roles, the auth schema, and the http extension used to ask GitHub who
 // is in the organization.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
-// The order the README gives. scripts/local.mjs applies the same list to the local backend.
-export const SQL_FILES = ['schema.sql', 'org-admins.sql', 'versions.sql', 'import.sql', 'moderation.sql', 'groups.sql', 'slugs.sql', 'reports.sql', 'validation.sql', 'limits.sql', 'rollback.sql'];
+// Every migration, in the order its name gives: the same files, in the same order, that
+// build the hosted database and the local copy of the backend.
+const MIGRATIONS = new URL('../supabase/migrations/', import.meta.url);
+const SQL_FILES = readdirSync(MIGRATIONS).filter((file) => file.endsWith('.sql')).sort();
 
 const SUPABASE_STAND_IN = `
 create role anon nologin;
@@ -65,13 +67,13 @@ async function build() {
 	const db = new PGlite();
 	await db.exec(SUPABASE_STAND_IN);
 	for (const file of SQL_FILES) {
-		const sql = readFileSync(new URL(`../supabase/${file}`, import.meta.url), 'utf8')
+		const sql = readFileSync(new URL(file, MIGRATIONS), 'utf8')
 			// Stood in for above; PGlite cannot install it.
 			.replace(/^create extension if not exists http[^;]*;/m, '');
 		try {
 			await db.exec(sql);
 		} catch (error) {
-			throw new Error(`supabase/${file} failed: ${error.message}`, { cause: error });
+			throw new Error(`supabase/migrations/${file} failed: ${error.message}`, { cause: error });
 		}
 	}
 	const copy = await db.dumpDataDir('none');

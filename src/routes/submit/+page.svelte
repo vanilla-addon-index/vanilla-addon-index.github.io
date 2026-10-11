@@ -11,7 +11,7 @@
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
-	// Must match the checks on addons.description in supabase/schema.sql and import.sql.
+	// Must match the checks on addons.description in the schema migration and the import migration.
 	const DESCRIPTION_MIN = 15;
 	const DESCRIPTION_MAX = 5000;
 

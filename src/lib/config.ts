@@ -1,5 +1,5 @@
 // Both values are public by design (they ship in the browser bundle).
-// Access control is enforced by row-level security, see supabase/schema.sql.
+// Access control is enforced by row-level security, see the schema migration.
 //
 // `npm run dev:local` points the site at the copy of the backend running on this computer
 // instead (see scripts/local.mjs), through these two settings in .env.localdb.
@@ -22,7 +22,7 @@ export const REPO_URL = 'https://github.com/vanilla-addon-index/vanilla-addon-in
 export const OAUTH_PROVIDERS = ['discord', 'github'] as const;
 export const PROVIDER_NAMES: Record<string, string> = { discord: 'Discord', github: 'GitHub' };
 
-// Must match the check on addons.category in supabase/validation.sql; a test compares the two.
+// Must match the check on addons.category in the validation migration; a test compares the two.
 export const CATEGORIES = [
 	'Action Bars',
 	'Auction & Economy',
@@ -47,8 +47,8 @@ export const CATEGORIES = [
 // What the wiki import falls back to when it cannot guess. Posters must pick one themselves.
 export const DEFAULT_CATEGORY = 'Miscellaneous';
 
-// Must match the check on addons.images in supabase/schema.sql.
+// Must match the check on addons.images in the schema migration.
 export const MAX_IMAGES = 5;
 
-// Links per addon, the main one included. Must match addons_links() in supabase/versions.sql.
+// Links per addon, the main one included. Must match addons_links() in the versions migration.
 export const MAX_VERSIONS = 10;

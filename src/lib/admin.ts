@@ -1,5 +1,5 @@
 // Calls behind the admin panel's Log, Trash and Users tabs. The database checks the
-// caller's rights on every one of them; see supabase/moderation.sql.
+// caller's rights on every one of them; see the moderation migration.
 import { PROVIDER_NAMES } from './config';
 import { linkKey } from './links';
 import { supabase } from './supabase';
@@ -52,7 +52,7 @@ export interface UserRow {
 	banned: boolean;
 	role: 'owner' | 'admin' | 'member';
 	addons: number;
-	// What the account logs in with, e.g. ['github']. Missing until supabase/user-providers.sql has been run.
+	// What the account logs in with, e.g. ['github'].
 	providers?: string[];
 }
 
@@ -190,7 +190,7 @@ export const ROLLBACK_TEXT: Record<RollbackStep['kind'], string> = {
 
 /**
  * Undoes everything an account did since a moment, newest first. With preview, nothing is
- * changed and the answer lists what a real run would do. See supabase/rollback.sql.
+ * changed and the answer lists what a real run would do. See the rollback migration.
  */
 export const rollbackAccount = (id: string, since: Date, preview: boolean) =>
 	call<Rollback>('rollback_account', { target: id, since: since.toISOString(), preview });

@@ -1,6 +1,6 @@
 // A copy of the whole backend on this computer, for trying things out and for the browser
-// tests: real Postgres, the real API and the real login service, with the project's own
-// SQL files applied and test data in place. Nothing here touches the hosted database.
+// tests: real Postgres, the real API and the real login service, built from the project's
+// own migrations, with test data in place. Nothing here touches the hosted database.
 //
 //   node scripts/local.mjs up      start it if needed, then wipe and fill it
 //   node scripts/local.mjs reset   wipe and fill it (it must be running)
@@ -9,10 +9,9 @@
 // Needs Docker. `npm run dev:local` then serves the site against it on port 5174, where
 // the login page offers one account of each kind. See src/lib/local-accounts.ts.
 import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { CATEGORIES } from '../src/lib/config.ts';
 import { LOCAL_ACCOUNTS, LOCAL_PASSWORD } from '../src/lib/local-accounts.ts';
-import { SQL_FILES } from '../tests/db.mjs';
 
 // The site only needs the database, the API and the login service.
 const LEFT_OUT = 'realtime,storage-api,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor';
@@ -135,13 +134,9 @@ async function fill() {
 	const info = status();
 	if (!info) throw new Error('The local backend is not running. Start it with: node scripts/local.mjs up');
 
-	console.log('Wiping the local database…');
-	supabase('db reset --no-seed', { stdio: ['ignore', 'ignore', 'inherit'] });
-
-	console.log('Applying the SQL files…');
-	for (const file of SQL_FILES) sql(readFileSync(`supabase/${file}`, 'utf8'), `supabase/${file}`);
-	// The API reads the tables and functions once and has to be told they changed.
-	sql(`notify pgrst, 'reload schema';`, 'reloading the API');
+	// Rebuilds it from supabase/migrations, the same way the hosted database was built.
+	console.log('Wiping the local database and applying the migrations…');
+	supabase('db reset --local --no-seed', { stdio: ['ignore', 'ignore', 'inherit'] });
 
 	console.log('Creating the test accounts and data…');
 	await createAccounts(info);

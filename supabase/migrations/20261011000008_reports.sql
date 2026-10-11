@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after slugs.sql. Safe to run again.
---
 -- Anyone logged in can report an addon: a dead link, a harmful download, a duplicate.
 -- Reports wait for an admin, who deals with the addon and closes the report. Visitors
 -- who are not logged in cannot report, so the database takes no anonymous writes.

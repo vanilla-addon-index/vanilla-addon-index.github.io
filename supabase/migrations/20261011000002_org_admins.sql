@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after schema.sql. Safe to run again.
---
 -- Public members of the GitHub organization become admins automatically when they
 -- log in with GitHub. The member list is fetched from GitHub at most every 10 minutes
 -- and stops granting access when it is more than 2 hours old, so leaving the

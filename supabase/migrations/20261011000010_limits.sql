@@ -1,5 +1,3 @@
--- Run once in the Supabase SQL editor, after validation.sql. Safe to run again.
---
 -- How much one account can do in an hour or a day. Reaching a limit never suspends
 -- anyone: the action is refused with the reason, and works again once time has passed.
 --
@@ -15,7 +13,7 @@
 -- it, or fill the database through the log, faster than someone can notice and step in.
 -- Everything within them is logged and can be undone from the log and the trash.
 --
--- Rolling an account back (rollback.sql) is clearing up, and is not held by them.
+-- Rolling an account back (the rollback migration) is clearing up, and is not held by them.
 --
 -- A refusal carries the code LIMIT, which the site shows as a pop-up.
 
@@ -113,7 +111,7 @@ create trigger addons_delete_limit
 	before delete on public.addons
 	for each row execute function public.addons_delete_limit();
 
--- Called by the group functions in groups.sql before they change anything.
+-- Called by the group functions in the groups migration before they change anything.
 create or replace function public.group_limit() returns void
 language plpgsql security definer set search_path = '' as $$
 begin

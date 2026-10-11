@@ -1,10 +1,8 @@
--- Run once in the Supabase SQL editor, after import.sql. Safe to run again.
---
 -- Guards against abuse:
 --   * owner and admin are separate levels; only the owner can suspend an admin
 --   * every change is written to a log that nobody can edit
 --   * deleted and merged addons go to a trash for 90 days, and edits can be reverted
---   * an account can only post, edit and delete so much in an hour or a day (limits.sql)
+--   * an account can only post, edit and delete so much in an hour or a day (the limits migration)
 --   * banned accounts can browse but not post or edit
 --
 -- After running it, make yourself the owner once:
@@ -47,7 +45,7 @@ language sql stable security definer set search_path = '' as $$
 	select exists (select 1 from public.profiles where id = auth.uid() and is_owner);
 $$;
 
--- Replaces the version in org-admins.sql: a suspended admin has no admin rights.
+-- Replaces the version in the org-admins migration: a suspended admin has no admin rights.
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = '' as $$
 	select exists (
@@ -201,9 +199,9 @@ create trigger addons_audit
 	after insert or update or delete on public.addons
 	for each row execute function public.addons_audit();
 
--- How much one account can post, edit and delete in an hour or a day is in limits.sql.
+-- How much one account can post, edit and delete in an hour or a day is in the limits migration.
 
--- Replaces the version in versions.sql: the delete is marked as a merge for the log, and a
+-- Replaces the version in the versions migration: the delete is marked as a merge for the log, and a
 -- merge stopped by the brake ends quietly.
 create or replace function public.merge_addons(source_id bigint, target_id bigint) returns void
 language plpgsql security definer set search_path = '' as $$
@@ -320,7 +318,7 @@ begin
 	perform set_config('app.doing', '', true);
 
 	-- Back in its group: the one it left if that still exists, or the group of two that
-	-- fell apart when it was deleted. See groups.sql.
+	-- fell apart when it was deleted. See the groups migration.
 	gid := (a ->> 'group_id')::bigint;
 	if gid is not null then
 		others := array(select jsonb_array_elements_text(coalesce(a -> 'group_members', '[]'))::bigint);
@@ -458,7 +456,7 @@ language sql stable security definer set search_path = '' as $$
 	limit 200;
 $$;
 
--- Replaces the version in import.sql: decisions on the queue are logged.
+-- Replaces the version in the import migration: decisions on the queue are logged.
 create or replace function public.decide_imports(ids bigint[], decision text) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
