@@ -98,7 +98,7 @@ create table if not exists public.activity_log (
 	-- addon.create, addon.update, addon.delete, addon.merge, addon.restore, addon.revert,
 	-- import.approve, import.reject, import.requeue, user.ban, user.unban,
 	-- user.autosuspend, group.add, group.remove, group.main, group.undo, group.suggest,
-	-- group.decline, report.create, report.handle, report.dismiss, trash.purge
+	-- group.decline, report.create, report.handle, report.dismiss, trash.purge, user.rollback
 	action text not null,
 	-- The addon or account the line is about.
 	subject text,

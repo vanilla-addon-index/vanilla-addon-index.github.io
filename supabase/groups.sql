@@ -57,22 +57,8 @@ begin
 end;
 $$;
 
--- Group changes are held to 200 an hour per admin, and every one records how the addons
--- involved were grouped before, so that it can be undone from its log line.
-create or replace function public.group_limit() returns void
-language plpgsql security definer set search_path = '' as $$
-begin
-	if not public.is_owner() and (
-		select count(*)
-		from public.activity_log
-		where actor = auth.uid()
-			and action in ('group.add', 'group.remove', 'group.main', 'group.undo')
-			and at > now() - interval '1 hour'
-	) >= 200 then
-		raise exception 'You can make at most 200 group changes an hour. Try again later.' using errcode = 'LIMIT';
-	end if;
-end;
-$$;
+-- Every group change records how the addons involved were grouped before, so that it can
+-- be undone from its log line. How many an admin can make in an hour is in limits.sql.
 
 -- The group, if any, and main flag of the given addons and of everything grouped with them.
 create or replace function public.groups_of(ids bigint[]) returns jsonb
@@ -584,7 +570,6 @@ grant execute on function public.suggest_group(bigint, bigint) to authenticated;
 grant execute on function public.decide_suggestion(bigint, boolean) to authenticated;
 grant execute on function public.dismiss_pair(bigint, bigint) to authenticated;
 grant execute on function public.approve_into(bigint, bigint) to authenticated;
-revoke all on function public.group_limit() from public, anon, authenticated;
 revoke all on function public.groups_of(bigint[]) from public, anon, authenticated;
 revoke all on function public.undo_grouping(bigint) from public, anon;
 revoke all on function public.unapprove_import(bigint) from public, anon;

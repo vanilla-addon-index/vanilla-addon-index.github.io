@@ -86,7 +86,8 @@ export const ACTION_TEXT: Record<string, string> = {
 	'import.requeue': 'put back in the import queue',
 	'user.ban': 'banned',
 	'user.unban': 'unbanned',
-	'user.autosuspend': 'was suspended automatically:'
+	'user.autosuspend': 'was suspended automatically:',
+	'user.rollback': 'rolled back everything done by'
 };
 
 export const TRASH_DAYS = 90;
@@ -160,6 +161,39 @@ export const restoreAddon = (trashId: number) => call<string>('restore_addon', {
 
 /** Removes trashed addons for good. Owner only. */
 export const purgeTrash = (ids: number[]) => call<number>('purge_trash', { ids });
+
+export interface RollbackStep {
+	kind: 'restore' | 'revert' | 'delete' | 'unapprove' | 'requeue' | 'ungroup' | 'unban' | 'dismiss';
+	// The addon or account the step is about.
+	subject: string;
+	// For a revert: how many edits by other people, made since, go with it.
+	others?: number;
+}
+
+export interface Rollback {
+	steps: RollbackStep[];
+	// What could not be undone, and why.
+	skipped: { action: string; subject: string; why: string }[];
+}
+
+// What each step reads as, before the name of what it is about.
+export const ROLLBACK_TEXT: Record<RollbackStep['kind'], string> = {
+	restore: 'Restore',
+	revert: 'Put back as it was:',
+	delete: 'Move to the trash:',
+	unapprove: 'Send back to the import queue:',
+	requeue: 'Put the rejected import back in the queue:',
+	ungroup: 'Undo a group change of',
+	unban: 'Lift the ban on',
+	dismiss: 'Dismiss their report about'
+};
+
+/**
+ * Undoes everything an account did since a moment, newest first. With preview, nothing is
+ * changed and the answer lists what a real run would do. See supabase/rollback.sql.
+ */
+export const rollbackAccount = (id: string, since: Date, preview: boolean) =>
+	call<Rollback>('rollback_account', { target: id, since: since.toISOString(), preview });
 
 /** Which trash entries still exist, so the log only offers to restore what can be restored. */
 export async function loadTrashIds() {

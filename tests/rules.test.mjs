@@ -755,6 +755,119 @@ describe('undoing from the log', () => {
 	});
 });
 
+describe('rolling an account back', () => {
+	const rollback = async (user, target, preview = false, since = '1 hour') =>
+		(
+			await call(user, `select public.rollback_account($1, now() - $2::interval, $3) as r`, [target.id, since, preview])
+		)[0].r;
+	const kinds = (result) => result.steps.map((s) => `${s.kind} ${s.subject}`).sort();
+	const author = async (row) => (await db.sql('select author from public.addons where id = $1', [row.id]))[0]?.author;
+	const backdate = () => db.sql(`update public.activity_log set at = at - interval '2 hours'`);
+
+	test('a member is rolled back: posts trashed, edits reverted, deletes restored, reports dismissed', async () => {
+		const old = await post(db, alice, addon('Old'));
+		const gone = await post(db, alice, addon('Gone'));
+		const victim = await post(db, bob, addon('Victim'));
+		await call(alice, `update public.addons set author = 'Before' where id = $1`, [old.id]);
+		await backdate();
+
+		// The damage: two edits of the same addon, a delete, two spam posts and a false report.
+		await call(alice, `update public.addons set author = 'Vandal 1' where id = $1`, [old.id]);
+		await call(alice, `update public.addons set author = 'Vandal 2' where id = $1`, [old.id]);
+		await call(alice, 'delete from public.addons where id = $1', [gone.id]);
+		const spam = await post(db, alice, addon('SpamOne'));
+		await call(alice, `update public.addons set author = 'Spammer' where id = $1`, [spam.id]);
+		await post(db, alice, addon('SpamTwo'));
+		await call(alice, 'select public.report_addon($1, $2, $3)', [victim.id, 'harmful', '']);
+
+		// The preview lists what would happen, and changes nothing.
+		const expected = ['delete SpamOne', 'delete SpamTwo', 'dismiss Victim', 'restore Gone', 'revert Old'];
+		const before = await logged();
+		assert.deepEqual(kinds(await rollback(admin, alice, true)), expected);
+		assert.deepEqual(await live(), ['Old', 'SpamOne', 'SpamTwo', 'Victim']);
+		assert.equal(await author(old), 'Vandal 2');
+		assert.deepEqual(await logged(), before);
+
+		const result = await rollback(admin, alice);
+		assert.deepEqual(kinds(result), expected);
+		assert.deepEqual(result.skipped, []);
+		assert.deepEqual(await live(), ['Gone', 'Old', 'Victim']);
+		// Back to before the first edit in that time, not to before every edit ever.
+		assert.equal(await author(old), 'Before');
+		assert.equal((await db.sql(`select count(*)::int as n from public.reports where status = 'open'`))[0].n, 0);
+		assert.equal((await logged()).at(-1), 'user.rollback');
+		// Done once, there is nothing left to do.
+		assert.deepEqual((await rollback(admin, alice)).steps, []);
+	});
+
+	test('an admin is rolled back by the owner: edits, deletes, groups, bans and import decisions', async () => {
+		const one = await post(db, alice, addon('One'));
+		const two = await post(db, bob, addon('Two'));
+		const three = await post(db, bob, addon('Three'));
+		await db.asService((q) =>
+			q('select public.queue_imports($1::jsonb)', [
+				JSON.stringify([
+					{ name: 'Wiki one', url: 'https://github.com/wiki/one' },
+					{ name: 'Wiki two', url: 'https://github.com/wiki/two' }
+				])
+			])
+		);
+		const queue = await db.sql('select id from public.import_queue order by id');
+		await backdate();
+
+		await call(admin2, `update public.addons set author = 'Defaced' where id = $1`, [one.id]);
+		await call(admin2, 'select public.group_addons($1)', [[one.id, two.id]]);
+		await call(admin2, 'delete from public.addons where id = $1', [three.id]);
+		await call(admin2, 'select public.set_banned($1, true)', [bob.id]);
+		await call(admin2, 'select public.approve_imports($1)', [[queue[0].id]]);
+		await call(admin2, 'select public.decide_imports($1, $2)', [[queue[1].id], 'rejected']);
+		// Someone else edits the defaced addon afterwards; the preview says so.
+		await call(admin, `update public.addons set category = 'PvP' where id = $1`, [one.id]);
+
+		await refused(() => rollback(admin, admin2), /Only the owner/);
+		const preview = await rollback(owner, admin2, true);
+		assert.equal(preview.steps.find((s) => s.kind === 'revert').others, 1);
+
+		const result = await rollback(owner, admin2);
+		assert.deepEqual(kinds(result), [
+			'requeue Wiki two',
+			'restore Three',
+			'revert One',
+			'unapprove Wiki one',
+			'unban bob',
+			'ungroup One'
+		]);
+		assert.deepEqual(await live(), ['One', 'Three', 'Two']);
+		assert.equal(await author(one), '');
+		assert.equal((await db.sql('select count(*)::int as n from public.addons where group_id is not null'))[0].n, 0);
+		assert.equal((await role(bob)).banned, false);
+		assert.deepEqual(await db.sql('select status from public.import_queue order by id'), [
+			{ status: 'pending' },
+			{ status: 'pending' }
+		]);
+	});
+
+	test('clearing up is not held by the delete limit, and who may roll back whom follows the ban rules', async () => {
+		const others = [];
+		for (let i = 0; i < 16; i++) others.push(await post(db, owner, addon(`Other${i}`)));
+		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Spam${i}`));
+		// The admin deletes twenty addons by hand, and the limit stops the twenty-first.
+		for (const row of others) await call(admin, 'delete from public.addons where id = $1', [row.id]);
+		for (let i = 0; i < 4; i++) await call(admin, 'delete from public.addons where name = $1', [`Spam${i}`]);
+		await refused(() => call(admin, 'delete from public.addons where name = $1', ['Spam4']), /at most 20 addons an hour/);
+
+		// The rollback clears the other six all the same.
+		const result = await rollback(admin, alice);
+		assert.equal(result.steps.length, 6);
+		assert.deepEqual(result.skipped, []);
+		assert.deepEqual(await live(), []);
+
+		await refused(() => rollback(alice, bob), /Only admins/);
+		await refused(() => rollback(admin, admin), /cannot roll yourself back/);
+		await refused(() => rollback(admin, owner), /owner cannot be rolled back/);
+	});
+});
+
 describe('import queue', () => {
 	const candidate = (name, url = `https://github.com/wiki/${name}`, extra = {}) => ({
 		name,

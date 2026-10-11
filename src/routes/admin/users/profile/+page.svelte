@@ -3,14 +3,17 @@
 	import { page } from '$app/state';
 	import {
 		ACTION_TEXT,
+		ROLLBACK_TEXT,
 		listUsers,
 		loadLogAbout,
 		loginsOf,
+		rollbackAccount,
 		setBanned,
 		type LogEntry,
+		type Rollback,
 		type UserRow
 	} from '#lib/admin.ts';
-	import { ownedBy } from '#lib/addons.svelte.ts';
+	import { loadAddons, ownedBy } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
@@ -28,6 +31,7 @@
 	async function load(username: string) {
 		loaded = false;
 		error = notice = '';
+		plan = undefined;
 		try {
 			// The search matches part of a name; the profile is the exact one.
 			user = (await listUsers(username)).find((u) => u.username.toLowerCase() === username.toLowerCase());
@@ -56,6 +60,57 @@
 			(user.role === 'member' || auth.isOwner)
 	);
 	const verb = $derived(user?.role === 'admin' ? 'Suspend' : 'Ban');
+
+	// Rolling back: everything the account did in a stretch of time, undone in one go. It
+	// is shown first, and only happens once that list has been confirmed.
+	const PERIODS = {
+		'1': 'the last hour',
+		'24': 'the last 24 hours',
+		'168': 'the last 7 days',
+		'720': 'the last 30 days',
+		'0': 'all the time it has existed'
+	} as const;
+	type Period = keyof typeof PERIODS;
+	let period = $state<Period>('24');
+	// What a rollback would do, for the stretch of time it was asked about.
+	let plan = $state<Rollback & { since: Date; period: Period }>();
+	let working = $state(false);
+	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+	async function previewRollback() {
+		if (!user) return;
+		working = true;
+		error = notice = '';
+		try {
+			const since = period === '0' ? new Date(0) : new Date(Date.now() - Number(period) * 3_600_000);
+			plan = { ...(await rollbackAccount(user.id, since, true)), since, period };
+		} catch (e) {
+			error = (e as Error).message;
+		}
+		working = false;
+	}
+
+	async function runRollback() {
+		if (!user || !plan) return;
+		const confirmed = await ask({
+			title: `Roll back ${plural(plan.steps.length, 'change')} by ${user.username}?`,
+			body: 'Each one is logged under your name and can be undone from the log like any other change.',
+			action: 'Roll back',
+			danger: true
+		});
+		if (!confirmed) return;
+		working = true;
+		try {
+			const done = await rollbackAccount(user.id, plan.since, false);
+			await Promise.all([loadAddons(), load(user.username)]);
+			notice =
+				`Rolled back ${plural(done.steps.length, 'change')} by ${user.username}.` +
+				(done.skipped.length ? ` ${plural(done.skipped.length, 'step')} could not be undone; see the log.` : '');
+		} catch (e) {
+			error = (e as Error).message;
+		}
+		working = false;
+	}
 
 	async function ban(value: boolean) {
 		if (!user) return;
@@ -129,10 +184,58 @@
 				{:else}
 					<button class="btn btn-danger w-full" onclick={() => ban(true)}>{verb}</button>
 				{/if}
+				<div class="panel p-3">
+					<h2 class="label">Roll back</h2>
+					<label class="text-sm text-muted" for="period">Undo everything this account did in</label>
+					<select id="period" class="input mt-1" bind:value={period}>
+						{#each Object.entries(PERIODS) as [value, label] (value)}
+							<option {value}>{label}</option>
+						{/each}
+					</select>
+					<button class="btn mt-2 w-full" disabled={working} onclick={previewRollback}>
+						{working ? 'Working…' : 'Show what would change'}
+					</button>
+				</div>
 			{/if}
 		</aside>
 
 		<section>
+			{#if plan}
+				<div class="panel mb-5 border-accent/30">
+					<div class="border-b border-border px-3 py-2">
+						<h2 class="font-bold">Rolling back {user.username}, {PERIODS[plan.period]}</h2>
+						<p class="text-sm text-muted">
+							{plan.steps.length
+								? 'Nothing has changed yet. This is what would happen, newest first.'
+								: 'There is nothing to roll back in that time.'}
+						</p>
+					</div>
+					{#each plan.steps as step, index (index)}
+						<p class="border-b border-border px-3 py-1.5 break-words">
+							<span class="text-muted">{ROLLBACK_TEXT[step.kind]}</span>
+							{step.subject}
+							{#if step.others}
+								<span class="text-sm text-danger">
+									· also undoes {plural(step.others, 'later edit')} by someone else
+								</span>
+							{/if}
+						</p>
+					{/each}
+					{#each plan.skipped as miss, index (index)}
+						<p class="border-b border-border px-3 py-1.5 text-sm break-words text-danger">
+							Cannot undo "{ACTION_TEXT[miss.action] ?? miss.action} {miss.subject}": {miss.why}
+						</p>
+					{/each}
+					<div class="flex flex-wrap gap-2 px-3 py-2">
+						{#if plan.steps.length}
+							<button class="btn btn-danger" disabled={working} onclick={runRollback}>
+								Roll back {plural(plan.steps.length, 'change')}
+							</button>
+						{/if}
+						<button class="btn" onclick={() => (plan = undefined)}>Close</button>
+					</div>
+				</div>
+			{/if}
 			<h2 class="label">Addons posted · {owned.posted.length}</h2>
 			<div class="panel">
 				{#each owned.posted as addon (addon.id)}

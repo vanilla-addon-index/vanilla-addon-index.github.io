@@ -191,6 +191,52 @@ test('a member is banned from the Users tab, with nothing trashed, and unbanned 
 	await expect(logLine(page, /banned\s+member2/).getByRole('button', { name: 'Lift the ban' })).toHaveCount(0);
 });
 
+test('everything a member did is rolled back from their profile, after a look at what would change', async ({ page }) => {
+	// The damage, as the member: a spam post and a defaced addon of their own.
+	await loginAs(page, 'member');
+	const spam = unique('Spam');
+	const spamAddress = await postAddon(page, spam);
+	await page.goto('/submit?edit=member-map');
+	await page.getByLabel('Description', { exact: true }).fill('Defaced by a browser test, long enough to save.');
+	await page.getByRole('button', { name: 'Save changes' }).click();
+	await expect(page.getByText('Defaced by a browser test, long enough to save.')).toBeVisible();
+	await page.goto('/account');
+	await page.getByRole('button', { name: 'Log out' }).click();
+	await expect(page.getByRole('navigation').getByRole('link', { name: 'Log in' })).toBeVisible();
+
+	await loginAs(page, 'admin');
+	await page.goto('/admin/users/profile?name=member');
+	await page.getByLabel('Undo everything this account did in').selectOption('1');
+	await page.getByRole('button', { name: 'Show what would change' }).click();
+	const plan = page.locator('.panel', { hasText: 'Rolling back member, the last hour' });
+	await expect(plan.getByText('Nothing has changed yet.')).toBeVisible();
+	await expect(plan.getByText(`Move to the trash: ${spam}`)).toBeVisible();
+	await expect(plan.getByText('Put back as it was: Member Map')).toBeVisible();
+
+	// Looking changed nothing.
+	await page.goto(spamAddress);
+	await expect(page.getByRole('heading', { level: 1, name: spam })).toBeVisible();
+
+	await page.goto('/admin/users/profile?name=member');
+	await page.getByLabel('Undo everything this account did in').selectOption('1');
+	await page.getByRole('button', { name: 'Show what would change' }).click();
+	await page.getByRole('button', { name: /^Roll back \d+ changes?$/ }).click();
+	await confirm(page, 'Roll back');
+	await expect(page.getByText(/Rolled back \d+ changes? by member\./)).toBeVisible();
+
+	await page.goto(spamAddress);
+	await expect(page.getByRole('heading', { name: 'Addon not found' })).toBeVisible();
+	await page.goto('/addon/member-map');
+	await expect(page.getByText('Posted by the test member. Coordinates and notes on the world map.')).toBeVisible();
+	await page.goto('/admin/log');
+	await expect(logLine(page, /rolled back everything done by\s+member/)).toBeVisible();
+
+	// An admin is not offered a rollback of another admin.
+	await page.goto('/admin/users/profile?name=admin2');
+	await expect(page.getByRole('heading', { level: 1, name: 'admin2' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Show what would change' })).toHaveCount(0);
+});
+
 test('an admin cannot suspend another admin or empty the trash; the owner can', async ({ page }) => {
 	await loginAs(page, 'admin');
 	await page.goto('/admin/users/profile?name=admin2');

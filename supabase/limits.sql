@@ -8,11 +8,14 @@
 --   editing            10 an hour,       100 an hour        no limit
 --                      50 a day
 --   deleting           20 an hour        20 an hour         no limit
+--   grouping           (admins only)     200 an hour        no limit
 --
 -- Approving imports is not posting and has no limit. The limits are there so that a
 -- script, or an admin account in the wrong hands, cannot flood the list, rewrite it, empty
 -- it, or fill the database through the log, faster than someone can notice and step in.
 -- Everything within them is logged and can be undone from the log and the trash.
+--
+-- Rolling an account back (rollback.sql) is clearing up, and is not held by them.
 --
 -- A refusal carries the code LIMIT, which the site shows as a pop-up.
 
@@ -91,7 +94,7 @@ create trigger addons_edit_limit
 create or replace function public.addons_delete_limit() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-	if auth.uid() is null or public.is_owner() then
+	if auth.uid() is null or public.is_owner() or public.doing('rollback') then
 		return old;
 	end if;
 	if (
@@ -109,3 +112,21 @@ drop trigger if exists addons_delete_limit on public.addons;
 create trigger addons_delete_limit
 	before delete on public.addons
 	for each row execute function public.addons_delete_limit();
+
+-- Called by the group functions in groups.sql before they change anything.
+create or replace function public.group_limit() returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+	if not public.is_owner() and not public.doing('rollback') and (
+		select count(*)
+		from public.activity_log
+		where actor = auth.uid()
+			and action in ('group.add', 'group.remove', 'group.main', 'group.undo')
+			and at > now() - interval '1 hour'
+	) >= 200 then
+		raise exception 'You can make at most 200 group changes an hour. Try again later.' using errcode = 'LIMIT';
+	end if;
+end;
+$$;
+
+revoke all on function public.group_limit() from public, anon, authenticated;
