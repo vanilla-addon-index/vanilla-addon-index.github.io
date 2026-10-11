@@ -1,15 +1,16 @@
 // Nightly import job, run by .github/workflows/nightly.yml.
-//   1. Reads the wiki and queues addons that are neither live nor already reviewed.
-//   2. Asks GitHub about every queued and live repository (stars, last update, archived,
+//   1. Asks GitHub who the organization's public members are: they are the site's admins.
+//   2. Reads the wiki and queues addons that are neither live nor already reviewed.
+//   3. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
 //
-// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 2. Without the token it does nothing, so
+// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for steps 1 and 3. Without the token it does nothing, so
 // the deploy keeps working before the secret is configured.
 //
 // The job signs in like any visitor. The token is what lets it do these few things and
-// nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+// nothing else; see the nightly token and org members migrations, and `npm run nightly:token` to make one.
+import { GITHUB_ORG, SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 
 const token = process.env.NIGHTLY_TOKEN;
@@ -24,7 +25,7 @@ const BATCH = 50;
 const TOC_BATCH = 25;
 const TOC_PATHS = 4;
 
-// Calls one of the job's three database functions. The token travels in the body.
+// Calls one of the job's database functions. The token travels in the body.
 async function db(name, args = {}) {
 	const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
 		method: 'POST',
@@ -39,14 +40,36 @@ async function db(name, args = {}) {
 	return res.json();
 }
 
-// 1. Wiki -> queue.
+// 1. GitHub -> organization members. First, and on its own: the list stops counting after
+// three days, so a wiki that is down must not keep it from being refreshed.
+if (githubToken) {
+	try {
+		const ids = [];
+		for (let page = 1; ; page++) {
+			const res = await fetch(`https://api.github.com/orgs/${GITHUB_ORG}/public_members?per_page=100&page=${page}`, {
+				headers: { Authorization: `Bearer ${githubToken}`, 'User-Agent': 'vanilla-addon-index' }
+			});
+			if (!res.ok) throw new Error(`GitHub answered ${res.status}: ${await res.text()}`);
+			const members = await res.json();
+			ids.push(...members.map((m) => m.id));
+			if (members.length < 100) break;
+		}
+		console.log(`The organization has ${await db('store_org_members', { ids })} public members.`);
+	} catch (error) {
+		// The rest still runs; the run is marked as failed so that this is seen.
+		console.error(`Could not refresh the organization's members: ${error.message}`);
+		process.exitCode = 1;
+	}
+}
+
+// 2. Wiki -> queue.
 const { candidates, revision } = await readWiki();
 const added = await db('queue_imports', { items: candidates });
 console.log(`Wiki revision ${revision}: ${candidates.length} addons listed, ${added} new in the queue.`);
 
-// 2. GitHub -> repo_stats.
+// 3. GitHub -> repo_stats.
 if (!githubToken) {
-	console.log('GITHUB_TOKEN is not set, skipping repository stats.');
+	console.log('GITHUB_TOKEN is not set, skipping the organization members and repository stats.');
 	process.exit(0);
 }
 

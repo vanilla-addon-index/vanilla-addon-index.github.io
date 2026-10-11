@@ -71,10 +71,33 @@ describe('roles', () => {
 		await refused(() => db.asVisitor((q) => q('select * from public.profiles')));
 	});
 
-	test('an admin who leaves the organization loses admin rights', async () => {
-		await db.sql(`update extensions.fake_github set members = '[]'`);
-		await db.sql(`update public.org_cache set checked_at = 'epoch'`);
+	test('an admin who leaves the organization loses admin rights at the next nightly run', async () => {
+		await db.storeOrgMembers([]);
 		assert.equal((await role(admin)).admin, false);
+		assert.equal((await role(owner)).admin, true);
+	});
+
+	test('only the nightly job can say who the organization\'s members are', async () => {
+		const [{ provider_id: mine }] = await db.sql(`insert into auth.identities (user_id, provider, provider_id) values ($1, 'github', '77') returning provider_id`, [alice.id]);
+		const store = 'select public.store_org_members($1, $2::bigint[])';
+		await refused(() => db.storeOrgMembers([Number(mine)], 'a guess'), /Only the nightly job/);
+		await refused(() => db.storeOrgMembers(null), /missing/);
+		for (const user of [alice, admin, owner]) {
+			await refused(() => call(user, store, [NIGHTLY_TOKEN, [77]]), /permission denied/);
+		}
+		await refused(() => db.asService((q) => q(store, [NIGHTLY_TOKEN, [77]])), /permission denied/);
+		assert.equal((await role(alice)).admin, false);
+	});
+
+	test('the list of members counts for three days after the last nightly run', async () => {
+		await db.sql(`update public.org_cache set fetched_at = now() - interval '2 days'`);
+		assert.equal((await role(admin)).admin, true);
+		await db.sql(`update public.org_cache set fetched_at = now() - interval '4 days'`);
+		assert.equal((await role(admin)).admin, false);
+		// The owner and hand-ticked admins do not depend on the list.
+		assert.equal((await role(owner)).admin, true);
+		await db.sql('update public.profiles set is_admin = true where id = $1', [alice.id]);
+		assert.equal((await role(alice)).admin, true);
 	});
 });
 

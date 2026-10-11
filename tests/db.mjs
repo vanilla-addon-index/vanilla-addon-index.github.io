@@ -40,7 +40,7 @@ create function auth.uid() returns uuid language sql stable as $$
 	select nullif(auth.jwt() ->> 'sub', '')::uuid;
 $$;
 
--- The http extension, answering with whatever the test says the organization's members are.
+-- The http extension, which an early migration needs to exist. Nothing calls it any more.
 create type extensions.http_header as (field text, value text);
 create type extensions.http_request as (
 	method text, uri text, headers extensions.http_header[], content_type text, content text
@@ -50,12 +50,8 @@ create type extensions.http_response as (
 );
 create function extensions.http_header(text, text) returns extensions.http_header
 language sql as $$ select row($1, $2)::extensions.http_header $$;
-create table extensions.fake_github (members jsonb not null default '[]');
-insert into extensions.fake_github default values;
 create function extensions.http(extensions.http_request) returns extensions.http_response
-language sql security definer as $$
-	select 200, 'application/json', null::extensions.http_header[], (select members::text from extensions.fake_github);
-$$;
+language sql as $$ select 200, 'application/json', null::extensions.http_header[], '[]' $$;
 
 grant usage on schema public, auth, extensions to anon, authenticated, service_role;
 `;
@@ -105,6 +101,12 @@ export async function createDb() {
 	}
 
 	let nextGithubId = 1000;
+	// The organization's public members, by GitHub id.
+	const members = [];
+
+	/** The nightly job storing who the organization's public members are. */
+	const storeOrgMembers = (ids, token = NIGHTLY_TOKEN) =>
+		request('anon', { role: 'anon' }, (q) => q('select public.store_org_members($1, $2::bigint[]) as n', [token, ids]));
 
 	return {
 		close: () => db.close(),
@@ -148,15 +150,13 @@ export async function createDb() {
 					id,
 					String(githubId)
 				]);
-				await db.query(`update extensions.fake_github set members = members || $1::jsonb`, [
-					JSON.stringify([{ id: githubId }])
-				]);
-				// The member list is cached for ten minutes; a new member needs a fresh read.
-				await db.exec(`update public.org_cache set checked_at = 'epoch'`);
-				await request('authenticated', { sub: id, role: 'authenticated' }, (q) => q('select public.my_role()'));
+				members.push(githubId);
+				await storeOrgMembers(members);
 			}
 			return user;
-		}
+		},
+
+		storeOrgMembers
 	};
 }
 
