@@ -1,6 +1,7 @@
 // Calls behind the admin panel's Log, Trash and Users tabs. The database checks the
 // caller's rights on every one of them; see supabase/moderation.sql.
 import { PROVIDER_NAMES } from './config';
+import { linkKey } from './links';
 import { supabase } from './supabase';
 import type { Addon } from './types';
 
@@ -21,6 +22,17 @@ export interface LogEntry {
 		reason?: string;
 		trashed?: boolean;
 		url?: string;
+		// For deletes: where in the trash the addon went.
+		trash_id?: number;
+		// For group changes: how the addons involved were grouped before, which is what
+		// undoing the line restores.
+		groups_before?: unknown[];
+		// For "undid a group change": the log line that was undone.
+		undid?: number;
+		// For "declined to group": the addon it was not grouped with.
+		target?: string;
+		// For emptying the trash: what was removed for good.
+		names?: string[];
 	} | null;
 }
 
@@ -63,6 +75,9 @@ export const ACTION_TEXT: Record<string, string> = {
 	'group.remove': 'removed from its group',
 	'group.main': 'made the main version',
 	'group.suggest': 'suggested a group for',
+	'group.undo': 'undid a group change of',
+	'group.decline': 'declined to group',
+	'trash.purge': 'removed for good from the trash:',
 	'report.create': 'reported',
 	'report.handle': 'handled a report about',
 	'report.dismiss': 'dismissed a report about',
@@ -124,6 +139,41 @@ export const restoreAddon = (trashId: number) => call<string>('restore_addon', {
 
 /** Removes trashed addons for good. Owner only. */
 export const purgeTrash = (ids: number[]) => call<number>('purge_trash', { ids });
+
+/** Which trash entries still exist, so the log only offers to restore what can be restored. */
+export async function loadTrashIds() {
+	const { data, error } = await client().from('addon_trash').select('id').limit(5000);
+	if (error) throw new Error(error.message);
+	return new Set((data as { id: number }[]).map((row) => row.id));
+}
+
+/** Puts the addons of a logged group change back the way they were grouped before it. */
+export const undoGrouping = (logId: number) => call<null>('undo_grouping', { log_id: logId });
+
+/** Undoes an approval: the addon goes to the trash and its entry is back in the import queue. */
+export const unapproveImport = (addonId: number) => call<null>('unapprove_import', { target: addonId });
+
+/** Puts a rejected import back in the queue, found by its link. False when it was not rejected any more. */
+export async function requeueImport(url: string) {
+	const { data, error } = await client()
+		.from('import_queue')
+		.select('id')
+		.eq('key', linkKey(url))
+		.eq('status', 'rejected')
+		.maybeSingle();
+	if (error) throw new Error(error.message);
+	if (!data) return false;
+	await call<number>('decide_imports', { ids: [data.id], decision: 'pending' });
+	return true;
+}
+
+/** Lifts the ban on the account with this name. False when there is no such account. */
+export async function unbanByName(username: string) {
+	const user = (await listUsers(username)).find((u) => u.username === username);
+	if (!user) return false;
+	await setBanned(user.id, false);
+	return true;
+}
 
 /** Sets an addon back to how it was before the edit in this log line. */
 export const revertEdit = (logId: number) => call<null>('revert_addon', { log_id: logId });

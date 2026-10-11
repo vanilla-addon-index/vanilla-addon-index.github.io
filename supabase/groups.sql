@@ -57,6 +57,32 @@ begin
 end;
 $$;
 
+-- Group changes are held to 200 an hour per admin, and every one records how the addons
+-- involved were grouped before, so that it can be undone from its log line.
+create or replace function public.group_limit() returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+	if not public.is_owner() and (
+		select count(*)
+		from public.activity_log
+		where actor = auth.uid()
+			and action in ('group.add', 'group.remove', 'group.main', 'group.undo')
+			and at > now() - interval '1 hour'
+	) >= 200 then
+		raise exception 'You can make at most 200 group changes an hour. Try again later.' using errcode = 'LIMIT';
+	end if;
+end;
+$$;
+
+-- The group, if any, and main flag of the given addons and of everything grouped with them.
+create or replace function public.groups_of(ids bigint[]) returns jsonb
+language sql stable security definer set search_path = '' as $$
+	select coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'group_id', a.group_id, 'is_main', a.is_main) order by a.id), '[]')
+	from public.addons a
+	where a.id = any (ids)
+		or a.group_id in (select g.group_id from public.addons g where g.id = any (ids) and g.group_id is not null);
+$$;
+
 -- Puts addons in one group. The first one decides: its group is the one the others
 -- join, bringing their own groups along, and its main version stays the main version.
 create or replace function public.group_addons(ids bigint[]) returns void
@@ -64,6 +90,7 @@ language plpgsql security definer set search_path = '' as $$
 declare
 	gid bigint;
 	absorbed bigint[];
+	before jsonb;
 begin
 	if not public.is_admin() then
 		raise exception 'Only admins can group addons.';
@@ -71,9 +98,14 @@ begin
 	if (select count(distinct x) from unnest(ids) x) < 2 then
 		raise exception 'Pick at least two different addons.';
 	end if;
+	if cardinality(ids) > 20 then
+		raise exception 'Group at most 20 addons at a time.';
+	end if;
 	if (select count(*) from public.addons where id = any (ids)) <> (select count(distinct x) from unnest(ids) x) then
 		raise exception 'One of those addons no longer exists.';
 	end if;
+	perform public.group_limit();
+	before := public.groups_of(ids);
 
 	select group_id into gid from public.addons where id = ids[1];
 	if gid is null then
@@ -94,7 +126,10 @@ begin
 		'group.add',
 		(select name from public.addons where group_id = gid and is_main),
 		(select id from public.addons where group_id = gid and is_main),
-		jsonb_build_object('members', (select jsonb_agg(name order by name) from public.addons where group_id = gid))
+		jsonb_build_object(
+			'members', (select jsonb_agg(name order by name) from public.addons where group_id = gid),
+			'groups_before', before
+		)
 	);
 end;
 $$;
@@ -104,6 +139,7 @@ language plpgsql security definer set search_path = '' as $$
 declare
 	gid bigint;
 	label text;
+	before jsonb;
 begin
 	if not public.is_admin() then
 		raise exception 'Only admins can change groups.';
@@ -112,9 +148,11 @@ begin
 	if gid is null then
 		raise exception 'That addon is not in a group.';
 	end if;
+	perform public.group_limit();
+	before := public.groups_of(array[target]);
 	update public.addons set group_id = null, is_main = false where id = target;
 	perform public.tidy_group(gid);
-	perform public.log_action('group.remove', label, target, null);
+	perform public.log_action('group.remove', label, target, jsonb_build_object('groups_before', before));
 end;
 $$;
 
@@ -123,6 +161,7 @@ language plpgsql security definer set search_path = '' as $$
 declare
 	gid bigint;
 	label text;
+	before jsonb;
 begin
 	if not public.is_admin() then
 		raise exception 'Only admins can pick the main version.';
@@ -131,8 +170,54 @@ begin
 	if gid is null then
 		raise exception 'That addon is not in a group.';
 	end if;
+	perform public.group_limit();
+	before := public.groups_of(array[target]);
 	update public.addons set is_main = (id = target) where group_id = gid and is_main is distinct from (id = target);
-	perform public.log_action('group.main', label, target, null);
+	perform public.log_action('group.main', label, target, jsonb_build_object('groups_before', before));
+end;
+$$;
+
+-- Puts the addons of one logged group change back the way they were grouped before it.
+-- The undo is logged the same way, so it can be undone in turn.
+create or replace function public.undo_grouping(log_id bigint) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+	entry public.activity_log;
+	before jsonb;
+	ids bigint[];
+	after jsonb;
+	item jsonb;
+	gid bigint;
+begin
+	if not public.is_admin() then
+		raise exception 'Only admins can change groups.';
+	end if;
+	select * into entry from public.activity_log where id = log_id and action like 'group.%';
+	before := entry.details -> 'groups_before';
+	if before is null or jsonb_array_length(before) = 0 then
+		raise exception 'That log line has nothing to undo.';
+	end if;
+	perform public.group_limit();
+
+	ids := array(select (b ->> 'id')::bigint from jsonb_array_elements(before) b);
+	after := public.groups_of(ids);
+	for item in select * from jsonb_array_elements(before) loop
+		update public.addons
+		set group_id = (item ->> 'group_id')::bigint, is_main = coalesce((item ->> 'is_main')::boolean, false)
+		where id = (item ->> 'id')::bigint;
+	end loop;
+	-- Addons may have been deleted or regrouped since; every group touched is left sound.
+	for gid in
+		select distinct (g ->> 'group_id')::bigint
+		from jsonb_array_elements(before || after) g
+		where g ->> 'group_id' is not null
+	loop
+		perform public.tidy_group(gid);
+	end loop;
+
+	perform public.log_action(
+		'group.undo', entry.subject, entry.addon_id, jsonb_build_object('groups_before', after, 'undid', log_id)
+	);
 end;
 $$;
 
@@ -225,6 +310,13 @@ begin
 	end if;
 	if accept then
 		perform public.group_addons(array[s.target_id, s.addon_id]);
+	else
+		perform public.log_action(
+			'group.decline',
+			(select name from public.addons where id = s.addon_id),
+			s.addon_id,
+			jsonb_build_object('target', (select name from public.addons where id = s.target_id))
+		);
 	end if;
 	update public.group_suggestions
 	set status = case when accept then 'accepted' else 'rejected' end, decided_by = auth.uid(), decided_at = now()
@@ -242,11 +334,17 @@ begin
 	insert into public.group_suggestions (addon_id, target_id, kind, status, decided_by, decided_at)
 	values (addon, target, 'auto', 'rejected', auth.uid(), now())
 	on conflict (pair) do update set status = 'rejected', decided_by = auth.uid(), decided_at = now();
+	perform public.log_action(
+		'group.decline',
+		(select name from public.addons where id = addon),
+		addon,
+		jsonb_build_object('target', (select name from public.addons where id = target))
+	);
 end;
 $$;
 
--- Replaces the version in moderation.sql: grouping has its own log lines, so a change of
--- group alone is not also logged as an edit.
+-- Replaces the version in moderation.sql: grouping and the wiki credit have their own log
+-- lines, so neither is also logged as an edit.
 create or replace function public.addons_audit() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -262,7 +360,7 @@ begin
 	elsif tg_op = 'UPDATE' then
 		select array_agg(n.key) into changed
 		from jsonb_each(to_jsonb(new)) n
-		where n.key not in ('updated_at', 'link_keys', 'repo_url', 'group_id', 'is_main')
+		where n.key not in ('updated_at', 'link_keys', 'repo_url', 'group_id', 'is_main', 'source')
 			and n.value is distinct from to_jsonb(old) -> n.key;
 		if changed is not null then
 			perform public.log_action(
@@ -279,7 +377,12 @@ begin
 	else
 		insert into public.addon_trash (addon, name, reason, deleted_by, deleted_by_name)
 		values (
-			to_jsonb(old) - 'link_keys',
+			-- With the others in its group, so a restore can put it back among them. This
+			-- runs before addons_group_cleanup, while a group of two is still a group.
+			to_jsonb(old) - 'link_keys' || jsonb_build_object(
+				'group_members',
+				(select coalesce(jsonb_agg(g.id), '[]') from public.addons g where g.group_id = old.group_id)
+			),
 			old.name,
 			'delete',
 			auth.uid(),
@@ -410,7 +513,7 @@ end;
 $$;
 
 -- Replaces the version in import.sql: an entry published through the form joins its
--- wiki group too.
+-- wiki group too, and is logged as an approved import.
 create or replace function public.mark_imported(queue_id bigint, target bigint, credit boolean) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -422,8 +525,30 @@ begin
 	where id = queue_id;
 	if credit then
 		update public.addons set source = 'Turtle WoW Wiki' where id = target;
+		perform public.log_action('import.approve', (select name from public.addons where id = target), target, null);
 		perform public.join_import_group(queue_id, target);
 	end if;
+end;
+$$;
+
+-- Undoes an approval: the addon goes to the trash and its entry is back in the queue.
+create or replace function public.unapprove_import(target bigint) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+	q public.import_queue;
+begin
+	if not public.is_admin() then
+		raise exception 'Only admins can review imports.';
+	end if;
+	select * into q from public.import_queue where addon_id = target and status = 'approved';
+	if q.id is null then
+		raise exception 'That addon did not come from the import queue.';
+	end if;
+	delete from public.addons where id = target;
+	update public.import_queue
+	set status = 'pending', decided_by = null, decided_at = null, addon_id = null, problem = null
+	where id = q.id;
+	perform public.log_action('import.requeue', q.name, null, jsonb_build_object('url', q.url));
 end;
 $$;
 
@@ -459,5 +584,11 @@ grant execute on function public.suggest_group(bigint, bigint) to authenticated;
 grant execute on function public.decide_suggestion(bigint, boolean) to authenticated;
 grant execute on function public.dismiss_pair(bigint, bigint) to authenticated;
 grant execute on function public.approve_into(bigint, bigint) to authenticated;
+revoke all on function public.group_limit() from public, anon, authenticated;
+revoke all on function public.groups_of(bigint[]) from public, anon, authenticated;
+revoke all on function public.undo_grouping(bigint) from public, anon;
+revoke all on function public.unapprove_import(bigint) from public, anon;
+grant execute on function public.undo_grouping(bigint) to authenticated;
+grant execute on function public.unapprove_import(bigint) to authenticated;
 revoke all on function public.queue_imports(jsonb) from authenticated;
 grant execute on function public.queue_imports(jsonb) to service_role;

@@ -620,6 +620,141 @@ describe('reports', () => {
 	});
 });
 
+describe('undoing from the log', () => {
+	const group = (user, ...rows) => call(user, 'select public.group_addons($1)', [rows.map((r) => r.id)]);
+	const groups = async () =>
+		(
+			await db.sql(
+				`select string_agg(name, ', ' order by is_main desc, name) as members
+				 from public.addons where group_id is not null group by group_id order by 1`
+			)
+		).map((r) => r.members);
+	const lastLine = async (action) =>
+		(await db.sql('select id, details from public.activity_log where action = $1 order by id desc limit 1', [action]))[0];
+	const undo = (user, line) => call(user, 'select public.undo_grouping($1)', [line.id]);
+	const restore = async (user) => {
+		const [{ id }] = await db.sql('select id from public.addon_trash order by id desc limit 1');
+		await call(user, 'select public.restore_addon($1)', [id]);
+	};
+
+	let atlas, fork, third;
+	beforeEach(async () => {
+		atlas = await post(db, alice, addon('Atlas', 'https://github.com/a/Atlas'));
+		fork = await post(db, bob, addon('Atlas fork', 'https://github.com/b/Atlas'));
+		third = await post(db, bob, addon('Atlas turtle', 'https://github.com/c/Atlas'));
+	});
+
+	test('a restored addon keeps its id, so its earlier edits can still be reverted', async () => {
+		await call(alice, `update public.addons set author = 'Vandal' where id = $1`, [atlas.id]);
+		const edit = await lastLine('addon.update');
+		await call(admin, 'delete from public.addons where id = $1', [atlas.id]);
+		await restore(admin);
+
+		const [back] = await db.sql(`select id, author from public.addons where name = 'Atlas'`);
+		assert.deepEqual(back, { id: atlas.id, author: 'Vandal' });
+		await call(admin, 'select public.revert_addon($1)', [edit.id]);
+		assert.equal((await db.sql('select author from public.addons where id = $1', [atlas.id]))[0].author, '');
+		// A new addon posted meanwhile never takes the id.
+		const next = await post(db, alice, addon('Another'));
+		assert.ok(next.id > third.id);
+	});
+
+	test('a restored addon returns to its group, as main version if it was', async () => {
+		// A group of two falls apart when one is deleted, and is whole again after a restore.
+		await group(admin, atlas, fork);
+		await call(admin, 'delete from public.addons where id = $1', [atlas.id]);
+		assert.deepEqual(await groups(), []);
+		await restore(admin);
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork']);
+
+		// A larger group lives on without it, and takes it back, here as an ordinary version.
+		await group(admin, atlas, third);
+		await call(admin, 'delete from public.addons where id = $1', [fork.id]);
+		assert.deepEqual(await groups(), ['Atlas, Atlas turtle']);
+		await restore(admin);
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork, Atlas turtle']);
+	});
+
+	test('every group change can be undone from its log line, and the undo too', async () => {
+		await group(admin, atlas, fork);
+		await group(admin, atlas, third);
+		await undo(admin, await lastLine('group.add'));
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork']);
+		// Undoing the undo puts the third back.
+		await undo(admin, await lastLine('group.undo'));
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork, Atlas turtle']);
+
+		await call(admin, 'select public.set_main($1)', [fork.id]);
+		await undo(admin, await lastLine('group.main'));
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork, Atlas turtle']);
+
+		await call(admin, 'select public.ungroup_addon($1)', [atlas.id]);
+		await undo(admin, await lastLine('group.remove'));
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork, Atlas turtle']);
+
+		await refused(() => undo(alice, { id: 1 }), /Only admins/);
+		const posted = await lastLine('addon.create');
+		await refused(() => undo(admin, posted), /nothing to undo/);
+	});
+
+	test('two groups thrown together come apart again in one step', async () => {
+		const other = await post(db, alice, addon('Bagnon', 'https://github.com/a/Bagnon'));
+		const otherFork = await post(db, bob, addon('Bagnon fork', 'https://github.com/b/Bagnon'));
+		await group(admin, atlas, fork);
+		await group(admin, other, otherFork);
+		await group(admin, atlas, other);
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork, Bagnon, Bagnon fork']);
+		await undo(admin, await lastLine('group.add'));
+		assert.deepEqual(await groups(), ['Atlas, Atlas fork', 'Bagnon, Bagnon fork']);
+
+		const many = [];
+		for (let i = 0; i < 21; i++) many.push({ id: 1000 + i });
+		await refused(() => group(admin, ...many), /at most 20/);
+	});
+
+	test('an approved import can be sent back to the queue', async () => {
+		await db.asService((q) =>
+			q('select public.queue_imports($1::jsonb)', [JSON.stringify([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }])])
+		);
+		const [{ id }] = await db.sql('select id from public.import_queue');
+		await call(admin, 'select public.approve_imports($1)', [[id]]);
+		const [made] = await db.sql(`select id from public.addons where name = 'pfUI'`);
+
+		await refused(() => call(alice, 'select public.unapprove_import($1)', [made.id]), /Only admins/);
+		await refused(() => call(admin, 'select public.unapprove_import($1)', [atlas.id]), /did not come from the import queue/);
+		await call(admin, 'select public.unapprove_import($1)', [made.id]);
+
+		assert.ok(!(await live()).includes('pfUI'));
+		assert.deepEqual(await db.sql('select status, addon_id from public.import_queue'), [{ status: 'pending', addon_id: null }]);
+		assert.deepEqual((await logged()).slice(-2), ['addon.delete', 'import.requeue']);
+		// And approved again, as if nothing had happened.
+		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [[id]]))[0].n, 1);
+	});
+
+	test('an import published with changes is logged as an approval, not as an edit', async () => {
+		await db.asService((q) =>
+			q('select public.queue_imports($1::jsonb)', [JSON.stringify([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }])])
+		);
+		const [{ id }] = await db.sql('select id from public.import_queue');
+		const made = await post(db, admin, addon('pfUI', 'https://github.com/shagu/pfUI'));
+		await call(admin, 'select public.mark_imported($1, $2, true)', [id, made.id]);
+		assert.deepEqual((await logged()).slice(-2), ['addon.create', 'import.approve']);
+	});
+
+	test('emptying the trash and turning down a suggestion are logged', async () => {
+		await call(admin, 'delete from public.addons where id = $1', [atlas.id]);
+		const [{ id }] = await db.sql('select id from public.addon_trash');
+		await call(owner, 'select public.purge_trash($1)', [[id]]);
+		const purge = await db.sql(`select subject, details from public.activity_log where action = 'trash.purge'`);
+		assert.deepEqual(purge, [{ subject: 'Atlas', details: { names: ['Atlas'] } }]);
+
+		await call(bob, 'select public.suggest_group($1, $2)', [third.id, fork.id]);
+		const [suggestion] = await db.sql('select id from public.group_suggestions');
+		await call(admin, 'select public.decide_suggestion($1, false)', [suggestion.id]);
+		assert.equal((await logged()).at(-1), 'group.decline');
+	});
+});
+
 describe('import queue', () => {
 	const candidate = (name, url = `https://github.com/wiki/${name}`, extra = {}) => ({
 		name,

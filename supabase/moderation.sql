@@ -97,7 +97,8 @@ create table if not exists public.activity_log (
 	actor_name text,
 	-- addon.create, addon.update, addon.delete, addon.merge, addon.restore, addon.revert,
 	-- import.approve, import.reject, import.requeue, user.ban, user.unban,
-	-- user.autosuspend
+	-- user.autosuspend, group.add, group.remove, group.main, group.undo, group.suggest,
+	-- group.decline, report.create, report.handle, report.dismiss, trash.purge
 	action text not null,
 	-- The addon or account the line is about.
 	subject text,
@@ -240,7 +241,9 @@ begin
 end;
 $$;
 
--- Puts a deleted or merged addon back. Returns its address.
+-- Puts a deleted addon back as it was: under the id it had, so its lines in the log lead
+-- to it again and its earlier edits can still be reverted, and in the group it was in.
+-- Returns its address.
 create or replace function public.restore_addon(trash_id bigint) returns text
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -254,6 +257,8 @@ declare
 	n integer := 1;
 	poster uuid;
 	made bigint;
+	gid bigint;
+	others bigint[];
 begin
 	if not public.is_admin() then
 		raise exception 'Only admins can restore addons.';
@@ -288,11 +293,18 @@ begin
 	-- Back to whoever posted it, if that account still exists.
 	select id into poster from public.profiles where id = (a ->> 'owner')::uuid;
 
+	made := (a ->> 'id')::bigint;
+	if made is null or exists (select 1 from public.addons where id = made) then
+		made := nextval(pg_get_serial_sequence('public.addons', 'id'));
+	end if;
+
 	perform set_config('app.doing', 'restore', true);
 	insert into public.addons (
-		slug, name, description, category, author, versions, images, source, aliases, owner, created_at
+		id, slug, name, description, category, author, versions, images, source, aliases, owner, created_at
 	)
+	overriding system value
 	values (
+		made,
 		new_slug,
 		a ->> 'name',
 		coalesce(a ->> 'description', ''),
@@ -304,9 +316,31 @@ begin
 		array(select jsonb_array_elements_text(coalesce(a -> 'aliases', '[]'))),
 		coalesce(poster, auth.uid()),
 		(a ->> 'created_at')::timestamptz
-	)
-	returning id into made;
+	);
 	perform set_config('app.doing', '', true);
+
+	-- Back in its group: the one it left if that still exists, or the group of two that
+	-- fell apart when it was deleted. See groups.sql.
+	gid := (a ->> 'group_id')::bigint;
+	if gid is not null then
+		others := array(select jsonb_array_elements_text(coalesce(a -> 'group_members', '[]'))::bigint);
+		if exists (select 1 from public.addons where group_id = gid) then
+			update public.addons set group_id = gid, is_main = false where id = made;
+		elsif cardinality(others) = 1 and exists (select 1 from public.addons where id = others[1] and group_id is null) then
+			update public.addons set group_id = gid, is_main = (id <> made) where id in (made, others[1]);
+		else
+			gid := null;
+		end if;
+		if gid is not null then
+			if coalesce((a ->> 'is_main')::boolean, false) then
+				update public.addons set is_main = (id = made) where group_id = gid and is_main is distinct from (id = made);
+			end if;
+			perform public.tidy_group(gid);
+		end if;
+	end if;
+
+	-- An approved import points at its addon again.
+	update public.import_queue set addon_id = made where addon_id is null and status = 'approved' and key = any (keys);
 
 	delete from public.addon_trash where id = trash_id;
 	perform public.log_action('addon.restore', a ->> 'name', made, jsonb_build_object('reason', t.reason));
@@ -346,18 +380,27 @@ begin
 end;
 $$;
 
--- Removes trashed addons for good. Owner only.
+-- Removes trashed addons for good. Owner only. It is the one thing that cannot be undone,
+-- so the log keeps the names.
 create or replace function public.purge_trash(ids bigint[]) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
-	gone integer;
+	names text[];
 begin
 	if not public.is_owner() then
 		raise exception 'Only the owner can empty the trash.';
 	end if;
-	delete from public.addon_trash where id = any (ids);
-	get diagnostics gone = row_count;
-	return gone;
+	with gone as (delete from public.addon_trash where id = any (ids) returning name)
+	select coalesce(array_agg(name order by name), '{}') into names from gone;
+	if cardinality(names) > 0 then
+		perform public.log_action(
+			'trash.purge',
+			case when cardinality(names) = 1 then names[1] else cardinality(names) || ' addons' end,
+			null,
+			jsonb_build_object('names', to_jsonb(names[1:200]))
+		);
+	end if;
+	return cardinality(names);
 end;
 $$;
 
