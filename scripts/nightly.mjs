@@ -62,10 +62,20 @@ if (githubToken) {
 	}
 }
 
-// 2. Wiki -> queue.
-const { candidates, revision } = await readWiki();
-const added = await db('queue_imports', { items: candidates });
-console.log(`Wiki revision ${revision}: ${candidates.length} addons listed, ${added} new in the queue.`);
+// 2. Wiki -> queue. The database refuses a page that lists far fewer addons than it has
+// seen before, which is what a page that no longer reads properly looks like.
+try {
+	const { candidates, revision, problems } = await readWiki();
+	const added = await db('queue_imports', { items: candidates });
+	console.log(
+		`Wiki revision ${revision}: ${candidates.length} addons listed, ${added} new in the queue, ` +
+			`${problems.length} bullets could not be read.`
+	);
+} catch (error) {
+	// The repositories are still checked; the run is marked as failed so that this is seen.
+	console.error(`The wiki was not imported: ${error.message}`);
+	process.exitCode = 1;
+}
 
 // 3. GitHub -> repo_stats.
 if (!githubToken) {
