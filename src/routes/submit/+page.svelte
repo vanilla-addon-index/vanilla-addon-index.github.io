@@ -7,7 +7,6 @@
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
-	import { getQueueItem, markPublished } from '#lib/imports.svelte.ts';
 	import { linkKey } from '#lib/links.ts';
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
@@ -17,8 +16,6 @@
 	const DESCRIPTION_MIN = 15;
 
 	const editSlug = page.url.searchParams.get('edit');
-	// Set when an admin opens an entry from the import queue to adjust it before publishing.
-	const importId = Number(page.url.searchParams.get('import')) || 0;
 	const editing = $derived(editSlug ? store.addons.find((a) => a.slug === editSlug) : undefined);
 
 	let form = $state<AddonInput>({
@@ -48,28 +45,6 @@
 			versions: versions.map((v) => ({ ...v })),
 			images: [...images]
 		};
-	});
-
-	let imported = false;
-	let importing = $state(Boolean(importId));
-	$effect(() => {
-		if (!importId || imported || !auth.isAdmin) return;
-		imported = true;
-		getQueueItem(importId)
-			.then((item) => {
-				if (!item || item.status !== 'pending') return (error = 'That import is no longer waiting for review.');
-				form = {
-					name: item.name.slice(0, 60),
-					summary: '',
-					description: item.description,
-					category: item.category,
-					author: item.key.startsWith('github.com/') ? item.key.split('/')[1] : '',
-					versions: [{ url: item.url, note: '' }],
-					images: item.images.slice(0, MAX_IMAGES)
-				};
-			})
-			.catch((e) => (error = e.message))
-			.finally(() => (importing = false));
 	});
 
 	const mainLink = $derived(form.versions[0].url);
@@ -169,7 +144,7 @@
 	const descriptionLength = $derived(form.description.trim().length);
 
 	const blocked = $derived.by(() => {
-		if (!auth.ready || (editSlug && !store.loaded) || (importing && auth.isAdmin)) return 'Loading…';
+		if (!auth.ready || (editSlug && !store.loaded)) return 'Loading…';
 		if (!auth.session) return 'You need to log in to post or edit addons.';
 		if (editSlug && !editing) return 'That addon does not exist.';
 		if (editing && !canEdit(editing.owner)) return 'Only the person who posted this addon can edit it.';
@@ -201,7 +176,6 @@
 		saving = true;
 		try {
 			const addon = editing ? await updateAddon(editing.id, input) : await createAddon(input);
-			if (importId && !editing) await markPublished(importId, addon.id);
 			// The addon is saved either way; a suggestion that fails is not worth losing it over.
 			if (versionOf) await suggestGroup(addon.id, versionOf.id).catch(() => {});
 			// "saving" stays on until the addon's page has replaced this one, so the form does
@@ -232,7 +206,7 @@
 		<aside class="panel">
 			<div class="border-b border-border px-3 py-3">
 				<h1 class="text-2xl leading-tight font-bold">{editing ? 'Edit addon' : 'Submit addon'}</h1>
-				<p class="text-muted">{editing ? editing.name : importId ? 'From the import queue' : 'Add one to the index'}</p>
+				<p class="text-muted">{editing ? editing.name : 'Add one to the index'}</p>
 			</div>
 			<ul class="space-y-2 px-3 py-3 text-sm text-muted">
 				<li>Name, link, category and description are <span class="text-accent">required</span>.</li>

@@ -1,20 +1,9 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
+	import ImportEntry from '#lib/components/ImportEntry.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
-	import {
-		approve,
-		approveInto,
-		fetchFromWiki,
-		imports,
-		loadQueue,
-		loadRejected,
-		reject,
-		restore,
-		type QueueItem
-	} from '#lib/imports.svelte.ts';
+	import { fetchFromWiki, imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
 	import { linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
@@ -169,8 +158,11 @@
 
 	// Entries leave the list the moment they are decided, so several can be handled in a row
 	// without waiting. Only reading the wiki blocks, since it reloads the whole queue.
+	// A decision that worked says nothing: the entry leaving the list is the confirmation.
+	// What an action does report stays until the next one.
 	async function run(action: () => Promise<string>) {
 		error = '';
+		notice = '';
 		try {
 			notice = await action();
 		} catch (e) {
@@ -189,32 +181,15 @@
 			}
 		});
 
-	const approveOne = (item: QueueItem) =>
-		run(async () =>
-			(await approve([item.id]))
-				? `Published "${item.name}".`
-				: `"${item.name}" could not be published; the reason is on the entry.`
-		);
-
-	const rejectOne = (item: QueueItem) =>
-		run(async () => {
-			await reject([item.id]);
-			return `Rejected "${item.name}". It will not be queued again.`;
-		});
-
 	const restoreOne = (item: QueueItem) =>
 		run(async () => {
 			await restore([item.id]);
-			return `"${item.name}" is back in the queue.`;
+			return '';
 		});
 
-	const addTo = (item: QueueItem, addon: Addon) =>
-		run(async () => {
-			await approveInto(item, addon);
-			return `Published "${item.name}" as a version of "${addon.name}".`;
-		});
-
-	const editFirst = (item: QueueItem) => goto(resolve(`/submit?import=${item.id}`));
+	// The shortcuts act on the highlighted entry through its own buttons and fields, so
+	// they publish what its fields say at that moment.
+	const within = (what: string) => document.querySelector<HTMLElement>(`[data-entry="${current}"] [data-act="${what}"]`);
 
 	function move(by: number) {
 		current = Math.max(0, Math.min(onPage - 1, current + by));
@@ -232,12 +207,10 @@
 			if (!item || key !== 'u') return;
 			restoreOne(item);
 		} else {
-			const entry = page[current];
-			if (!entry) return;
-			if (key === 'a') approveOne(entry.item);
-			else if (key === 'r') rejectOne(entry.item);
-			else if (key === 'e') editFirst(entry.item);
-			else if (key === 'v' && entry.match) addTo(entry.item, entry.match);
+			if (key === 'a') within('approve')?.click();
+			else if (key === 'r') within('reject')?.click();
+			else if (key === 'e') within('name')?.focus();
+			else if (key === 'v') within('version')?.click();
 			else return;
 		}
 		event.preventDefault();
@@ -343,8 +316,9 @@
 				{#if view === 'rejected'}
 					<p>U to put back in the queue</p>
 				{:else}
-					<p>A approve · E edit first</p>
+					<p>A approve · E edit the name</p>
 					<p>V approve as a version · R reject</p>
+					<p>Ctrl+Enter approves from a field</p>
 				{/if}
 			</div>
 		</aside>
@@ -362,11 +336,13 @@
 				}}
 			/>
 
-			<p class={['mt-2 min-h-[1lh] truncate', error ? 'text-danger' : 'text-accent']} aria-live="polite">
-				{error || notice}
-			</p>
+			<div aria-live="polite">
+				{#if error || notice}
+					<p class={['mt-2 break-words', error ? 'text-danger' : 'text-accent']}>{error || notice}</p>
+				{/if}
+			</div>
 
-			<div class="panel mt-1">
+			<div class="panel mt-2">
 				{#if view === 'rejected'}
 					{#if !imports.rejectedLoaded}
 						<p class="px-3 py-8 text-center text-muted">Loading the rejected entries…</p>
@@ -394,25 +370,17 @@
 					</p>
 				{:else}
 					{#each page as { item, verdict, advice, notes, match }, index (item.id)}
-						{#snippet body()}
-							<p class={['text-sm', verdict === 'fine' ? 'text-muted' : verdict === 'problem' ? 'text-danger' : 'text-accent']}>
-								{advice}
-							</p>
-							{#each notes as note (note)}
-								<p class="text-sm text-muted">{note}</p>
-							{/each}
-							<div class="mt-1.5 flex flex-wrap gap-2">
-								<button class="btn btn-primary py-1" onclick={() => approveOne(item)}>Approve</button>
-								<button class="btn py-1" onclick={() => editFirst(item)}>Edit first</button>
-								{#if match}
-									<button class="btn py-1" onclick={() => addTo(item, match)}>
-										Approve as a version of {match.name}
-									</button>
-								{/if}
-								<button class="btn btn-danger py-1" onclick={() => rejectOne(item)}>Reject</button>
-							</div>
-						{/snippet}
-						{@render entry(item, index, body)}
+						<ImportEntry
+							{item}
+							{index}
+							{verdict}
+							{advice}
+							{notes}
+							{match}
+							{run}
+							selected={index === current}
+							onselect={() => (current = index)}
+						/>
 					{/each}
 				{/if}
 			</div>

@@ -1,6 +1,6 @@
-import { loadAddons } from './addons.svelte';
+import { createAddon, groupAddons, loadAddons } from './addons.svelte';
 import { supabase } from './supabase';
-import type { Addon } from './types';
+import type { Addon, AddonInput } from './types';
 import { type Candidate, readWiki } from './wiki';
 
 export interface QueueItem extends Candidate {
@@ -162,15 +162,15 @@ export async function approveInto(item: QueueItem, addon: Addon) {
 	}
 }
 
-/** Records that a queued entry was published through the submit form. */
-export async function markPublished(queueId: number, addonId: number) {
-	await call('mark_imported', { queue_id: queueId, target: addonId, credit: true });
-	if (imports.loaded) settle([queueId], 'approved');
-	await loadAddons();
-}
-
-export async function getQueueItem(id: number) {
-	const { data, error } = await client().from('import_queue').select('*').eq('id', id).maybeSingle();
-	if (error) throw new Error(error.message);
-	return data as QueueItem | null;
+/**
+ * Publishes a queued entry as an admin changed it on the review page, optionally straight
+ * into the group of a live addon. It is posted like any addon, then marked as imported.
+ */
+export async function publishEdited(item: QueueItem, input: AddonInput, into?: Addon) {
+	const addon = await createAddon(input);
+	await call('mark_imported', { queue_id: item.id, target: addon.id, credit: true });
+	settle([item.id], 'approved');
+	// Either one reloads the list, which brings in the credit and the wiki's own grouping.
+	if (into) await groupAddons([into.id, addon.id]);
+	else await loadAddons();
 }
