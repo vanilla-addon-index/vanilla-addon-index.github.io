@@ -16,6 +16,7 @@
 	} from '#lib/addons.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
+	import ReportDialog from '#lib/components/ReportDialog.svelte';
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
@@ -33,6 +34,7 @@
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 
 	let error = $state('');
+	let report = $state<ReturnType<typeof ReportDialog>>();
 
 	// An addon the list does not have may have been posted since the daily snapshot was
 	// taken: the database is asked for just that one before the page says "not found".
@@ -300,7 +302,22 @@
 				/>
 			{/if}
 			{#if error}<p class="text-danger">{error}</p>{/if}
+
+			<!-- For anyone who spots a dead link or something harmful. Reporting needs an
+			     account, so a visitor is sent to log in first. -->
+			{#if !auth.banned}
+				<p class="text-right text-sm">
+					{#if auth.session}
+						<button class="cursor-pointer text-muted hover:text-accent hover:underline" onclick={() => report?.open()}>
+							Report this addon
+						</button>
+					{:else}
+						<a href={resolve('/login')} class="text-muted hover:text-accent hover:underline">Log in to report this addon</a>
+					{/if}
+				</p>
+			{/if}
 		</aside>
+		<ReportDialog bind:this={report} {addon} />
 	</article>
 {:else if store.loaded && lookedUp === page.params.slug}
 	<div class="py-16 text-center">

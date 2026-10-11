@@ -2,12 +2,14 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '#lib/auth.svelte.ts';
+	import { reports } from '#lib/reports.svelte.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
 
 	const TABS = [
 		{ path: '/admin/import', label: 'Import' },
+		{ path: '/admin/reports', label: 'Reports' },
 		{ path: '/admin/groups', label: 'Groups' },
 		{ path: '/admin/log', label: 'Log' },
 		{ path: '/admin/trash', label: 'Trash' },
@@ -31,6 +33,8 @@
 				aria-current={active ? 'page' : undefined}
 			>
 				{tab.label}
+				<!-- How many reports wait, so they are noticed from any tab. -->
+				{#if tab.path === '/admin/reports' && reports.open}<span class="text-accent">{reports.open}</span>{/if}
 			</a>
 		{/each}
 		<span class="ml-auto text-sm text-muted">{auth.isOwner ? 'Owner' : 'Admin'} · {auth.username}</span>

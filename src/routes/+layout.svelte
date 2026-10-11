@@ -7,6 +7,7 @@
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
+	import { countReports, reports } from '#lib/reports.svelte.ts';
 	import { configured } from '#lib/supabase.ts';
 	import type { LayoutProps } from './$types';
 
@@ -21,6 +22,11 @@
 	$effect(() => {
 		void userId;
 		if (auth.known) loadAddons();
+	});
+
+	// Admins see how many reports wait, next to "Admin", on every page.
+	$effect(() => {
+		if (auth.isAdmin) countReports();
 	});
 
 	onNavigate((navigation) => {
@@ -54,7 +60,12 @@
 					<a href={resolve('/submit')} class="btn btn-primary">Submit addon</a>
 				{/if}
 				{#if auth.isAdmin}
-					<a href={resolve('/admin/import')} class="btn">Admin</a>
+					<a href={resolve(reports.open ? '/admin/reports' : '/admin/import')} class="btn">
+						Admin
+						{#if reports.open}
+							<span class="text-accent" aria-label="{reports.open} reports waiting">{reports.open}</span>
+						{/if}
+					</a>
 				{/if}
 				{#if auth.username}
 					<a href={resolve('/account')} class="btn">{auth.username}</a>
