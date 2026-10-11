@@ -17,8 +17,8 @@ export const HOME_DESCRIPTION = `${SITE_TAGLINE} Browse and search community add
 // The words people search with: the addon's name, the game and its version.
 export const addonTitle = (addon: Pick<Addon, 'name'>) => `${addon.name} – WoW 1.12.1 addon · ${SITE_NAME}`;
 
-export function addonDescription(addon: Pick<Addon, 'name' | 'summary' | 'description' | 'category' | 'author'>) {
-	const blurb = (addon.summary || addon.description.trim().split('\n')[0]).replace(/[.\s]+$/, '');
+export function addonDescription(addon: Pick<Addon, 'name' | 'description' | 'category' | 'author'>) {
+	const blurb = addon.description.trim().split('\n')[0].replace(/[.\s]+$/, '');
 	const what = `${addon.category} addon for World of Warcraft 1.12.1 (Vanilla)${addon.author ? ` by ${addon.author}` : ''}.`;
 	return clip(blurb ? `${blurb}. ${what}` : `${addon.name}: ${what}`);
 }

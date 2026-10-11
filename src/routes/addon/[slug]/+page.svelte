@@ -123,7 +123,6 @@
 	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
 		<div class="panel p-4">
 			<h1 class="text-3xl font-bold">{addon.name}</h1>
-			{#if addon.summary}<p class="mt-1 text-lg text-muted">{addon.summary}</p>{/if}
 
 			<div class="mt-3 flex flex-wrap gap-1.5">
 				<a href={resolve(`/?cat=${encodeURIComponent(addon.category)}`)} class="chip">

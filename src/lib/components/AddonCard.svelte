@@ -3,7 +3,7 @@
 	import type { Addon } from '#lib/types.ts';
 
 	type Props = {
-		addon: Pick<Addon, 'slug' | 'name' | 'summary' | 'description' | 'category' | 'repo_url' | 'versions'>;
+		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url' | 'versions'>;
 		// Renders the row without links, for the live preview on the submit page.
 		preview?: boolean;
 		// Who hosts it, shown when another addon in the list has the same name.
@@ -13,8 +13,8 @@
 	};
 	let { addon, preview = false, owner, minor = false }: Props = $props();
 
-	// Without a summary the row shows where the description starts.
-	const blurb = $derived(addon.summary || addon.description.trim().split('\n')[0]);
+	// The row shows where the description starts.
+	const blurb = $derived(addon.description.trim().split('\n')[0]);
 	const others = $derived(addon.versions.filter((v) => v.url.trim()).length - 1);
 </script>
 

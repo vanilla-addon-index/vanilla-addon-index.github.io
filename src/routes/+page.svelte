@@ -33,7 +33,7 @@
 			if (category && a.category !== category) return false;
 			// The links are searched too, so a repository owner's name finds their addons.
 			const links = a.versions.map((v) => v.url).join(' ');
-			const haystack = `${a.name} ${a.summary} ${a.description} ${a.author} ${links}`.toLowerCase();
+			const haystack = `${a.name} ${a.description} ${a.author} ${links}`.toLowerCase();
 			return words.every((w) => haystack.includes(w));
 		};
 

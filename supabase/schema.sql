@@ -13,7 +13,6 @@ create table public.addons (
 	-- Made from the name by a trigger in slugs.sql; whatever the client sends is replaced.
 	slug text not null unique check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
 	name text not null check (char_length(name) between 2 and 60),
-	summary text not null default '' check (char_length(summary) <= 160),
 	-- The 15 character minimum for non-admins is enforced by a trigger in import.sql.
 	description text not null default '' check (char_length(description) <= 5000),
 	category text not null check (category <> ''),
@@ -92,9 +91,9 @@ create policy "owners and admins can delete" on public.addons for delete to auth
 -- Clients may read everything but only write addon content; profiles are written by the trigger only.
 revoke all on public.profiles, public.addons from anon, authenticated;
 grant select on public.profiles, public.addons to anon, authenticated;
-grant insert (slug, name, summary, description, category, author, repo_url, images)
+grant insert (slug, name, description, category, author, repo_url, images)
 	on public.addons to authenticated;
-grant update (name, summary, description, category, author, repo_url, images)
+grant update (name, description, category, author, repo_url, images)
 	on public.addons to authenticated;
 grant delete on public.addons to authenticated;
 grant usage on schema public to anon, authenticated;

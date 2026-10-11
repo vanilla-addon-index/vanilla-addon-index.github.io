@@ -9,7 +9,6 @@ export interface Addon {
 	id: number;
 	slug: string;
 	name: string;
-	summary: string;
 	description: string;
 	category: string;
 	author: string;
@@ -34,7 +33,6 @@ export interface Addon {
 export type AddonInput = Pick<
 	Addon,
 	| 'name'
-	| 'summary'
 	| 'description'
 	| 'category'
 	| 'author'

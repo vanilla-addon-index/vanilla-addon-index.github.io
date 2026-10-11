@@ -367,12 +367,11 @@ begin
 
 	perform set_config('app.doing', 'restore', true);
 	insert into public.addons (
-		slug, name, summary, description, category, author, versions, images, source, aliases, owner, created_at
+		slug, name, description, category, author, versions, images, source, aliases, owner, created_at
 	)
 	values (
 		new_slug,
 		a ->> 'name',
-		coalesce(a ->> 'summary', ''),
 		coalesce(a ->> 'description', ''),
 		a ->> 'category',
 		coalesce(a ->> 'author', ''),
@@ -411,7 +410,6 @@ begin
 	perform set_config('app.doing', 'revert', true);
 	update public.addons
 	set name = b ->> 'name',
-		summary = coalesce(b ->> 'summary', ''),
 		description = coalesce(b ->> 'description', ''),
 		category = b ->> 'category',
 		author = coalesce(b ->> 'author', ''),

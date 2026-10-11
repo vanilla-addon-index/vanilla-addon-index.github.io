@@ -90,8 +90,8 @@ describe('posting and editing', () => {
 		const mine = await post(db, alice, addon('Atlas'));
 		const theirs = await post(db, bob, addon('Bagnon'));
 
-		await call(alice, `update public.addons set summary = 'Maps' where id = $1`, [mine.id]);
-		const touched = await call(alice, `update public.addons set summary = 'Hacked' where id = $1 returning id`, [
+		await call(alice, `update public.addons set author = 'Maps' where id = $1`, [mine.id]);
+		const touched = await call(alice, `update public.addons set author = 'Hacked' where id = $1 returning id`, [
 			theirs.id
 		]);
 		assert.equal(touched.length, 0);
@@ -191,7 +191,7 @@ describe('bans', () => {
 		assert.equal((await role(alice)).banned, true);
 		assert.equal((await call(alice, 'select name from public.addons')).length, 1);
 		await refused(() => post(db, alice, addon('Another')));
-		assert.equal((await call(alice, `update public.addons set summary = 'x' where id = $1 returning id`, [mine.id])).length, 0);
+		assert.equal((await call(alice, `update public.addons set author = 'x' where id = $1 returning id`, [mine.id])).length, 0);
 		assert.equal((await call(alice, 'delete from public.addons where id = $1 returning id', [mine.id])).length, 0);
 
 		await call(admin, 'select public.set_banned($1, false, false)', [alice.id]);
@@ -239,13 +239,13 @@ describe('bans', () => {
 describe('log, trash and undo', () => {
 	test('every change is logged with who did it', async () => {
 		const row = await post(db, alice, addon('Atlas'));
-		await call(admin, `update public.addons set summary = 'Maps' where id = $1`, [row.id]);
+		await call(admin, `update public.addons set author = 'Maps' where id = $1`, [row.id]);
 		await call(admin, 'delete from public.addons where id = $1', [row.id]);
 
 		const [edit] = await db.sql(`select details from public.activity_log where action = 'addon.update'`);
-		assert.deepEqual(edit.details.changed, ['summary']);
-		assert.equal(edit.details.before.summary, '');
-		assert.deepEqual(edit.details.after, { summary: 'Maps' });
+		assert.deepEqual(edit.details.changed, ['author']);
+		assert.equal(edit.details.before.author, '');
+		assert.deepEqual(edit.details.after, { author: 'Maps' });
 
 		const lines = await db.sql('select actor_name, action, subject from public.activity_log order by id');
 		assert.deepEqual(lines, [
@@ -333,16 +333,16 @@ describe('the brake', () => {
 	test('an admin who rewrites more than 100 addons posted by others in an hour is suspended', async () => {
 		const row = await post(db, alice, addon('Atlas'));
 		for (let i = 0; i < 105; i++) {
-			await call(admin, 'update public.addons set summary = $1 where id = $2', [`Defaced ${i}`, row.id]);
+			await call(admin, 'update public.addons set author = $1 where id = $2', [`Defaced ${i}`, row.id]);
 		}
 		assert.deepEqual(await role(admin), { admin: false, owner: false, banned: true });
-		assert.equal((await db.sql('select summary from public.addons'))[0].summary, 'Defaced 99');
+		assert.equal((await db.sql('select author from public.addons'))[0].author, 'Defaced 99');
 	});
 
 	test('editing your own addons never trips the brake', async () => {
 		const row = await post(db, admin, addon('Mine'));
 		for (let i = 0; i < 105; i++) {
-			await call(admin, 'update public.addons set summary = $1 where id = $2', [`Draft ${i}`, row.id]);
+			await call(admin, 'update public.addons set author = $1 where id = $2', [`Draft ${i}`, row.id]);
 		}
 		assert.equal((await role(admin)).banned, false);
 	});

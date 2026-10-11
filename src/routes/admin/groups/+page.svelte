@@ -82,7 +82,7 @@
 	});
 
 	const label = (a: Addon) => `${a.name} (${linkOwner(a.repo_url)})`;
-	const blurb = (a: Addon) => a.summary || a.description.trim().split('\n')[0] || 'No description.';
+	const blurb = (a: Addon) => a.description.trim().split('\n')[0] || 'No description.';
 
 	async function run(work: () => Promise<unknown>, done: string, reload = false) {
 		error = '';

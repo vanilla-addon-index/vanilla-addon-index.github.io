@@ -52,7 +52,6 @@ function addonPage(addon: Addon) {
 		}),
 		body: noscript(
 			`<h1>${esc(addon.name)}</h1>` +
-				(addon.summary ? `<p>${esc(addon.summary)}</p>` : '') +
 				`<p>${esc(addon.category)} addon for World of Warcraft 1.12.1${addon.author ? ` by ${esc(addon.author)}` : ''}</p>` +
 				(addon.description ? `<p style="white-space: pre-line">${esc(addon.description)}</p>` : '') +
 				`<ul>${links}</ul>` +
@@ -63,7 +62,7 @@ function addonPage(addon: Addon) {
 
 function homePage() {
 	const list = addons
-		.map((a) => `<li><a href="/addon/${esc(a.slug)}">${esc(a.name)}</a>${a.summary ? ` – ${esc(a.summary)}` : ''}</li>`)
+		.map((a) => `<li><a href="/addon/${esc(a.slug)}">${esc(a.name)}</a></li>`)
 		.join('');
 	return {
 		head: head({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: '/' }),

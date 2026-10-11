@@ -11,7 +11,6 @@
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
-	const SUMMARY_MAX = 160;
 	// Must match the check on addons.description in supabase/schema.sql.
 	const DESCRIPTION_MIN = 15;
 
@@ -20,7 +19,6 @@
 
 	let form = $state<AddonInput>({
 		name: '',
-		summary: '',
 		description: '',
 		category: '',
 		author: '',
@@ -35,10 +33,9 @@
 	$effect(() => {
 		if (!editing || filled) return;
 		filled = true;
-		const { name, summary, description, category, author, versions, images } = editing;
+		const { name, description, category, author, versions, images } = editing;
 		form = {
 			name,
-			summary,
 			description,
 			category,
 			author,
@@ -283,19 +280,6 @@
 			<h2 class="section-title mt-8">Optional</h2>
 			<p class="mb-2 text-muted">Leave any of these empty.</p>
 			<div class="panel space-y-4 p-4">
-				<div>
-					<div class="flex items-baseline justify-between">
-						<label class="field-label" for="summary">Summary</label>
-						<span class="text-sm text-muted">{form.summary.length} / {SUMMARY_MAX}</span>
-					</div>
-					<input
-						id="summary"
-						class="input"
-						maxlength={SUMMARY_MAX}
-						placeholder="One sentence on what it does"
-						bind:value={form.summary}
-					/>
-				</div>
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div>
 						<label class="field-label" for="author">Addon author</label>
@@ -458,7 +442,6 @@
 					addon={{
 						slug: '',
 						name: form.name,
-						summary: form.summary,
 						description: form.description,
 						category: form.category,
 						repo_url: mainLink,
