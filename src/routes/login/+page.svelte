@@ -1,14 +1,20 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { auth } from '#lib/auth.svelte.ts';
 	import { OAUTH_PROVIDERS, PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
+	import { rememberReturn, takeReturn } from '#lib/return.ts';
 	import { supabase } from '#lib/supabase.ts';
 
 	let error = $state('');
 
+	// The page the "Log in" link was clicked on, kept for after the login: see return.ts.
+	rememberReturn(page.url.searchParams.get('next'));
+
 	$effect(() => {
-		if (auth.session) goto(resolve('/'));
+		// takeReturn only ever gives a page of this site.
+		if (auth.session) goto(takeReturn() ?? resolve('/'), { replaceState: true });
 	});
 
 	async function login(provider: (typeof OAUTH_PROVIDERS)[number]) {

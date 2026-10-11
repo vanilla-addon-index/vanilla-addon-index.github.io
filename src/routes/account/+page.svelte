@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { ownedBy } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
+	import { loginHref } from '#lib/return.ts';
 	import { supabase } from '#lib/supabase.ts';
 
 	// An admin who approves imports becomes their keeper, but did not post them: they are
@@ -61,7 +63,7 @@
 {:else if !user}
 	<div class="panel mx-auto mt-8 max-w-sm p-5 text-center">
 		<p class="text-muted">You are not logged in.</p>
-		<a href={resolve('/login')} class="btn btn-primary mt-4">Log in</a>
+		<a href={loginHref(page.url)} class="btn btn-primary mt-4">Log in</a>
 	</div>
 {:else}
 	<div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
