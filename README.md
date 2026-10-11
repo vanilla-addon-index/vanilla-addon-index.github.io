@@ -1,23 +1,66 @@
 # Vanilla Addon Index
 
-A community list of addons for the 1.12.1 client. Anyone can browse; anyone with an account can post addons and edit or delete their own.
+**[vanilla-addon-index.github.io](https://vanilla-addon-index.github.io)** is a community list of addons for the 1.12.1 client of World of Warcraft. Anyone can browse it; anyone with an account can post addons and edit or delete their own. The site's [about page](https://vanilla-addon-index.github.io/about) says who runs it and what it stores.
+
+This repository is the whole site: its code, its database and the jobs that keep it running. It costs nothing to run.
 
 - **Site:** static SvelteKit app on GitHub Pages
 - **Accounts and data:** Supabase (free plan), protected by row-level security
-- **Snapshot:** the deploy workflow writes the whole list to `addons.json` daily; visitors read the list from it, and it stands in if the database is unreachable. Its history is on the `snapshot` branch, so `main` only ever holds your own commits. `npm run snapshot` fetches one for a build on your computer
+- **Snapshot:** every deploy writes the whole list to `addons.json`. Visitors read the list from it, and it stands in if the database is unreachable. Its history is on the `snapshot` branch, so `main` only ever holds your own commits
 - **Backup:** a full, encrypted copy of the database is taken every night and kept for 90 days; see [Backups](#backups)
 
-## Setup
+## Setting it up from nothing
 
-1. **Supabase:** create a project, then build its database from the migrations in [supabase/migrations](supabase/migrations): `npx supabase login`, `npx supabase link --project-ref <your project>`, `npm run db:push`.
-2. **Config:** put the project URL and anon key in [src/lib/config.ts](src/lib/config.ts).
+In this order. Steps 1 to 4 are done once in Supabase, 5 to 8 once on GitHub, and 9 after the site is up.
+
+1. **Supabase project:** create one, in the region you want the data kept in.
+2. **Config:** in [src/lib/config.ts](src/lib/config.ts), set the project's URL and public key, the site's address, the repository's address and the GitHub organization whose public members are admins. The project's id also appears as `--project-ref` in [deploy.yml](.github/workflows/deploy.yml) and [backup.yml](.github/workflows/backup.yml). The [about page](src/routes/about/+page.svelte) names who runs the site and where the data is kept.
 3. **Login providers:** in Supabase under Authentication → Sign In / Providers, enable Discord and GitHub with an OAuth app from each, and turn the Email provider off.
-4. **Auth URLs:** in Supabase under Authentication → URL Configuration, set the site URL to `https://vanilla-addon-index.github.io` and add `http://localhost:5173` as a redirect URL.
-5. **GitHub Pages:** push to a repository named `vanilla-addon-index.github.io` and set Settings → Pages → Source to "GitHub Actions".
-6. **Owner:** after your first login, run `update public.profiles set is_owner = true where username = 'your-username';`. The owner can suspend admins and empty the trash.
-7. **Admins:** anyone who is a *public* member of the GitHub organization and logs in with GitHub can edit or delete any addon. The nightly job reads who the members are, so joining or leaving takes effect at its next run; start the Nightly workflow by hand to apply a change at once. To make someone else an admin, tick `is_admin` on their row in Table Editor → `profiles`.
+4. **Auth URLs:** in Supabase under Authentication → URL Configuration, set the site URL to the site's address and add `http://localhost:5173` as a redirect URL.
+5. **Repository:** it must be named `<organization>.github.io`. Under Settings → Pages, set Source to "GitHub Actions".
+6. **Secrets:** add the four in the table below under Settings → Secrets and variables → Actions. Each workflow skips the part that needs a secret it does not have, so the site deploys before they are all there.
+7. **First deploy:** push to `main`. The deploy builds the database from [supabase/migrations](supabase/migrations) and publishes the site.
+8. **Protect `main`:** under Settings → Branches, require a pull request and the two checks of the CI workflow, "Tests, types and build" and "Browser tests", for admins too. From here on a change goes out as described under [How a change goes out](#how-a-change-goes-out).
+9. **Owner:** log in on the site once, then run this in Supabase's SQL editor: `update public.profiles set is_owner = true where username = 'your-username';`. The owner can suspend admins and empty the trash, and is the one account that cannot be deleted.
 
-## How a change goes out
+**Admins** are the public members of the GitHub organization who log in with GitHub. The nightly job reads who they are, so joining or leaving takes effect at its next run; start the Nightly workflow by hand to apply a change at once. To make someone else an admin, tick `is_admin` on their row in Supabase's Table Editor → `profiles`.
+
+### Secrets
+
+| Secret | What it is | Used by |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | A Supabase access token scoped to this one project, with Read on Project Settings, API Keys, API Key Secrets and Connection Pooling, and nothing else | Deploy (migrations) and Backup, to find the database |
+| `SUPABASE_DB_PASSWORD` | The database password, from the project's database settings | Deploy (migrations) and Backup |
+| `NIGHTLY_TOKEN` | Made by `npm run nightly:token`; see [The nightly import](#the-nightly-import) | Nightly |
+| `BACKUP_PASSPHRASE` | Any long passphrase of your own. Keep a copy somewhere other than GitHub | Backup |
+
+The database password is only ever given to jobs that install nothing but the Supabase tool. The project's secret key is not used anywhere.
+
+## Working on it
+
+```sh
+npm install
+npm run local       # a copy of the whole backend on this computer; needs Docker
+npm run dev:local   # the site against it, on http://localhost:5174
+npm run local:stop  # stop it
+```
+
+The local copy is built from the migrations and filled with test addons, a full import queue and one account of each kind. On that address the login page offers those accounts, one click each: the owner, two admins, members and a banned member. `npm run local` again wipes and refills it.
+
+`npm run dev` runs the site against the **hosted** database instead, on port 5173. Everything done there is real.
+
+`npm run check` type-checks, `npm run build` writes the static site to `build/`, and `npm run snapshot` fetches the current addon list for a build on your computer.
+
+### Tests
+
+| Command | What it checks | Needs |
+|---|---|---|
+| `npm test` | What each kind of account may and may not do, against the real database rules: posting, editing, groups, bans, the log, the trash, the import queue, deleting an account. Also the wiki parser, on small cases and a saved copy of the page | Nothing: a throwaway Postgres runs inside Node |
+| `npm run test:e2e` | The site in a real browser as a visitor, a member, an admin and the owner. Fails if the page's Content-Security-Policy refused anything | Docker, for the local backend, which it wipes and refills first |
+
+Neither touches the hosted database.
+
+### How a change goes out
 
 `main` is protected: a change reaches it through a pull request, and only once both jobs of the [CI workflow](.github/workflows/ci.yml) have passed.
 
@@ -28,9 +71,13 @@ A community list of addons for the 1.12.1 client. Anyone can browse; anyone with
 | [Nightly](.github/workflows/nightly.yml) | once a day | reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
-## The nightly import
+An addon posted between two deploys has no page of its own until the next one. It shows normally to anyone who opens it; only link previews and search engines wait.
 
-The [Nightly workflow](.github/workflows/nightly.yml) reads who the organization's public members are, reads the wiki into the import queue and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else; the project's secret key is not used anywhere.
+## Keeping it running
+
+### The nightly import
+
+The [Nightly workflow](.github/workflows/nightly.yml) reads who the organization's public members are, reads the Turtle WoW wiki's addon list into the import queue for an admin to review, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else.
 
 ```sh
 npm run nightly:token   # makes a token, and prints where its two halves go
@@ -38,9 +85,9 @@ npm run nightly:token   # makes a token, and prints where its two halves go
 
 The token goes to GitHub as the `NIGHTLY_TOKEN` secret, and its hash into the database with the one statement the command prints. Doing it again replaces the token; the old one stops working at once. Until the secret exists the import skips itself and the site still deploys.
 
-The wiki page is hand-written, so the import guards against reading it badly: a page that lists far fewer addons than the queue has ever seen is refused whole, and the run fails so that it is noticed. [tests/wiki.test.mjs](tests/wiki.test.mjs) pins what the parser makes of a saved copy of the page; `node scripts/wiki-import.mjs` shows what it makes of the page as it is now, without touching anything.
+The wiki page is hand-written, so the import guards against reading it badly: a page that lists far fewer addons than the queue has ever seen is refused whole, and the run fails so that it is noticed. [tests/wiki.test.mjs](tests/wiki.test.mjs) pins what the parser makes of a saved copy of the page. `node scripts/wiki-import.mjs` shows what it makes of the page as it is now: a dry run that writes a report to `wiki-import/` and changes nothing.
 
-## Changing the database
+### Changing the database
 
 The database is described by the numbered files in [supabase/migrations](supabase/migrations). Each one is applied once, in order, and Supabase remembers which have run, so nothing is pasted into the SQL editor by hand and no file is ever run twice.
 
@@ -48,13 +95,13 @@ The database is described by the numbered files in [supabase/migrations](supabas
 npm run db:new -- add_something   # a new, empty migration to write the change in
 npm run local                     # rebuilds the local backend from all migrations
 npm test && npm run test:e2e      # the rules, and the site in a browser, against it
-npm run db:status                 # which migrations the hosted database has had
-npm run db:push                   # applies the ones it has not
 ```
 
-A migration that has reached the hosted database is never edited again: a later change goes in a new one. With the `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets set on the repository, the deploy applies pending migrations itself before the site goes out, and stops if one fails.
+A migration that has reached the hosted database is never edited again: a later change goes in a new one. The deploy applies pending migrations itself before the site goes out, and stops if one fails, so the site is never ahead of its database.
 
-## Backups
+`npm run db:status` shows which migrations the hosted database has had, and `npm run db:push` applies the rest by hand. Both need `npx supabase login` and `npx supabase link --project-ref <the project's id>` to have been run once on this computer.
+
+### Backups
 
 The free Supabase plan keeps no backups, so the [Backup workflow](.github/workflows/backup.yml) takes a full copy of the hosted database every night: every table of the site, and the accounts. Because the copy holds private data and this repository is public, it is encrypted with the `BACKUP_PASSPHRASE` secret before GitHub stores it, and kept for 90 days. The table structure is not in it; the migrations are that.
 
@@ -64,35 +111,4 @@ npm run db:backup:check -- <file>       # loads a copy into the local backend, t
 gpg --decrypt backup.sql.gpg > backup.sql   # opens a nightly copy downloaded from GitHub
 ```
 
-To recover from losing the hosted database: create a new project, `npx supabase link` it, build its tables with `npm run db:push`, then load the backup file into it with `psql`. Keep the passphrase somewhere other than GitHub: without it the nightly copies cannot be opened.
-
-## Development
-
-```sh
-npm install
-npm run dev
-```
-
-`npm run check` type-checks, `npm run build` writes the static site to `build/`.
-
-## Tests
-
-`npm test` checks what each kind of account may and may not do: posting, editing, merging, bans, the log, the trash and the import queue. It applies the migrations to a throwaway Postgres running inside Node, with dummy owner, admin and member accounts, and never touches the hosted database.
-
-### Browser tests and a local copy of the backend
-
-`npm run test:e2e` drives the real site in a real browser as a visitor, a member, an admin and the owner: posting, the import review, reports, limits, and undoing things from the log. It needs Docker running. It starts a copy of the whole backend on this computer (Postgres, the API and the login service), builds it from the migrations, fills it with test addons, a full import queue and one account of each kind, and runs the tests in `tests/e2e/` against it. The hosted database is never involved.
-
-The same copy is there for trying things out by hand:
-
-```sh
-npm run local       # start it, or wipe and refill it
-npm run dev:local   # the site against it, on http://localhost:5174
-npm run local:stop  # stop it
-```
-
-On that address the login page offers the test accounts, one click each: the owner, two admins, two members and a banned member. `npm run dev` still uses the hosted database, where everything you do is real.
-
-## Wiki import
-
-`node scripts/wiki-import.mjs` reads the addon list from the Turtle WoW wiki and writes a report and the parsed candidates to `wiki-import/`. It is a dry run and changes nothing in the database.
+To recover from losing the hosted database: create a new project, `npx supabase link` it, build its tables with `npm run db:push`, then load the backup file into it with `psql`. Without the passphrase the nightly copies cannot be opened.
