@@ -31,12 +31,14 @@ const LEFT_OUT = [
 	// A cache of who is in the GitHub organization; the migrations create it and it refills itself.
 	'public.org_cache'
 ].join(',');
+// The Supabase tool: the project's own copy, or the one the backup workflow installs.
+const CLI = process.env.SUPABASE_CLI ?? 'npx supabase';
 const DB_CONTAINER = 'supabase_db_vanilla-addon-index';
 const TABLES = ['auth.users', 'auth.identities', 'profiles', 'addons', 'import_queue', 'repo_stats', 'activity_log', 'addon_trash', 'group_suggestions', 'reports'];
 
 function dump(file) {
 	mkdirSync(dirname(file), { recursive: true });
-	execSync(`npx supabase db dump --linked --data-only --use-copy --schema ${SCHEMAS} --exclude ${LEFT_OUT} --file "${file}"`, {
+	execSync(`${CLI} db dump --linked --data-only --use-copy --schema ${SCHEMAS} --exclude ${LEFT_OUT} --file "${file}"`, {
 		stdio: ['ignore', 'ignore', 'inherit']
 	});
 	const { size } = statSync(file);
@@ -61,7 +63,7 @@ function psql(input, args = []) {
 function check(file) {
 	const backup = readFileSync(file, 'utf8');
 	console.log('Rebuilding the local database from the migrations…');
-	execSync('npx supabase db reset --local --no-seed', { stdio: ['ignore', 'ignore', 'inherit'] });
+	execSync(`${CLI} db reset --local --no-seed`, { stdio: ['ignore', 'ignore', 'inherit'] });
 	console.log('Loading the backup into it…');
 	psql(backup);
 	const counts = psql(
