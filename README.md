@@ -85,6 +85,14 @@ Nightly and Backup run on a timer, and GitHub switches the timers of a public re
 
 GitHub does not promise that this keeps working. It sends an email before it switches a timer off, so make sure notifications for this repository reach an inbox that is read. If it happens: Actions → the workflow → "Enable workflow". With the timers off there are no backups, imports or deploys, and Supabase pauses the project after about a week without use; it is restored from the Supabase dashboard.
 
+### When something is waiting for an admin
+
+The site sends no email. When a report nobody has closed, or a member's suggestion nobody has decided, is waiting, the Nightly workflow opens an issue in this repository named "Waiting for an admin" and assigns it to the people named as `TELL` in [nightly.yml](.github/workflows/nightly.yml), whom GitHub then emails. It adds a comment when more arrives and closes the issue when nothing is left. A new addon, an edit or anything else that needs no admin never causes one. Issues are public, so it holds the two numbers and nothing else. The address it links to is `ADMIN_PAGE` in the same file.
+
+### What members may link to
+
+Nobody reviews an addon before it is listed, so a member's link must be on a site known for hosting code, and their screenshots on a site known for hosting code or pictures. A screenshot is only ever shown as a picture, so what its address ends in does not matter: one that is not a picture shows nothing. The two lists are `LINK_HOSTS` and `IMAGE_HOSTS` in [src/lib/config.ts](src/lib/config.ts) and `allowed_hosts()` in the database; a test fails if they differ, and adding a site takes a new migration. An entry such as `octowow.st/git` allows that part of a site and nothing else on it. Admins are not held to the lists, which is how an addon kept anywhere else gets listed, and how the wiki's entries keep the links they have.
+
 ### The nightly import
 
 The [Nightly workflow](.github/workflows/nightly.yml) reads the Turtle WoW wiki's addon list into the import queue for an admin to review, trims the log and the trash of what is older than 90 days, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else: it cannot post, edit, delete, or make anyone an admin.

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
+	import { hostNames } from '#lib/hosts.ts';
 	import { ABOUT_TITLE } from '#lib/seo.ts';
 	import { WIKI, WIKI_NAME, WIKI_PAGE } from '#lib/wiki.ts';
 
@@ -119,6 +120,42 @@
 			you, or to have something corrected, {@render out(ISSUES, 'open an issue on GitHub')} and
 			give the username shown on your account page. An issue is public, so put nothing else
 			personal in it.
+		</p>
+	</section>
+
+	<section class="panel p-4" id="rules">
+		<h2 class="section-title">Rules for posting</h2>
+		<p class="mt-3">Anyone with an account can post, and nobody reviews an entry first. So:</p>
+		<ul class="mt-1 list-disc space-y-1 pl-5">
+			<li>Post addons for the 1.12.1 client, with a link that leads to the addon itself.</li>
+			<li>
+				The link must be on a site known for hosting code ({hostNames('link')}), and screenshots on
+				a site known for hosting code or pictures, as a link to the picture itself. For an addon
+				kept anywhere else,
+				{@render out(ISSUES, 'ask an admin')} to list it.
+			</li>
+			<li>Nothing harmful, nothing illegal, no advertising, and no entry made to mislead.</li>
+			<li>
+				You do not have to be the addon's author. Name the author where you know who it is, and
+				write the description in your own words.
+			</li>
+			<li>
+				What you write in an entry, its name and description, you release under
+				{@render out('https://creativecommons.org/licenses/by-sa/4.0/', 'CC BY-SA 4.0')}, the same
+				licence as the entries imported from the wiki: anyone may reuse the list if they give
+				credit and share it alike. The addons themselves keep whatever licence their authors gave
+				them.
+			</li>
+			<li>
+				Admins may edit or remove any entry, and suspend an account that breaks these rules.
+			</li>
+		</ul>
+
+		<h3 class="field-label mt-5">If you download an addon</h3>
+		<p>
+			The site hosts no addon files. Every download comes from the site an entry links to, and
+			nobody here has checked it. Look at what you install, and
+			use "Report this addon" on an entry's page if a link is dead or something looks harmful.
 		</p>
 	</section>
 
