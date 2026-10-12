@@ -5,7 +5,8 @@
 // Every test gets its own throwaway database with dummy accounts; see db.mjs.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { CATEGORIES, PUBLIC_ADDON_COLUMNS } from '../src/lib/config.ts';
+import { CATEGORIES, IMAGE_HOSTS, LINK_HOSTS, PUBLIC_ADDON_COLUMNS } from '../src/lib/config.ts';
+import { hostAllowed } from '../src/lib/hosts.ts';
 import { linkKey } from '../src/lib/links.ts';
 import { NIGHTLY_TOKEN, addon, createDb, post } from './db.mjs';
 
@@ -315,7 +316,93 @@ describe('links and versions', () => {
 		const long = (length) => `https://example.com/${'a'.repeat(length)}`;
 		await refused(() => post(db, alice, addon('Long', long(300))), /at most 300/);
 		await refused(() => post(db, alice, addon('Shots', undefined, { images: `{${long(500)}}` })), /at most 500/);
-		await post(db, alice, addon('Shots', undefined, { images: `{${long(200)}}` }));
+		await post(db, admin, addon('Shots', undefined, { images: `{${long(200)}}` }));
+	});
+
+	test('a member\'s link and screenshots must be on a known site; an admin is not held to that', async () => {
+		const shots = (...urls) => ({ images: `{${urls.join(',')}}` });
+		await refused(() => post(db, alice, addon('Own site', 'https://my-own-site.example/addon.zip')), /The link must be on one of these sites: github\.com/);
+		await refused(() => post(db, alice, addon('Tracker', undefined, shots('https://my-own-site.example/pixel.png'))), /Screenshots must be kept on one of these sites/);
+		// Dressed up as GitHub: the site is the part before the first slash, and nothing else.
+		await refused(() => post(db, alice, addon('Trick1', 'https://github.com@evil.example/a/b')), /must be on one of these sites/);
+		await refused(() => post(db, alice, addon('Trick2', 'https://github.com.evil.example/a/b')), /must be on one of these sites/);
+		await refused(() => post(db, alice, addon('Trick3', 'https://evil.example/github.com/a/b')), /must be on one of these sites/);
+
+		// One part of a site can be allowed without the rest of it.
+		await post(db, alice, addon('Octo', 'https://octowow.st/git/Ade/AdeAlts'));
+		await refused(() => post(db, alice, addon('Octo2', 'https://octowow.st/forum/thread/1')), /must be on one of these sites/);
+		await refused(() => post(db, alice, addon('Octo3', 'https://octowow.st/git/../forum/thread/1')), /must be on one of these sites/);
+		// GitHub serves many pictures from addresses with no ending; the site is what counts.
+		await post(db, alice, addon('Shot', undefined, shots('https://github.com/user-attachments/assets/140e2cf7', 'https://camo.githubusercontent.com/abc/def')));
+
+		const mine = await post(db, alice, addon('Mine', 'https://codeberg.org/alice/mine', shots('https://raw.githubusercontent.com/a/b/main/shot.png', 'https://i.imgur.com/abc.png')));
+		// An admin lists one kept elsewhere, and can give any addon a link or picture from anywhere.
+		const theirs = await post(db, admin, addon('Elsewhere', 'https://octowow.st/addon', shots('https://static.example/shot.png')));
+		await call(admin, `update public.addons set images = '{https://static.example/other.png}' where id = $1`, [mine.id]);
+
+		// What an addon already has stays when a member edits it; only something new is checked.
+		await call(alice, `update public.addons set description = 'Edited, with the picture an admin gave it.' where id = $1`, [mine.id]);
+		await refused(
+			() => call(alice, `update public.addons set images = '{https://static.example/other.png,https://static.example/new.png}' where id = $1`, [mine.id]),
+			/Screenshots must be kept/
+		);
+		await refused(() => call(alice, `update public.addons set versions = $1 where id = $2`, [JSON.stringify([{ url: 'https://my-own-site.example/a', note: '' }]), mine.id]), /The link must be/);
+		assert.equal((await db.sql('select repo_url from public.addons where id = $1', [theirs.id]))[0].repo_url, 'https://octowow.st/addon');
+	});
+
+	test('the site and the database agree on which sites are allowed', async () => {
+		for (const [kind, list] of [['link', LINK_HOSTS], ['image', IMAGE_HOSTS]]) {
+			assert.deepEqual((await db.sql('select public.allowed_hosts($1) as hosts', [kind]))[0].hosts, list);
+		}
+		const samples = [
+			'https://github.com/a/b',
+			'https://www.GitHub.com/a/b',
+			'https://github.com:443/a/b',
+			'https://github.com',
+			'https://gist.github.com/a/b',
+			'https://raw.githubusercontent.com/a/b/main/x.png',
+			'https://githubusercontent.com/a.png',
+			'https://evilgithubusercontent.com/a.png',
+			'https://i.imgur.com/a.png',
+			'https://github.com@evil.example/a',
+			'https://github.com:443@evil.example/a',
+			'https://evil.example\\@github.com/a',
+			'https://github.com\\.evil.example/a',
+			'https://github.com.evil.example/a',
+			'https://evil.example/?https://github.com/a',
+			'https://evil.example#github.com',
+			'http://github.com/a/b',
+			'https://git.sr.ht/~someone/addon',
+			'https://octowow.st/git/Ade/AdeAlts',
+			'https://octowow.st/git',
+			'https://octowow.st/git/',
+			'https://octowow.st/gitea/x',
+			'https://octowow.st/',
+			'https://octowow.st/forum/git/x',
+			'https://octowow.st/git/../forum',
+			'https://octowow.st/git/%2E%2e/forum',
+			'https://octowow.st/Git/x',
+			'https://www.octowow.st/git/x?tab=readme#top',
+			'https://i.imgur.com/a.PNG',
+			'https://i.imgur.com/a.png?x=1#y',
+			'https://i.imgur.com/a.png.exe',
+			'https://i.imgur.com/a',
+			'https://i.imgur.com/a.',
+			'https://i.imgur.com/a.jpeg',
+			'https://i.imgur.com/a.svg',
+			'https://i.imgur.com/page?file=a.png',
+			'github.com/a/b',
+			''
+		];
+		for (const kind of ['link', 'image']) {
+			for (const url of samples) {
+				const [{ ok }] = await db.sql('select public.host_allowed($1, $2) as ok', [url, kind]);
+				assert.equal(ok, hostAllowed(url, kind), `${kind}: ${url}`);
+			}
+		}
+		assert.equal(hostAllowed('https://octowow.st/git/Ade/AdeAlts', 'link'), true);
+		assert.equal(hostAllowed('https://octowow.st/git/../forum', 'link'), false);
+		assert.equal(hostAllowed('https://octowow.st/forum/git/x', 'link'), false);
 	});
 
 	test('the first version is the main link', async () => {
@@ -968,6 +1055,24 @@ describe('reports', () => {
 		await report(bob, row, 'harmful');
 		assert.deepEqual(await open(), ['bob: harmful']);
 		assert.deepEqual((await logged()).slice(1), ['report.create', 'report.dismiss', 'report.create']);
+	});
+
+	test('the nightly job is told how much is waiting for an admin, and nothing more', async () => {
+		const waiting = async (token = NIGHTLY_TOKEN) => (await db.asVisitor((q) => q('select public.nightly_waiting($1) as w', [token])))[0].w;
+		assert.deepEqual(await waiting(), { reports: 0, suggestions: 0 });
+		const atlas = await post(db, bob, addon('Atlas'));
+		assert.deepEqual(await waiting(), { reports: 0, suggestions: 0 });
+		await report(alice, atlas);
+		await report(bob, atlas, 'harmful');
+		const mine = await post(db, alice, addon('Fork'));
+		await call(alice, 'select public.suggest_group($1, $2)', [mine.id, atlas.id]);
+		assert.deepEqual(await waiting(), { reports: 2, suggestions: 1 });
+		// A new addon is nothing an admin has to act on, and a closed report no longer waits.
+		const [{ id }] = await db.sql('select id from public.reports order by id limit 1');
+		await call(admin, `select public.decide_report($1, 'dismissed')`, [id]);
+		assert.deepEqual(await waiting(), { reports: 1, suggestions: 1 });
+		await refused(() => waiting('a guess'), /Only the nightly job/);
+		await refused(() => call(admin, 'select public.nightly_waiting($1)', [NIGHTLY_TOKEN]), /permission denied/);
 	});
 
 	test('deleting an addon removes its reports', async () => {
