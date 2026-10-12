@@ -29,9 +29,12 @@
 
 	// The list comes from the daily snapshot for visitors and from the database for anyone
 	// logged in, so it is loaded once that is known, and again on logging in or out.
+	// An admin gets it exactly as it is, so it is loaded again once an account turns out
+	// to be one.
 	const userId = $derived(auth.session?.user.id);
 	$effect(() => {
 		void userId;
+		void auth.isAdmin;
 		if (auth.known) loadAddons();
 	});
 
