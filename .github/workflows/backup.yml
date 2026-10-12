@@ -26,6 +26,9 @@ jobs:
     environment: database
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    # Whether a backup was made, for the job below.
+    outputs:
+      made: ${{ steps.ready.outputs.go }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -84,3 +87,53 @@ jobs:
           gpg --batch --yes --decrypt --passphrase "$BACKUP_PASSPHRASE" --output restored.sql backup.sql.gpg
           node scripts/backup.mjs check restored.sql
           rm restored.sql
+
+  keep:
+    # A second place for the copies, outside GitHub's own storage for workflow files: the
+    # last seven are kept on the "backups" branch, which every mirror of this repository
+    # picks up by itself. Only once the copy has been shown to restore, and with no secret:
+    # this job is given the stored file, already encrypted, and the right to push.
+    #
+    # The branch is a single commit that replaces the one before, like the snapshot's, so
+    # old copies do not pile up in its history and what is deleted from the site is gone
+    # from here a week later. The files are public and of no use without the passphrase.
+    name: Keep the last seven on a branch
+    needs: backup
+    if: needs.backup.outputs.made
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Add tonight's copy and drop the oldest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          keep="$RUNNER_TEMP/keep"
+          mkdir -p "$keep"
+          if git fetch --depth 1 origin backups; then
+            git archive FETCH_HEAD | tar -x -C "$keep"
+          fi
+          gh run download "$GITHUB_RUN_ID" --name "backup-$GITHUB_RUN_ID" --dir "$RUNNER_TEMP/new"
+          cp "$RUNNER_TEMP/new/backup.sql.gpg" "$keep/backup-$(date -u +%F).sql.gpg"
+          # The names sort by date: everything but the newest seven goes.
+          ls -1 "$keep" | grep -E '^backup-.*\.sql\.gpg$' | sort | head -n -7 | while read -r old; do
+            rm -- "${keep:?}/${old:?}"
+          done
+          printf '%s\n' \
+            "The last seven nightly backups of the site's database, encrypted." \
+            "" \
+            "Written by the Backup workflow on the main branch, whose README says how to open" \
+            "and restore one. Without the passphrase these files are of no use to anyone." \
+            > "$keep/README.md"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/index"
+          git --work-tree="$keep" add -A .
+          commit=$(git commit-tree "$(git write-tree)" -m "Nightly backups")
+          git push --force origin "$commit:refs/heads/backups"
+          ls -1 "$keep"

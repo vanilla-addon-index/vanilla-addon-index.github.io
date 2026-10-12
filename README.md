@@ -135,6 +135,6 @@ gpg --decrypt backup.sql.gpg > backup.sql   # opens a nightly copy downloaded fr
 
 Every night's copy is also tried out: the workflow opens the stored file with the passphrase and loads it into a throwaway database, and the run fails if that does not work or the copy holds no accounts.
 
-The nightly copies exist only on GitHub, in this repository. Run `npm run db:backup:fetch` now and then to keep one somewhere else as well; it stays encrypted, so it can be stored anywhere.
+The last seven copies are also kept on the `backups` branch, as a single commit that replaces the one before, once each has been shown to restore. A mirror of this repository on another server picks that branch up by itself, which is how the copies get somewhere that is not GitHub without anyone doing anything. They are public there and of no use without the passphrase, so the passphrase must be long and used nowhere else. `npm run db:backup:fetch` still downloads the latest one to this computer.
 
 To recover from losing the hosted database: create a new project, `npx supabase link` it, build its tables with `npm run db:push`, then load the backup file into it with `psql`. Without the passphrase the nightly copies cannot be opened.
