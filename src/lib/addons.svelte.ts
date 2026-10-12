@@ -200,7 +200,12 @@ export async function createAddon(input: AddonInput) {
 	return addon;
 }
 
-export async function updateAddon(id: number, input: AddonInput) {
+/**
+ * Saves an edit of the addon as it was when the form was filled: "since" is its
+ * "updated_at" then. If someone else has edited it in the meantime, nothing is saved, so
+ * their edit is not quietly overwritten by a form that never showed it.
+ */
+export async function updateAddon(id: number, input: AddonInput, since: string) {
 	if (!supabase) throw new Error('Database is not configured.');
 	const previous = store.addons;
 	// Optimistic: show the edit immediately, roll back if the database rejects it.
@@ -209,11 +214,17 @@ export async function updateAddon(id: number, input: AddonInput) {
 		.from('addons')
 		.update(input)
 		.eq('id', id)
+		.eq('updated_at', since)
 		.select('*, profiles(username)')
-		.single();
-	if (error) {
+		.maybeSingle();
+	if (error || !data) {
 		store.addons = previous;
-		throw new Error(explain(error));
+		if (error) throw new Error(explain(error));
+		// No row matched: it changed, it is gone, or it is not this account's to edit.
+		await fetchAddon((previous.find((a) => a.id === id) ?? { slug: '' }).slug);
+		throw new Error(
+			'This addon was changed by someone else while you were editing it, so your changes were not saved. Open it again to see how it is now, then make your changes there.'
+		);
 	}
 	const addon = toAddon(data as Row);
 	store.addons = store.addons.map((a) => (a.id === id ? addon : a));

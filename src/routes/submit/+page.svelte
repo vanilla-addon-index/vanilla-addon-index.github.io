@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { createAddon, slugify, store, suggestGroup, updateAddon } from '#lib/addons.svelte.ts';
+	import { createAddon, fetchAddon, slugify, store, suggestGroup, updateAddon } from '#lib/addons.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
@@ -30,11 +30,24 @@
 	let error = $state('');
 	let saving = $state(false);
 	let filled = false;
+	// The addon's "updated" stamp when the form was filled; saving checks it has not moved.
+	let since = '';
 
-	// The addon list may arrive after this page mounts, so fill the form once it is there.
+	// The list this browser holds can be a visit old, or a day old when it is the snapshot.
+	// The form is filled from the addon as it is now: asked for once it is known who is
+	// logged in, since a visitor is not told who posted it.
+	let asked = false;
+	let fresh = $state(!editSlug);
 	$effect(() => {
-		if (!editing || filled) return;
+		if (!editSlug || asked || !auth.ready) return;
+		asked = true;
+		fetchAddon(editSlug).finally(() => (fresh = true));
+	});
+
+	$effect(() => {
+		if (!editing || filled || !fresh) return;
 		filled = true;
+		since = editing.updated_at;
 		const { name, description, category, author, versions, images } = editing;
 		form = {
 			name,
@@ -143,7 +156,7 @@
 	const descriptionLength = $derived(form.description.trim().length);
 
 	const blocked = $derived.by(() => {
-		if (!auth.ready || (editSlug && !store.loaded)) return 'Loading…';
+		if (!auth.ready || (editSlug && (!store.loaded || !fresh))) return 'Loading…';
 		if (!auth.session) return 'You need to log in to post or edit addons.';
 		if (editSlug && !editing) return 'That addon does not exist.';
 		if (editing && !canEdit(editing.owner)) return 'Only the person who posted this addon can edit it.';
@@ -174,7 +187,7 @@
 		if (!editing && !slugify(input.name)) return (error = 'The name needs at least one letter or digit.');
 		saving = true;
 		try {
-			const addon = editing ? await updateAddon(editing.id, input) : await createAddon(input);
+			const addon = editing ? await updateAddon(editing.id, input, since) : await createAddon(input);
 			// The addon is saved either way; a suggestion that fails is not worth losing it over.
 			if (versionOf) await suggestGroup(addon.id, versionOf.id).catch(() => {});
 			// "saving" stays on until the addon's page has replaced this one, so the form does
