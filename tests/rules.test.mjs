@@ -621,6 +621,38 @@ describe('limits', () => {
 		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [ids]))[0].n, 5);
 	});
 
+	test('deleting the account and logging in again does not start the day\'s posts over', async () => {
+		const identity = `insert into auth.identities (user_id, provider, provider_id) values ($1, 'discord', $2)`;
+		const leave = (user) => call(user, 'select public.delete_account()');
+		await db.sql(identity, [alice.id, '555']);
+		for (let i = 0; i < 10; i++) await post(db, alice, addon(`Addon${i}`));
+		await leave(alice);
+		// Only a fingerprint is kept, and nobody can read it.
+		assert.match((await db.sql('select fingerprint from public.left_posts'))[0].fingerprint, /^[0-9a-f]{64}$/);
+		await refused(() => call(admin, 'select * from public.left_posts'), /permission denied/);
+
+		// The same Discord account logs in again and gets a new account.
+		const again = await db.addUser('alice');
+		await db.sql(identity, [again.id, '555']);
+		await refused(() => post(db, again, addon('OneTooMany')), /at most 10 addons a day/);
+		// Leaving a second time changes nothing.
+		await leave(again);
+		const third = await db.addUser('alice');
+		await db.sql(identity, [third.id, '555']);
+		await refused(() => post(db, third, addon('OneTooMany')), /at most 10 addons a day/);
+		assert.equal((await live()).length, 10);
+
+		// Someone else on Discord was never affected.
+		await db.sql(identity, [bob.id, '556']);
+		await post(db, bob, addon('Bagnon'));
+
+		// A day later it works again, and the next account to leave clears the notes away.
+		await db.sql(`update public.left_posts set posted_at = posted_at - interval '2 days'`);
+		await post(db, third, addon('NextDay'));
+		await leave(bob);
+		assert.deepEqual(await db.sql('select distinct posted_at > now() - interval \'1 day\' as fresh from public.left_posts'), [{ fresh: true }]);
+	});
+
 	test('the owner has no limits', async () => {
 		const rows = await seed(25, alice);
 		for (const row of rows) await remove(owner, row);

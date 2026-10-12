@@ -104,6 +104,10 @@
 			If the account was banned, a fingerprint of the login it used is kept, so that the ban
 			still holds if that login comes back. The fingerprint cannot be turned back into the login.
 		</p>
+		<p class="mt-3">
+			If the account posted addons in its last day, the same kind of fingerprint is kept for one
+			day, so that the daily posting limit still holds if that login comes back.
+		</p>
 
 		<h3 class="field-label mt-5">Seeing or correcting your data</h3>
 		<p>
