@@ -4,6 +4,9 @@
 	"version": "0.0.1",
 	"license": "MIT",
 	"type": "module",
+	"engines": {
+		"node": ">=22.18"
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -22,7 +25,6 @@
 		"db:backup": "node scripts/backup.mjs",
 		"db:backup:check": "node scripts/backup.mjs check",
 		"db:backup:fetch": "node scripts/backup.mjs fetch",
-		"db:baseline": "supabase migration repair --linked --status applied 20261011000001 20261011000002 20261011000003 20261011000004 20261011000005 20261011000006 20261011000007 20261011000008 20261011000009 20261011000010 20261011000011",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
 	},

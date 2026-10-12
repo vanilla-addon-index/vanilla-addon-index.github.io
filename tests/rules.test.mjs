@@ -132,6 +132,27 @@ describe('roles', () => {
 	});
 });
 
+describe('housekeeping', () => {
+	test('every function names the schema it looks things up in', async () => {
+		// One without it would look names up wherever its caller says.
+		const loose = await db.sql(`
+			select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+			where n.nspname = 'public' and p.proconfig is null`);
+		assert.deepEqual(loose, []);
+	});
+
+	test('the roles of the API can empty no table, now or on one made later', async () => {
+		await db.raw('create table public.made_later (id integer)');
+		const open = await db.sql(`
+			select c.relname, r.role from pg_class c
+			join pg_namespace n on n.oid = c.relnamespace
+			cross join (values ('anon'), ('authenticated'), ('service_role')) r (role)
+			where n.nspname = 'public' and c.relkind = 'r'
+				and (has_table_privilege(r.role, c.oid, 'truncate') or has_table_privilege(r.role, c.oid, 'trigger'))`);
+		assert.deepEqual(open, []);
+	});
+});
+
 describe('posting and editing', () => {
 	test('a visitor can read but not post', async () => {
 		await post(db, alice, addon('Atlas'));
