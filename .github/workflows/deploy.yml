@@ -168,11 +168,25 @@ jobs:
             exit 0
           fi
           file="$RUNNER_TEMP/snapshot/addons.json"
-          if git fetch --depth 1 origin snapshot && git show FETCH_HEAD:addons.json | cmp -s - "$file"; then
+          # What the branch is, for whoever lands on it.
+          readme="$RUNNER_TEMP/snapshot/README.md"
+          printf '%s\n' \
+            "The list of addons the site was last built with, as one file: addons.json." \
+            "" \
+            "Written by the Deploy workflow on the main branch. Visitors read the list from this" \
+            "file, and it stands in when the database cannot be reached. It holds what any" \
+            "visitor may see and nothing else." \
+            "" \
+            "The branch is always a single commit that replaces the one before, so it has no" \
+            "history: an addon deleted from the site is gone from here with the next snapshot." \
+            > "$readme"
+          if git fetch --depth 1 origin snapshot \
+            && git show FETCH_HEAD:addons.json | cmp -s - "$file" \
+            && git show FETCH_HEAD:README.md 2>/dev/null | cmp -s - "$readme"; then
             echo "The snapshot has not changed."
             exit 0
           fi
-          blob=$(git hash-object -w "$file")
-          tree=$(printf '100644 blob %s\taddons.json\n' "$blob" | git mktree)
+          tree=$(printf '100644 blob %s\taddons.json\n100644 blob %s\tREADME.md\n' \
+            "$(git hash-object -w "$file")" "$(git hash-object -w "$readme")" | git mktree)
           commit=$(git commit-tree "$tree" -m "Addon snapshot")
           git push --force origin "$commit:refs/heads/snapshot"
