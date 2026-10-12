@@ -73,6 +73,45 @@
 		}
 	}
 
+	// The screenshots that load, in the order they were given. Linked pictures disappear
+	// from their hosts, so each one is tried before any is shown: a dead one never takes a
+	// place, and the ones that work start where they will stay instead of moving up when
+	// the dead one is found out.
+	let shots = $state<string[]>([]);
+	const wanted = $derived((addon?.images ?? []).join('\n'));
+	$effect(() => {
+		const images = wanted ? wanted.split('\n') : [];
+		shots = [];
+		if (!images.length) return;
+		let current = true;
+		const loaded = new Set<string>();
+		let waiting = images.length;
+		let shown = false;
+		const show = () => {
+			shown = true;
+			if (current) shots = images.filter((image) => loaded.has(image));
+		};
+		// A host that neither answers nor refuses must not hold the others back for long.
+		const patience = setTimeout(show, 3000);
+		for (const image of images) {
+			const probe = new Image();
+			probe.referrerPolicy = 'no-referrer';
+			const settle = (ok: boolean) => {
+				if (ok) loaded.add(image);
+				waiting--;
+				// All of them have answered, or one has come in after the others were shown.
+				if (!waiting || shown) show();
+			};
+			probe.onload = () => settle(true);
+			probe.onerror = () => settle(false);
+			probe.src = image;
+		}
+		return () => {
+			current = false;
+			clearTimeout(patience);
+		};
+	});
+
 	let viewer = $state<HTMLDialogElement>();
 	// Index of the screenshot shown full size, -1 when the viewer is closed.
 	let viewing = $state(-1);
@@ -84,7 +123,7 @@
 
 	function step(event: KeyboardEvent) {
 		const move = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
-		const count = addon?.images.length ?? 0;
+		const count = shots.length;
 		if (move && count) viewing = (viewing + move + count) % count;
 	}
 
@@ -137,25 +176,18 @@
 				<p class="mt-4 leading-relaxed break-words whitespace-pre-line">{addon.description}</p>
 			{/if}
 
-			{#if addon.images.length}
+			{#if shots.length}
 				<!-- Five across, the most an addon can have, so the row always fits the panel. -->
 				<ul class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
-					{#each addon.images as image, index (image)}
+					{#each shots as image, index (image)}
 						<li>
 							<button
 								class="block w-full cursor-zoom-in transition-opacity duration-100 hover:opacity-80"
 								aria-label="View screenshot {index + 1} of {addon.name} full size"
 								onclick={() => view(index)}
 							>
-								<!-- Linked images can disappear from their host; a broken one is hidden. -->
-								<img
-									src={image}
-									alt=""
-									loading="lazy"
-									referrerpolicy="no-referrer"
-									class="aspect-video w-full object-contain"
-									onerror={(e) => (e.currentTarget as HTMLElement).closest('li')?.remove()}
-								/>
+								<!-- Already loaded once, above, so it is drawn at once. -->
+								<img src={image} alt="" referrerpolicy="no-referrer" class="aspect-video w-full object-contain" />
 							</button>
 						</li>
 					{/each}
@@ -173,9 +205,9 @@
 			onclose={() => (viewing = -1)}
 			onkeydown={step}
 		>
-			{#if addon.images[viewing]}
+			{#if shots[viewing]}
 				<img
-					src={addon.images[viewing]}
+					src={shots[viewing]}
 					alt="Screenshot {viewing + 1} of {addon.name}"
 					referrerpolicy="no-referrer"
 					class="max-h-[94vh] max-w-[94vw] object-contain"
