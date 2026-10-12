@@ -1575,8 +1575,8 @@ describe('import queue', () => {
 		assert.deepEqual(links, [
 			{ key: 'github.com/someone/port', url: 'https://github.com/Someone/Port/tree/Vanilla-Port', readme: false },
 			{ key: 'github.com/wiki/atlas', url: 'https://github.com/wiki/Atlas', readme: false },
-			// Waiting, and without a screenshot: its README is to be read.
-			{ key: 'github.com/wiki/bagnon', url: 'https://github.com/wiki/Bagnon', readme: true }
+			// Waiting, and not looked at yet: it comes with the pictures it has, here none.
+			{ key: 'github.com/wiki/bagnon', url: 'https://github.com/wiki/Bagnon', readme: true, images: [] }
 		]);
 
 		const store = 'select public.store_repo_stats($1, $2::jsonb) as n';
@@ -1591,27 +1591,34 @@ describe('import queue', () => {
 		await refused(() => call(admin, `insert into public.repo_stats (key) values ('github.com/a/b')`));
 	});
 
-	test('screenshots found in a README are stored for a waiting entry that has none, once', async () => {
+	test('the pictures of a waiting entry are looked at once, and what is settled replaces what it had', async () => {
 		const shot = (name) => `https://raw.githubusercontent.com/wiki/${name}/main/shot.png`;
-		await queue([candidate('Bare'), candidate('Shown', undefined, { images: [shot('wiki')] }), candidate('Empty'), candidate('Gone')]);
+		await queue([candidate('Bare'), candidate('Shown', undefined, { images: [shot('dead'), shot('wiki')] }), candidate('Empty'), candidate('Gone')]);
 		const ids = Object.fromEntries((await db.sql('select name, id from public.import_queue')).map((r) => [r.name, r.id]));
 		await call(admin, `select public.decide_imports($1, 'rejected')`, [[ids.Gone]]);
 		const store = 'select public.store_queue_images($1, $2::jsonb) as n';
 		const items = (...list) => JSON.stringify(list.map(([name, ...images]) => ({ key: `github.com/wiki/${name.toLowerCase()}`, images })));
-		const wants = async () => (await nightly('select public.nightly_links($1) as links', NIGHTLY_TOKEN))[0].links.filter((l) => l.readme).map((l) => l.key);
-		assert.deepEqual(await wants(), ['github.com/wiki/bare', 'github.com/wiki/empty']);
+		const wants = async () => (await nightly('select public.nightly_links($1) as links', NIGHTLY_TOKEN))[0].links.filter((l) => l.readme);
+		// Every waiting entry, with the pictures it has from the wiki.
+		assert.deepEqual((await wants()).map((l) => `${l.key}: ${l.images.length}`), ['github.com/wiki/bare: 0', 'github.com/wiki/empty: 0', 'github.com/wiki/shown: 2']);
 
-		// Seven found for one, none for another; one that has the wiki's own, one no longer waiting.
+		// Seven found for one, none for another; one whose dead picture is dropped and whose
+		// README adds one; one that is no longer waiting.
 		const seven = Array.from({ length: 7 }, (_, i) => shot(`bare${i}`));
-		const [{ n }] = await nightly(store, NIGHTLY_TOKEN, items(['Bare', ...seven, 'http://insecure.example/a.png'], ['Empty'], ['Shown', shot('other')], ['Gone', shot('gone')]));
-		assert.equal(n, 1);
-		const images = Object.fromEntries((await db.sql('select name, images from public.import_queue')).map((r) => [r.name, r.images]));
+		const [{ n }] = await nightly(store, NIGHTLY_TOKEN, items(['Bare', ...seven, 'http://insecure.example/a.png'], ['Empty'], ['Shown', shot('wiki'), shot('readme')], ['Gone', shot('gone')]));
+		assert.equal(n, 2);
+		const stored = async () => Object.fromEntries((await db.sql('select name, images from public.import_queue')).map((r) => [r.name, r.images]));
+		let images = await stored();
 		assert.deepEqual(images.Bare, seven.slice(0, 5));
-		assert.deepEqual(images.Shown, [shot('wiki')]);
+		assert.deepEqual(images.Shown, [shot('wiki'), shot('readme')]);
 		assert.deepEqual(images.Empty, []);
 		assert.deepEqual(images.Gone, []);
-		// Each README is read once, whatever it held.
+		// Each entry is looked at once: sent again, nothing changes.
 		assert.deepEqual(await wants(), []);
+		await nightly(store, NIGHTLY_TOKEN, items(['Shown', shot('later')], ['Empty', shot('later')]));
+		images = await stored();
+		assert.deepEqual(images.Shown, [shot('wiki'), shot('readme')]);
+		assert.deepEqual(images.Empty, []);
 
 		await refused(() => nightly(store, 'a guess', items()), /Only the nightly job/);
 		await refused(() => call(admin, 'select public.store_queue_images($1, $2::jsonb)', [NIGHTLY_TOKEN, items()]), /permission denied/);

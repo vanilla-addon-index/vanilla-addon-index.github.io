@@ -1,6 +1,7 @@
 // Reads the addon list from the Turtle WoW wiki and turns each entry into a candidate
 // for the import queue. Run by the nightly job and the dry run in scripts/.
 import { CATEGORIES, DEFAULT_CATEGORY, MAX_IMAGES } from './config.ts';
+import { uncamo } from './github.ts';
 import { linkKey } from './links.ts';
 
 export const WIKI = 'https://turtle-wow.fandom.com';
@@ -146,7 +147,9 @@ function parseBullet(line: string): Parsed {
 			name,
 			url,
 			description,
-			images: httpsOnly(images).slice(0, MAX_IMAGES),
+			// A picture copied from a page on github.com came with the address of GitHub's image
+			// proxy, which stops working; the address behind it does not.
+			images: httpsOnly(images.map(uncamo)).slice(0, MAX_IMAGES),
 			alts: httpsOnly(alts),
 			category: guessCategory(name, description),
 			obsolete,
