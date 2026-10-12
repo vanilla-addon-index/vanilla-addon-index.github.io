@@ -6,7 +6,7 @@ This repository is the whole site: its code, its database and the jobs that keep
 
 - **Site:** static SvelteKit app on GitHub Pages
 - **Accounts and data:** Supabase (free plan), protected by row-level security
-- **Snapshot:** every deploy writes the whole list to `addons.json`. Visitors read the list from it, and it stands in if the database is unreachable. Its history is on the `snapshot` branch, so `main` only ever holds your own commits
+- **Snapshot:** every deploy writes the whole list to `addons.json`. Visitors read the list from it, and it stands in if the database is unreachable. The latest one is kept on the `snapshot` branch, as a single commit that replaces the one before, so `main` only ever holds your own commits and no deleted addon stays readable there
 - **Backup:** a full, encrypted copy of the database is taken every night and kept for 90 days; see [Backups](#backups)
 
 ## Setting it up from nothing
@@ -67,11 +67,13 @@ Neither touches the hosted database.
 | Workflow | Runs | Does |
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
-| [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | three jobs in turn: rule tests and type check again; pending migrations; then a fresh snapshot, the build and the publish. Only the middle one is given the database password, and it installs nothing but the Supabase tool |
+| [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | five jobs in turn: rule tests and type check again; pending migrations; a fresh snapshot and the build; the publish; saving the snapshot. Only the migrations job is given the database password, and it installs nothing but the Supabase tool. Only the build job installs the site's dependencies, and it can read no secret and write nowhere |
 | [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
 Deploy and Nightly only touch the hosted database and the site when they run on `main`. Started by hand on another branch, they run the checks and stop there.
+
+The snapshot is not replaced by a list less than half as long as the last one: that is more likely a database that answered wrongly than a list that shrank, and the run says so on its page. If the list really is that much shorter, delete the `snapshot` branch on GitHub and deploy again.
 
 An addon posted between two deploys has no page of its own until the next one. It shows normally to anyone who opens it; only link previews and search engines wait.
 
