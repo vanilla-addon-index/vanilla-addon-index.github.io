@@ -22,6 +22,8 @@ concurrency:
 
 jobs:
   backup:
+    # The secrets are kept in this environment, which only main may use.
+    environment: database
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

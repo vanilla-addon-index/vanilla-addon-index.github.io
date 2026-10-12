@@ -43,7 +43,12 @@ jobs:
           done
 
   import:
+    # From main only: a run started by hand on another branch would otherwise write to the
+    # hosted database with that branch's script, which nobody has merged.
     name: Import from the wiki
+    if: github.ref == 'refs/heads/main'
+    # The token is kept in this environment, which only main may use.
+    environment: database
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

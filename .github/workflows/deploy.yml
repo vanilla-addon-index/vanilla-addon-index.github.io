@@ -35,8 +35,16 @@ jobs:
     # Brings the hosted database up to supabase/migrations before the site that needs it
     # goes out. A failure stops the deploy, so the site is never ahead of its database.
     # This job installs the Supabase tool and nothing else.
+    #
+    # From main only. A run started by hand on another branch would otherwise apply that
+    # branch's migrations, which nobody has merged, to the hosted database. There it stops
+    # after the checks: this job is skipped, and the deploy that needs it with it.
     name: Database migrations
     needs: check
+    if: github.ref == 'refs/heads/main'
+    # The secrets are kept in this environment, which only main may use, so a workflow
+    # changed on another branch is not given them at all.
+    environment: database
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
