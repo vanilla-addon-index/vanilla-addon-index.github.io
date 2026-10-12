@@ -6,7 +6,7 @@ This repository is the whole site: its code, its database and the jobs that keep
 
 - **Site:** static SvelteKit app on GitHub Pages
 - **Accounts and data:** Supabase (free plan), protected by row-level security
-- **Snapshot:** every deploy writes the whole list to `addons.json`. Visitors read the list from it, and it stands in if the database is unreachable. The latest one is kept on the `snapshot` branch, as a single commit that replaces the one before, so `main` only ever holds your own commits and no deleted addon stays readable there
+- **Snapshot:** every deploy writes the whole list to `addons.json`. Visitors read the list from it and ask the database only for what was posted or edited since, so a new addon shows for everyone at once while the database is spared the whole list; the file also stands in if the database is unreachable. The latest one is kept on the `snapshot` branch, as a single commit that replaces the one before, so `main` only ever holds your own commits and no deleted addon stays readable there
 - **Backup:** a full, encrypted copy of the database is taken every night and kept for 90 days; see [Backups](#backups)
 
 ## Setting it up from nothing
@@ -69,19 +69,22 @@ Neither touches the hosted database.
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | five jobs in turn: rule tests and type check again; pending migrations; a fresh snapshot and the build; the publish; saving the snapshot. Only the migrations job is given the database password, and it installs nothing but the Supabase tool. Only the build job installs the site's dependencies, and it can read no secret and write nowhere |
 | [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads the wiki into the import queue, trims the log and the trash, and asks GitHub about every repository, then runs Deploy |
+| [Refresh](.github/workflows/refresh.yml) | three times a day, between the nightly runs | looks whether the list has changed since the last snapshot and runs Deploy only if it has; most runs end after that one look |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
 Deploy and Nightly only touch the hosted database and the site when they run on `main`. Started by hand on another branch, they run the checks and stop there.
 
 The snapshot is not replaced by a list less than half as long as the last one: that is more likely a database that answered wrongly than a list that shrank, and the run says so on its page. If the list really is that much shorter, delete the `snapshot` branch on GitHub and deploy again.
 
-An addon posted between two deploys has no page of its own until the next one. It shows normally to anyone who opens it; only link previews and search engines wait.
+An addon posted between two deploys shows in the list and in search for everyone at once, and opens normally. Until the next deploy it has no page of its own, so link previews and search engines wait; and an addon deleted or regrouped in that time still shows to visitors as it was. With Nightly and Refresh that is a few hours at most.
 
 ## Keeping it running
 
 ### The daily timers
 
-Nightly and Backup run on a timer, and GitHub switches the timers of a public repository off when it has had no activity for 60 days. Nothing commits to `main` by itself, so Nightly starts each run by marking both workflows as enabled, which starts the 60 days again.
+Nightly, Refresh and Backup run on a timer, and GitHub switches the timers of a public repository off when it has had no activity for 60 days. Nothing commits to `main` by itself, so Nightly starts each run by marking all three workflows as enabled, which starts the 60 days again.
+
+GitHub also runs these timers late, often by hours; nothing here depends on the exact time. Four short runs a day are far inside what GitHub allows a public repository, which pays nothing for them.
 
 GitHub does not promise that this keeps working. It sends an email before it switches a timer off, so make sure notifications for this repository reach an inbox that is read. If it happens: Actions → the workflow → "Enable workflow". With the timers off there are no backups, imports or deploys, and Supabase pauses the project after about a week without use; it is restored from the Supabase dashboard.
 
