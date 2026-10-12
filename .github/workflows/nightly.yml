@@ -37,7 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for workflow in nightly.yml backup.yml; do
+          for workflow in nightly.yml backup.yml refresh.yml; do
             gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/enable"
             echo "$workflow is enabled."
           done

@@ -1,0 +1,67 @@
+name: Refresh
+
+# A few times a day, between the nightly runs: looks whether the addon list has changed
+# since the last snapshot, and deploys only if it has. A visitor's browser asks the
+# database for whatever is newer than the snapshot, so a fresher snapshot keeps those
+# answers small; it is also what takes a deleted addon out of the list visitors see, and
+# what gives a new one a page of its own for search engines and link previews.
+#
+# Most runs find nothing changed and end after one short job. GitHub runs timers like
+# these late, sometimes by hours; nothing depends on the exact time.
+on:
+  schedule:
+    - cron: '23 10,16,22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  changed:
+    # Reads the list with the public key, the way any visitor could, and compares it with
+    # the snapshot the site went out with. Given no secret, and installs nothing.
+    name: Has the list changed?
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Compare the list with the last snapshot
+        id: compare
+        # A list far shorter than the last snapshot fails here, as it does in the deploy:
+        # see scripts/export.mjs. So does a database that cannot be reached; the next run
+        # tries again.
+        run: |
+          if git fetch --depth 1 origin snapshot; then
+            git show FETCH_HEAD:addons.json > static/addons.json
+            cp static/addons.json "$RUNNER_TEMP/last.json"
+          else
+            : > "$RUNNER_TEMP/last.json"
+          fi
+          node scripts/export.mjs
+          if cmp -s static/addons.json "$RUNNER_TEMP/last.json"; then
+            echo "The list has not changed since the last snapshot."
+          else
+            echo "The list has changed: deploying."
+            echo "changed=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: changed
+    if: needs.changed.outputs.changed
+    permissions:
+      contents: write
+      actions: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
