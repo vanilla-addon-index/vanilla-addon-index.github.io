@@ -2,7 +2,8 @@ name: Nightly
 
 # Once a day: reads the wiki into the import queue and asks GitHub about every repository,
 # then deploys, which refreshes the snapshot and the pre-rendered addon pages. The daily
-# read of the database is also what keeps the free Supabase project from being paused.
+# read of the database is also what keeps the free Supabase project from being paused,
+# and the first job below is what keeps GitHub from switching this timer off.
 on:
   schedule:
     - cron: '17 4 * * *'
@@ -16,6 +17,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  keepalive:
+    # GitHub switches off the timers of a public repository that has had no activity for 60
+    # days, and nothing commits to main by itself. With the timers off there would be no
+    # backups, no import and no deploys, the organization's admins would lose their rights
+    # after three days, and Supabase would pause the project within about a week. Marking
+    # a workflow as enabled, which it already is, is what starts the 60 days again.
+    #
+    # GitHub does not promise that. It warns by email before it switches a timer off, to
+    # whoever watches this repository: that email is the backstop, and "Enable workflow"
+    # on the Actions page is the way back.
+    name: Keep the schedules on
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Mark the scheduled workflows as enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for workflow in nightly.yml backup.yml; do
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/enable"
+            echo "$workflow is enabled."
+          done
+
   import:
     name: Import from the wiki
     runs-on: ubuntu-latest

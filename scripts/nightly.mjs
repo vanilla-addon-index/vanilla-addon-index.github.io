@@ -54,7 +54,8 @@ if (githubToken) {
 			ids.push(...members.map((m) => m.id));
 			if (members.length < 100) break;
 		}
-		console.log(`The organization has ${await db('store_org_members', { ids })} public members.`);
+		const stored = await db('store_org_members', { ids });
+		console.log(`The organization has ${stored} public member${stored === 1 ? '' : 's'}.`);
 	} catch (error) {
 		// The rest still runs; the run is marked as failed so that this is seen.
 		console.error(`Could not refresh the organization's members: ${error.message}`);

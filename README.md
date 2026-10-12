@@ -68,12 +68,18 @@ Neither touches the hosted database.
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | three jobs in turn: rule tests and type check again; pending migrations; then a fresh snapshot, the build and the publish. Only the middle one is given the database password, and it installs nothing but the Supabase tool |
-| [Nightly](.github/workflows/nightly.yml) | once a day | reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
+| [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
 An addon posted between two deploys has no page of its own until the next one. It shows normally to anyone who opens it; only link previews and search engines wait.
 
 ## Keeping it running
+
+### The daily timers
+
+Nightly and Backup run on a timer, and GitHub switches the timers of a public repository off when it has had no activity for 60 days. Nothing commits to `main` by itself, so Nightly starts each run by marking both workflows as enabled, which starts the 60 days again.
+
+GitHub does not promise that this keeps working. It sends an email before it switches a timer off, so make sure notifications for this repository reach an inbox that is read. If it happens: Actions → the workflow → "Enable workflow". With the timers off there are no backups, imports or deploys, the organization's admins lose their rights after three days, and Supabase pauses the project after about a week without use; it is restored from the Supabase dashboard.
 
 ### The nightly import
 
