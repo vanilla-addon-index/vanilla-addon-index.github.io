@@ -7,6 +7,7 @@
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
+	import { hostAllowed, hostNames } from '#lib/hosts.ts';
 	import { linkKey } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
@@ -93,8 +94,16 @@
 	// Images the poster removed stay removed when the README is read again.
 	const removed = new Set<string>();
 
+	// A member's link and screenshots must be on a site known for hosting code or pictures;
+	// an admin is not held to that, and what an addon already has stays. The database
+	// decides; see the allowed hosts migration.
+	const mayUse = (url: string, kind: 'link' | 'image') =>
+		auth.isAdmin ||
+		hostAllowed(url, kind) ||
+		(kind === 'link' ? editing?.versions.some((v) => v.url === url) : editing?.images.includes(url)) === true;
+
 	function addImages(urls: string[]) {
-		const fresh = urls.filter((u) => !form.images.includes(u) && !removed.has(u));
+		const fresh = urls.filter((u) => !form.images.includes(u) && !removed.has(u) && mayUse(u, 'image'));
 		form.images = [...form.images, ...fresh].slice(0, MAX_IMAGES);
 		return fresh.length;
 	}
@@ -120,6 +129,7 @@
 		// Imgur's page for a single image has a direct address built from the same id.
 		const imgur = /^https:\/\/(?:www\.)?imgur\.com\/(\w+)$/.exec(url);
 		if (imgur) url = `https://i.imgur.com/${imgur[1]}.jpg`;
+		if (!mayUse(url, 'image')) return (imageNote = `That link is on a site screenshots cannot be kept on. These can: ${hostNames('image')}.`);
 
 		checking = true;
 		const ok = await loadsAsImage(url);
@@ -182,6 +192,9 @@
 		if (descriptionLength < DESCRIPTION_MIN && !auth.isAdmin) {
 			return (error = `The description needs at least ${DESCRIPTION_MIN} characters.`);
 		}
+		if (input.versions.some((v) => v.url && !mayUse(v.url, 'link'))) {
+			return (error = `The link must be on one of these sites: ${hostNames('link')}. For an addon kept anywhere else, ask an admin to list it.`);
+		}
 		// The browser already insists on one; this covers a browser that does not.
 		if (!input.category) return (error = 'Pick a category.');
 		if (!editing && !slugify(input.name)) return (error = 'The name needs at least one letter or digit.');
@@ -224,6 +237,13 @@
 				<li>Name, link, category and description are <span class="text-accent">required</span>.</li>
 				<li>Everything else is optional and helps players find the addon.</li>
 				<li>You can edit or delete your entry at any time.</li>
+				{#if !auth.isAdmin}
+					<li>The link must be on one of: {hostNames('link')}.</li>
+				{/if}
+				<li>
+					By posting you agree to the
+					<a href={resolve('/about#rules')} class="underline hover:text-accent">rules for posting</a>.
+				</li>
 			</ul>
 		</aside>
 
@@ -449,7 +469,9 @@
 						{fetching
 							? 'Reading the README…'
 							: imageNote ||
-								'Images from a GitHub README are added automatically. You can also paste a link to an image.'}
+								(auth.isAdmin
+									? 'Images from a GitHub README are added automatically. You can also paste a link to an image.'
+									: `Images from a GitHub README are added automatically. You can also paste a link to an image kept on one of: ${hostNames('image')}.`)}
 					</p>
 				</div>
 			</div>
