@@ -52,6 +52,22 @@ export const DEFAULT_CATEGORY = 'Miscellaneous';
 export const PUBLIC_ADDON_COLUMNS =
 	'id,slug,name,description,category,author,versions,repo_url,link_keys,aliases,images,source,group_id,is_main,created_at,updated_at';
 
+// The sites a member's link, and a member's screenshots, may be on. An admin is not held
+// to them. Must match allowed_hosts() in the allowed hosts migration; a test compares the
+// two. An entry that starts with "*." stands for every site under that name; one with a
+// slash in it stands for that part of a site only.
+export const LINK_HOSTS = [
+	'github.com',
+	'gitlab.com',
+	'codeberg.org',
+	'bitbucket.org',
+	'sourceforge.net',
+	'gitea.com',
+	'git.sr.ht',
+	'octowow.st/git'
+];
+export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co'];
+
 // Must match the check on addons.images in the schema migration.
 export const MAX_IMAGES = 5;
 
