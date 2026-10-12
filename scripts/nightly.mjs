@@ -101,20 +101,35 @@ const repos = (await db('nightly_repos'))
 	.filter(Boolean)
 	.map(([key, owner, name, folder = '']) => ({ key, owner, name, folder }));
 
+// One request to GitHub, tried up to three times: it now and then fails to answer a large
+// request in time. Gives nothing when it still has not answered, and the run is marked as
+// failed so that this is seen; whoever asked goes on without that batch.
 async function github(query) {
-	const res = await fetch('https://api.github.com/graphql', {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${githubToken}`, 'User-Agent': 'vanilla-addon-index' },
-		body: JSON.stringify({ query })
-	});
-	if (!res.ok) throw new Error(`GitHub answered ${res.status}: ${await res.text()}`);
-	// A repository or file that is gone comes back as null with an entry in "errors"; that is expected.
-	const { data, errors = [] } = await res.json();
-	if (!data) throw new Error(`GitHub returned no data: ${errors[0]?.message ?? 'no reason given'}`);
-	// Which of the repositories asked for GitHub says do not exist. Anything else that came
-	// back empty (a limit reached, a timeout on GitHub's side) is not an answer.
-	const gone = new Set(errors.filter((e) => e.type === 'NOT_FOUND' && e.path?.length === 1).map((e) => e.path[0]));
-	return { data, gone };
+	let problem = '';
+	for (let attempt = 1; attempt <= 3; attempt++) {
+		if (attempt > 1) await new Promise((wait) => setTimeout(wait, attempt * 5000));
+		try {
+			const res = await fetch('https://api.github.com/graphql', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${githubToken}`, 'User-Agent': 'vanilla-addon-index' },
+				body: JSON.stringify({ query })
+			});
+			// The body of a failure can be a whole web page; its status says enough.
+			if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+			// A repository or file that is gone comes back as null with an entry in "errors"; that is expected.
+			const { data, errors = [] } = await res.json();
+			if (!data) throw new Error(`GitHub returned no data: ${errors[0]?.message ?? 'no reason given'}`);
+			// Which of the repositories asked for GitHub says do not exist. Anything else that came
+			// back empty (a limit reached, a timeout on GitHub's side) is not an answer.
+			const gone = new Set(errors.filter((e) => e.type === 'NOT_FOUND' && e.path?.length === 1).map((e) => e.path[0]));
+			return { data, gone };
+		} catch (error) {
+			problem = error.message;
+		}
+	}
+	console.error(`GitHub did not answer a request after three tries: ${problem}`);
+	process.exitCode = 1;
+	return null;
 }
 
 const repository = (r, n, fields) =>
@@ -127,7 +142,7 @@ let unanswered = 0;
 for (let i = 0; i < repos.length; i += BATCH) {
 	const batch = repos.slice(i, i + BATCH);
 	// One aliased field per repository, so a whole batch costs one request.
-	const { data, gone } = await github(
+	const answer = await github(
 		`{${batch
 			.map((r, n) =>
 				repository(
@@ -138,6 +153,12 @@ for (let i = 0; i < repos.length; i += BATCH) {
 			)
 			.join(' ')}}`
 	);
+	// No answer about the whole batch: see below.
+	if (!answer) {
+		unanswered += batch.length;
+		continue;
+	}
+	const { data, gone } = answer;
 	batch.forEach((r, n) => {
 		const repo = data[`r${n}`];
 		// No answer about this one: what was stored about it last time stays as it is,
@@ -173,7 +194,7 @@ for (let i = 0; i < repos.length; i += BATCH) {
 // Second pass: read those .toc files for the "## Interface:" line.
 for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 	const batch = withToc.slice(i, i + TOC_BATCH);
-	const { data } = await github(
+	const answer = await github(
 		`{${batch
 			.map((r, n) =>
 				repository(
@@ -186,6 +207,14 @@ for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 			)
 			.join(' ')}}`
 	);
+	// Without their .toc files these are not stored at all, so that the game version known
+	// from last time is not replaced by "unknown".
+	if (!answer) {
+		for (const r of batch) stats.splice(stats.indexOf(r.row), 1);
+		unanswered += batch.length;
+		continue;
+	}
+	const { data } = answer;
 	batch.forEach((r, n) => {
 		const found = r.paths
 			.map((_, f) => /^##\s*Interface:\s*(\d+)/im.exec(data[`r${n}`]?.[`f${f}`]?.text ?? '')?.[1])
