@@ -15,8 +15,17 @@
 
 	let { children }: LayoutProps = $props();
 
-	initAuth();
-	readCache();
+	// Shown inside a frame on someone else's page, the site could be laid under that page's
+	// own buttons, and a logged-in admin tricked into clicking through to something here.
+	// A browser can be told to refuse framing, but only by a header, and GitHub Pages sends
+	// none of ours. So the site refuses itself: in a frame it starts nothing and shows one
+	// link, which opens it properly.
+	const framed = window.top !== window.self;
+
+	if (!framed) {
+		initAuth();
+		readCache();
+	}
 
 	// The list comes from the daily snapshot for visitors and from the database for anyone
 	// logged in, so it is loaded once that is known, and again on logging in or out.
@@ -57,6 +66,11 @@
 	});
 </script>
 
+{#if framed}
+	<p class="p-6 text-center">
+		<a href={page.url.href} target="_top" class="text-accent underline">Open {SITE_NAME}</a>
+	</p>
+{:else}
 <div class="flex min-h-screen flex-col">
 	<header class="border-b border-border bg-surface">
 		<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
@@ -119,3 +133,4 @@
 </div>
 
 <ConfirmDialog />
+{/if}
