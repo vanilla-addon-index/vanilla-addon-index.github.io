@@ -85,8 +85,8 @@ export const ACTION_TEXT: Record<string, string> = {
 	'import.reject': 'rejected the import of',
 	'import.requeue': 'put back in the import queue',
 	'account.delete': 'deleted',
-	'user.admin': 'made an admin, as a public member of the organization:',
-	'user.unadmin': 'took the admin rights of, as no longer a public member of the organization:',
+	'user.admin': 'made an admin of',
+	'user.unadmin': 'took the admin rights of',
 	'user.ban': 'banned',
 	'user.unban': 'unbanned',
 	'user.autosuspend': 'was suspended automatically:',
@@ -241,6 +241,9 @@ export const listUsers = (search: string) => call<UserRow[]>('list_users', { sea
 
 /** Bans or unbans. What the account posted or imported stays up either way. */
 export const setBanned = (id: string, value: boolean) => call<null>('set_banned', { target: id, value });
+
+/** Makes an account an admin, or an ordinary member again. Owner only. */
+export const setAdmin = (id: string, value: boolean) => call<null>('set_admin', { target: id, value });
 
 export interface Suggestion {
 	id: number;

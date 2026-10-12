@@ -3,8 +3,7 @@
 // touches the hosted Supabase project.
 //
 // Supabase provides a few things the SQL files rely on. They are stood in for below:
-// the three API roles, the auth schema, and the http extension used to ask GitHub who
-// is in the organization.
+// the three API roles, the auth schema, and the http extension an early migration uses.
 import { readdirSync, readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
@@ -100,14 +99,6 @@ export async function createDb() {
 		}
 	}
 
-	let nextGithubId = 1000;
-	// The organization's public members, by GitHub id.
-	const members = [];
-
-	/** The nightly job storing who the organization's public members are. */
-	const storeOrgMembers = (ids, token = NIGHTLY_TOKEN) =>
-		request('anon', { role: 'anon' }, (q) => q('select public.store_org_members($1, $2::bigint[]) as n', [token, ids]));
-
 	return {
 		close: () => db.close(),
 
@@ -132,7 +123,7 @@ export async function createDb() {
 
 		/**
 		 * Creates an account the way a first login does.
-		 * role: 'member' (default), 'admin' (public member of the GitHub organization) or 'owner'.
+		 * role: 'member' (default), 'admin' or 'owner'.
 		 */
 		async addUser(username, role = 'member') {
 			const [{ id }] = (
@@ -145,20 +136,10 @@ export async function createDb() {
 				await db.query(`update public.profiles set is_owner = true where id = $1`, [id]);
 			}
 			if (role === 'admin') {
-				const githubId = nextGithubId++;
-				await db.query(`insert into auth.identities (user_id, provider, provider_id) values ($1, 'github', $2)`, [
-					id,
-					String(githubId)
-				]);
-				members.push(githubId);
-				await storeOrgMembers(members);
-				// Setting the scene is not something that happened on the site.
-				await db.query(`delete from public.activity_log where action = 'user.admin'`);
+				await db.query(`update public.profiles set is_admin = true where id = $1`, [id]);
 			}
 			return user;
-		},
-
-		storeOrgMembers
+		}
 	};
 }
 

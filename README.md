@@ -14,16 +14,16 @@ This repository is the whole site: its code, its database and the jobs that keep
 In this order. Steps 1 to 4 are done once in Supabase, 5 to 8 once on GitHub, and 9 after the site is up.
 
 1. **Supabase project:** create one, in the region you want the data kept in.
-2. **Config:** in [src/lib/config.ts](src/lib/config.ts), set the project's URL and public key, the site's address, the repository's address and the GitHub organization whose public members are admins. The project's id also appears as `--project-ref` in [deploy.yml](.github/workflows/deploy.yml) and [backup.yml](.github/workflows/backup.yml). The [about page](src/routes/about/+page.svelte) names who runs the site and where the data is kept.
+2. **Config:** in [src/lib/config.ts](src/lib/config.ts), set the project's URL and public key, the site's address and the repository's address. The project's id also appears as `--project-ref` in [deploy.yml](.github/workflows/deploy.yml) and [backup.yml](.github/workflows/backup.yml). The [about page](src/routes/about/+page.svelte) names who runs the site and where the data is kept.
 3. **Login providers:** in Supabase under Authentication → Sign In / Providers, enable Discord and GitHub with an OAuth app from each, and turn the Email provider off.
 4. **Auth URLs:** in Supabase under Authentication → URL Configuration, set the site URL to the site's address and add `http://localhost:5173` as a redirect URL.
 5. **Repository:** it must be named `<organization>.github.io`. Under Settings → Pages, set Source to "GitHub Actions".
 6. **Secrets:** under Settings → Environments, create an environment named `database`, limit its deployment branches to `main`, untick "Allow administrators to bypass", and add the four secrets in the table below to it as environment secrets. Do not add them as repository secrets: those are given to a workflow on any branch. Each workflow skips the part that needs a secret it does not have, so the site deploys before they are all there.
 7. **First deploy:** push to `main`. The deploy builds the database from [supabase/migrations](supabase/migrations) and publishes the site.
 8. **Protect `main`:** under Settings → Branches, require a pull request and the two checks of the CI workflow, "Tests, types and build" and "Browser tests", for admins too. From here on a change goes out as described under [How a change goes out](#how-a-change-goes-out).
-9. **Owner:** log in on the site once, then run this in Supabase's SQL editor: `update public.profiles set is_owner = true where username = 'your-username';`. The owner can suspend admins and empty the trash, and is the one account that cannot be deleted.
+9. **Owner:** log in on the site once, then run this in Supabase's SQL editor: `update public.profiles set is_owner = true where username = 'your-username';`. The owner appoints the admins, can suspend them and empty the trash, and is the one account that cannot be deleted.
 
-**Admins** are the public members of the GitHub organization who log in with GitHub. The nightly job reads who they are, so joining or leaving takes effect at its next run; start the Nightly workflow by hand to apply a change at once. To make someone else an admin, tick `is_admin` on their row in Supabase's Table Editor → `profiles`.
+**Admins** are appointed by the owner: on the Users page of the admin panel, or on an account's own page there, "Make admin" and "Remove admin". It takes effect at once, works whichever way the account logs in, and is written to the log. Nobody else can do it, and nothing outside the site has a say in it.
 
 ### Secrets
 
@@ -68,7 +68,7 @@ Neither touches the hosted database.
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | five jobs in turn: rule tests and type check again; pending migrations; a fresh snapshot and the build; the publish; saving the snapshot. Only the migrations job is given the database password, and it installs nothing but the Supabase tool. Only the build job installs the site's dependencies, and it can read no secret and write nowhere |
-| [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
+| [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads the wiki into the import queue, trims the log and the trash, and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
 Deploy and Nightly only touch the hosted database and the site when they run on `main`. Started by hand on another branch, they run the checks and stop there.
@@ -83,11 +83,11 @@ An addon posted between two deploys has no page of its own until the next one. I
 
 Nightly and Backup run on a timer, and GitHub switches the timers of a public repository off when it has had no activity for 60 days. Nothing commits to `main` by itself, so Nightly starts each run by marking both workflows as enabled, which starts the 60 days again.
 
-GitHub does not promise that this keeps working. It sends an email before it switches a timer off, so make sure notifications for this repository reach an inbox that is read. If it happens: Actions → the workflow → "Enable workflow". With the timers off there are no backups, imports or deploys, the organization's admins lose their rights after three days, and Supabase pauses the project after about a week without use; it is restored from the Supabase dashboard.
+GitHub does not promise that this keeps working. It sends an email before it switches a timer off, so make sure notifications for this repository reach an inbox that is read. If it happens: Actions → the workflow → "Enable workflow". With the timers off there are no backups, imports or deploys, and Supabase pauses the project after about a week without use; it is restored from the Supabase dashboard.
 
 ### The nightly import
 
-The [Nightly workflow](.github/workflows/nightly.yml) reads who the organization's public members are, reads the Turtle WoW wiki's addon list into the import queue for an admin to review, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else. One of those calls says who the organization's members are, and so who is an admin: treat the token like an admin's login. Every account that joins or leaves that list is written to the admins' log.
+The [Nightly workflow](.github/workflows/nightly.yml) reads the Turtle WoW wiki's addon list into the import queue for an admin to review, trims the log and the trash of what is older than 90 days, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else: it cannot post, edit, delete, or make anyone an admin.
 
 ```sh
 npm run nightly:token   # makes a token, and prints where its two halves go

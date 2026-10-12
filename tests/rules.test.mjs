@@ -64,7 +64,7 @@ describe('roles', () => {
 		const list = 'select username, providers from public.list_users($1)';
 		assert.deepEqual(await call(admin, list, ['alice']), [{ username: 'alice', providers: ['discord'] }]);
 		assert.deepEqual(await call(admin, list, ['bob']), [{ username: 'bob', providers: [] }]);
-		assert.deepEqual(await call(owner, list, ['admin2']), [{ username: 'admin2', providers: ['github'] }]);
+		assert.deepEqual(await call(owner, list, ['admin2']), [{ username: 'admin2', providers: [] }]);
 		assert.deepEqual(await call(alice, list, ['']), []);
 	});
 
@@ -89,46 +89,37 @@ describe('roles', () => {
 		await refused(() => db.asVisitor((q) => q('select * from public.profiles')));
 	});
 
-	test('an admin who leaves the organization loses admin rights at the next nightly run', async () => {
-		await db.storeOrgMembers([]);
-		assert.equal((await role(admin)).admin, false);
-		assert.equal((await role(owner)).admin, true);
-	});
-
-	test('an account joining or leaving the organization\'s list is logged', async () => {
-		const ids = (await db.sql(`select provider_id::bigint as id from auth.identities where provider = 'github' order by 1`)).map((r) => r.id);
-		// Storing the same list again changes nothing and logs nothing.
-		await db.storeOrgMembers(ids);
-		assert.deepEqual(await logged(), []);
-		// One the site has never seen joins, and one of the admins leaves.
-		await db.storeOrgMembers([ids[0], 4242]);
+	test('the owner appoints admins and takes the role away again, at once and in the log', async () => {
+		const appoint = (user, target, value) => call(user, 'select public.set_admin($1, $2)', [target.id, value]);
+		await appoint(owner, alice, true);
+		assert.deepEqual(await role(alice), { admin: true, owner: false, banned: false });
+		// Saying it twice changes nothing and logs nothing more.
+		await appoint(owner, alice, true);
+		await appoint(owner, alice, false);
+		assert.equal((await role(alice)).admin, false);
 		assert.deepEqual(
-			(await db.sql('select actor_name, action, subject from public.activity_log order by action')).map((l) => `${l.actor_name} ${l.action} ${l.subject}`),
-			['null user.admin GitHub user 4242', 'null user.unadmin admin2']
+			(await db.sql('select actor_name, action, subject from public.activity_log order by id')).map((l) => `${l.actor_name} ${l.action} ${l.subject}`),
+			['owner user.admin alice', 'owner user.unadmin alice']
 		);
 	});
 
-	test('only the nightly job can say who the organization\'s members are', async () => {
-		const [{ provider_id: mine }] = await db.sql(`insert into auth.identities (user_id, provider, provider_id) values ($1, 'github', '77') returning provider_id`, [alice.id]);
-		const store = 'select public.store_org_members($1, $2::bigint[])';
-		await refused(() => db.storeOrgMembers([Number(mine)], 'a guess'), /Only the nightly job/);
-		await refused(() => db.storeOrgMembers(null), /missing/);
-		for (const user of [alice, admin, owner]) {
-			await refused(() => call(user, store, [NIGHTLY_TOKEN, [77]]), /permission denied/);
-		}
-		await refused(() => db.asService((q) => q(store, [NIGHTLY_TOKEN, [77]])), /permission denied/);
+	test('only the owner can appoint: not an admin, not the account itself, not the nightly job', async () => {
+		const appoint = (user, target) => call(user, 'select public.set_admin($1, true)', [target.id]);
+		await refused(() => appoint(admin, alice), /Only the owner/);
+		await refused(() => appoint(alice, alice), /Only the owner/);
+		await refused(() => db.asVisitor((q) => q('select public.set_admin($1, true)', [alice.id])), /permission denied/);
+		await refused(() => appoint(owner, owner), /stays one/);
 		assert.equal((await role(alice)).admin, false);
+		// Nothing is left of the organization's list for the nightly job's token to write to.
+		await refused(() => db.asVisitor((q) => q('select public.store_org_members($1, $2::bigint[])', [NIGHTLY_TOKEN, [1]])), /does not exist/);
 	});
 
-	test('the list of members counts for three days after the last nightly run', async () => {
-		await db.sql(`update public.org_cache set fetched_at = now() - interval '2 days'`);
-		assert.equal((await role(admin)).admin, true);
-		await db.sql(`update public.org_cache set fetched_at = now() - interval '4 days'`);
-		assert.equal((await role(admin)).admin, false);
-		// The owner and hand-ticked admins do not depend on the list.
-		assert.equal((await role(owner)).admin, true);
-		await db.sql('update public.profiles set is_admin = true where id = $1', [alice.id]);
+	test('an admin logs in with whatever they like, and a suspended one has no admin rights', async () => {
+		await db.sql(`insert into auth.identities (user_id, provider, provider_id) values ($1, 'discord', '9')`, [alice.id]);
+		await call(owner, 'select public.set_admin($1, true)', [alice.id]);
 		assert.equal((await role(alice)).admin, true);
+		await call(owner, 'select public.set_banned($1, true)', [alice.id]);
+		assert.deepEqual(await role(alice), { admin: false, owner: false, banned: true });
 	});
 });
 
@@ -1321,8 +1312,8 @@ describe('import queue', () => {
 		const mine = await post(db, alice, addon('Bagnon'));
 		await refused(() => call(alice, 'select public.suggest_group($1, $2)', [atlas.id, mine.id]), /an addon you posted/);
 
-		// The admin who approved it leaves the organization: it is not theirs to change.
-		await db.storeOrgMembers([]);
+		// The admin who approved it is an admin no longer: it is not theirs to change.
+		await call(owner, 'select public.set_admin($1, false)', [admin.id]);
 		assert.equal((await edit(admin)).length, 0);
 		assert.equal((await remove(admin)).length, 0);
 		assert.deepEqual(await live(), ['Atlas', 'Bagnon']);

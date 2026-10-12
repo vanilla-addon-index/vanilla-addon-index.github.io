@@ -20,9 +20,9 @@ jobs:
   keepalive:
     # GitHub switches off the timers of a public repository that has had no activity for 60
     # days, and nothing commits to main by itself. With the timers off there would be no
-    # backups, no import and no deploys, the organization's admins would lose their rights
-    # after three days, and Supabase would pause the project within about a week. Marking
-    # a workflow as enabled, which it already is, is what starts the 60 days again.
+    # backups, no import and no deploys, and Supabase would pause the project within about
+    # a week. Marking a workflow as enabled, which it already is, is what starts the 60
+    # days again.
     #
     # GitHub does not promise that. It warns by email before it switches a timer off, to
     # whoever watches this repository: that email is the backstop, and "Enable workflow"
