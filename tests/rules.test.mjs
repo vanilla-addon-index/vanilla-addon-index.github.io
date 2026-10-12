@@ -514,6 +514,33 @@ describe('log, trash and undo', () => {
 	});
 
 
+	test('a restored addon is what was deleted: it stays nobody\'s, with its approver and its dates', async () => {
+		const orphan = await post(db, alice, addon('Orphan'));
+		await call(alice, 'select public.delete_account()');
+		await db.queueImports([{ name: 'pfUI', url: 'https://github.com/shagu/pfUI' }]);
+		const [{ id: queued }] = await db.sql('select id from public.import_queue');
+		await call(admin, 'select public.approve_imports($1)', [[queued]]);
+		// Both were last changed a month ago.
+		await db.raw(`alter table public.addons disable trigger user;
+			update public.addons set updated_at = now() - interval '30 days';
+			alter table public.addons enable trigger user;`);
+		const before = await db.sql('select name, owner, approved_by, updated_at from public.addons order by name');
+		assert.deepEqual(before.map((r) => [r.name, r.owner, r.approved_by]), [['Orphan', null, null], ['pfUI', null, admin.id]]);
+
+		// Another admin deletes and restores them.
+		await call(admin2, 'delete from public.addons');
+		for (const { id } of await db.sql('select id from public.addon_trash')) await call(admin2, 'select public.restore_addon($1)', [id]);
+		assert.deepEqual(await db.sql('select name, owner, approved_by, updated_at from public.addons order by name'), before);
+		assert.equal((await db.sql('select id from public.addons where name = $1', ['Orphan']))[0].id, orphan.id);
+
+		// An approver whose account is gone is forgotten, as when they left.
+		await call(admin2, 'delete from public.addons where name = $1', ['pfUI']);
+		await call(admin, 'select public.delete_account()');
+		const [{ id }] = await db.sql('select id from public.addon_trash');
+		await call(admin2, 'select public.restore_addon($1)', [id]);
+		assert.deepEqual(await db.sql('select owner, approved_by from public.addons where name = $1', ['pfUI']), [{ owner: null, approved_by: null }]);
+	});
+
 	test('an edit can be reverted from its log line', async () => {
 		const row = await post(db, alice, addon('Atlas'));
 		await call(admin, `update public.addons set description = 'Vandalised beyond recognition.', author = 'nobody' where id = $1`, [row.id]);
