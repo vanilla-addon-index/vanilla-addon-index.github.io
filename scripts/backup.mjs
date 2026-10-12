@@ -2,20 +2,23 @@
 // kept by the login service. The table structure is not part of it; supabase/migrations is
 // that. Needs Docker, and `npx supabase login` and `link` to have been run once.
 //
-//   node scripts/backup.mjs                 writes backups/<date and time>.sql
+//   node scripts/backup.mjs                 writes <date and time>.sql to a folder in your
+//                                           home directory, outside this project
 //   node scripts/backup.mjs <file>          the same, to that file
 //   node scripts/backup.mjs check <file>    loads a backup into the local backend and counts
 //                                           what arrived, to show it can be restored
 //
-// A backup holds private data: usernames, email addresses, the log, reports. It is never
-// committed (backups/ is ignored by git), and the nightly one that GitHub keeps is
-// encrypted first; see .github/workflows/backup.yml.
+// A backup holds private data: usernames, email addresses, the log, reports. A copy made
+// on this computer is not encrypted, so it is kept out of the project folder, which may
+// be synced or shared as a whole. The nightly one that GitHub keeps is encrypted first;
+// see .github/workflows/backup.yml.
 //
 // To restore after losing the hosted database: create a project, link it, build its tables
 // with `npm run db:push`, then load the backup file with psql against the new database.
 import { execSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 // The site's own tables, and the accounts with the logins they are tied to.
 const SCHEMAS = 'public,auth';
@@ -33,6 +36,8 @@ const LEFT_OUT = [
 ].join(',');
 // The Supabase tool: the project's own copy, or the one the backup workflow installs.
 const CLI = process.env.SUPABASE_CLI ?? 'npx supabase';
+// Where a backup goes when no file is named.
+const FOLDER = join(homedir(), 'vanilla-addon-index-backups');
 const DB_CONTAINER = 'supabase_db_vanilla-addon-index';
 const TABLES = ['auth.users', 'auth.identities', 'profiles', 'addons', 'import_queue', 'repo_stats', 'activity_log', 'addon_trash', 'group_suggestions', 'reports'];
 
@@ -79,5 +84,5 @@ if (first === 'check') {
 	if (!second) throw new Error('Usage: node scripts/backup.mjs check <file>');
 	check(second);
 } else {
-	dump(first ?? `backups/${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.sql`);
+	dump(first ?? join(FOLDER, `${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.sql`));
 }

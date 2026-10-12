@@ -114,7 +114,7 @@ A migration that has reached the hosted database is never edited again: a later 
 The free Supabase plan keeps no backups, so the [Backup workflow](.github/workflows/backup.yml) takes a full copy of the hosted database every night: every table of the site, and the accounts. Because the copy holds private data and this repository is public, it is encrypted with the `BACKUP_PASSPHRASE` secret before GitHub stores it, and kept for 90 days. The table structure is not in it; the migrations are that.
 
 ```sh
-npm run db:backup                       # a copy on this computer, in backups/ (ignored by git)
+npm run db:backup                       # a copy on this computer, in vanilla-addon-index-backups/ in your home folder
 npm run db:backup:check -- <file>       # loads a copy into the local backend, to show it restores
 gpg --decrypt backup.sql.gpg > backup.sql   # opens a nightly copy downloaded from GitHub
 ```
