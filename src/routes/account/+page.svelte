@@ -27,6 +27,16 @@
 
 	let leaving = $state<HTMLDialogElement>();
 	let busy = $state(false);
+	// Deleting an account cannot be undone, so a click is not enough: its name has to be
+	// typed out first.
+	const phrase = $derived(auth.username || 'delete');
+	let typed = $state('');
+
+	function askToLeave() {
+		typed = '';
+		error = '';
+		leaving?.showModal();
+	}
 	let error = $state('');
 
 	async function deleteAccount() {
@@ -85,7 +95,7 @@
 			<button class="btn w-full" onclick={signOut}>Log out</button>
 			<!-- The owner looks after the admins; the site must not be left without one. -->
 			{#if !auth.isOwner}
-				<button class="btn btn-danger w-full" onclick={() => leaving?.showModal()}>Delete account</button>
+				<button class="btn btn-danger w-full" onclick={askToLeave}>Delete account</button>
 			{/if}
 		</aside>
 
@@ -135,10 +145,23 @@
 				it from its own page first.
 			</p>
 		{/if}
+		<label class="field-label mt-4" for="leave-confirm">
+			To confirm, type <span class="text-fg">{phrase}</span> below
+		</label>
+		<input
+			id="leave-confirm"
+			class="input"
+			autocomplete="off"
+			autocapitalize="off"
+			spellcheck="false"
+			bind:value={typed}
+		/>
 		{#if error}<p class="mt-3 text-danger">{error}</p>{/if}
 		<div class="mt-4 flex justify-end gap-2">
 			<button class="btn" onclick={() => leaving?.close()}>Cancel</button>
-			<button class="btn btn-danger" disabled={busy} onclick={deleteAccount}>Delete account</button>
+			<button class="btn btn-danger" disabled={busy || typed.trim() !== phrase} onclick={deleteAccount}>
+				Delete account
+			</button>
 		</div>
 	</dialog>
 {/if}
