@@ -6,8 +6,8 @@
 //   4. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
-//   5. Reads the README of each queued entry that has no screenshot, once, and stores
-//      the pictures in it for the review.
+//   5. Looks at the screenshots of each queued entry, once: keeps the wiki's that still
+//      load, adds the ones in the repository's README, and stores them for the review.
 //
 // Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 4. Without the token it does nothing, so
 // the deploy keeps working before the secret is configured.
@@ -16,7 +16,7 @@
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
-import { imagesIn } from '../src/lib/github.ts';
+import { imagesIn, uncamo } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
 import { readWiki } from '../src/lib/wiki.ts';
@@ -98,13 +98,53 @@ if (!githubToken) {
 // Each link comes as it was written, since its key leaves out the branch and has no capital
 // letters: where to look for the .toc is read from the link itself. One key, one check.
 const repos = [];
-for (const { key, url, readme } of await db('nightly_links')) {
+// Whether a picture is still there. Only a plain "gone" counts: a host that is slow, or
+// that turns this job away while it serves browsers, gets the benefit of the doubt.
+async function gone(image) {
+	try {
+		const res = await fetch(image, { signal: AbortSignal.timeout(10_000), headers: { 'User-Agent': 'vanilla-addon-index' } });
+		await res.body?.cancel();
+		// imgur answers for a picture it has removed with a picture that says so.
+		return res.status === 404 || res.status === 410 || /\/removed\./.test(res.url);
+	} catch {
+		return false;
+	}
+}
+
+// The pictures a queued entry has from the wiki, with proxy addresses turned back into
+// the real ones, and without those that are gone. A few at a time.
+async function stillThere(images) {
+	const real = [...new Set(images.map(uncamo))].filter((image) => image.startsWith('https://'));
+	const kept = [];
+	for (let i = 0; i < real.length; i += 5) {
+		const batch = real.slice(i, i + 5);
+		const dead = await Promise.all(batch.map(gone));
+		kept.push(...batch.filter((_, n) => !dead[n]));
+	}
+	return kept;
+}
+
+// Queued entries whose pictures are to be looked at, and what was settled for each.
+const pictures = [];
+const links = await db('nightly_links');
+const toLookAt = links.filter((l) => l.readme);
+const wikiPictures = new Map();
+for (let i = 0; i < toLookAt.length; i += 10) {
+	await Promise.all(
+		toLookAt.slice(i, i + 10).map(async (l) => wikiPictures.set(l.key, l.images?.length ? await stillThere(l.images) : []))
+	);
+}
+
+for (const { key, url, readme } of links) {
 	const place = githubPlace(url);
+	// Not on GitHub: there is no README to read, so the pictures that are left are it.
+	if (!place && readme) pictures.push({ key, images: wikiPictures.get(key) ?? [] });
 	if (!place || repos.some((r) => r.key === key)) continue;
 	// What the key has after the repository: the folder, as the stored address needs it.
 	const folder = /^github\.com\/[^/]+\/[^/]+(\/.+)?$/.exec(key)?.[1] ?? '';
-	// "readme": a queued entry without a screenshot, whose README has not been read yet.
-	repos.push({ key, ...place, folder, ref: place.ref || 'HEAD', readme });
+	// "readme": a queued entry whose pictures have not been looked at yet; "wiki": the
+	// ones it has from the wiki that still load.
+	repos.push({ key, ...place, folder, ref: place.ref || 'HEAD', readme, wiki: wikiPictures.get(key) ?? [] });
 }
 
 // One request to GitHub, tried up to three times: it now and then fails to answer a large
@@ -144,9 +184,8 @@ const repository = (r, n, fields) =>
 // First pass: the facts, and what sits at the top of each repository.
 const stats = [];
 const withToc = [];
-// Queued entries whose README is to be read, and what was found for each.
+// Queued entries whose README is to be read.
 const withReadme = [];
-const pictures = [];
 let unanswered = 0;
 for (let i = 0; i < repos.length; i += BATCH) {
 	const batch = repos.slice(i, i + BATCH);
@@ -201,9 +240,9 @@ for (let i = 0; i < repos.length; i += BATCH) {
 		// The README sits in the same place, under one of a few spellings.
 		if (r.readme && repo) {
 			const file = entries.find((e) => e.type === 'blob' && /^readme(\.(md|markdown|mdown|txt|rst))?$/i.test(e.name))?.name;
-			// Without one there is nothing to find, and it is not looked for again.
+			// Without one there is nothing to add to the wiki's, and it is not looked for again.
 			if (file) withReadme.push({ ...r, full: repo.nameWithOwner, file: `${within}${file}` });
-			else pictures.push({ key: r.key, images: [] });
+			else pictures.push({ key: r.key, images: r.wiki });
 		}
 	});
 }
@@ -258,14 +297,15 @@ for (let i = 0; i < withReadme.length; i += README_BATCH) {
 		if (!repo) return;
 		// Where the README is served from, so that a picture kept next to it resolves.
 		const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
-		const images = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
-		pictures.push({ key: r.key, images });
+		const found = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
+		// The wiki's first, since someone chose those; then the README's, each picture once.
+		pictures.push({ key: r.key, images: [...new Set([...r.wiki, ...found])].slice(0, 5) });
 	});
 }
 if (pictures.length) {
 	try {
 		const given = await db('store_queue_images', { items: pictures });
-		console.log(`Read ${pictures.length} READMEs for screenshots: ${given} queued entries got pictures.`);
+		console.log(`Looked at the screenshots of ${pictures.length} queued entries: ${given} have pictures now.`);
 	} catch (error) {
 		console.error(`Could not store the screenshots found in READMEs: ${error.message}`);
 		process.exitCode = 1;

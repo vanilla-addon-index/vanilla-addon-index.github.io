@@ -17,6 +17,24 @@ const toRaw = (url: string) =>
 	);
 
 /**
+ * The picture behind an address of GitHub's image proxy. A README shown on github.com
+ * loads its pictures through that proxy, and the proxy's address spells the real one out
+ * in hexadecimal. Old proxy addresses stop working while the picture is still there, so
+ * the real address is the one worth keeping. Any other address comes back as it is.
+ */
+export function uncamo(url: string): string {
+	const hex = /^https:\/\/camo\.githubusercontent\.com\/[0-9a-f]+\/((?:[0-9a-f]{2})+)(?:[?#].*)?$/i.exec(url)?.[1];
+	if (!hex) return url;
+	try {
+		const bytes = Uint8Array.from(hex.match(/../g)!, (pair) => parseInt(pair, 16));
+		const real = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		return /^https?:\/\/\S+$/.test(real) ? real.replace(/^http:/, 'https:') : url;
+	} catch {
+		return url;
+	}
+}
+
+/**
  * Image links in the text of a README, in document order. "base" is the README's own raw
  * address, so that a picture kept next to it in the repository resolves to where it is.
  */
