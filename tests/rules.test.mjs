@@ -5,7 +5,7 @@
 // Every test gets its own throwaway database with dummy accounts; see db.mjs.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { CATEGORIES } from '../src/lib/config.ts';
+import { CATEGORIES, PUBLIC_ADDON_COLUMNS } from '../src/lib/config.ts';
 import { linkKey } from '../src/lib/links.ts';
 import { NIGHTLY_TOKEN, addon, createDb, post } from './db.mjs';
 
@@ -51,7 +51,10 @@ describe('roles', () => {
 	test('who posted an addon cannot be looked up by a visitor or another member', async () => {
 		await post(db, alice, addon('Atlas'));
 		const poster = 'select p.username from public.addons a left join public.profiles p on p.id = a.owner';
-		assert.deepEqual(await db.asVisitor((q) => q(poster)), [{ username: null }]);
+		// A visitor cannot even read the account id; a member reads the id but no name.
+		await refused(() => db.asVisitor((q) => q(poster)), /permission denied/);
+		await refused(() => db.asVisitor((q) => q('select approved_by from public.addons')), /permission denied/);
+		assert.deepEqual(await db.asVisitor((q) => q(`select ${PUBLIC_ADDON_COLUMNS} from public.addons`)).then((rows) => rows.map((r) => r.name)), ['Atlas']);
 		assert.deepEqual(await call(bob, poster), [{ username: null }]);
 		assert.deepEqual(await call(admin, poster), [{ username: 'alice' }]);
 	});

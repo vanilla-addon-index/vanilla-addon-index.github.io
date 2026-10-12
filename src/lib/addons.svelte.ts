@@ -1,6 +1,6 @@
 import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
-import { LOCAL } from './config';
+import { LOCAL, PUBLIC_ADDON_COLUMNS } from './config';
 import { tell } from './confirm.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
@@ -15,7 +15,13 @@ export const store = $state({
 	stale: false
 });
 
-type Row = Omit<Addon, 'owner_name'> & { profiles: { username: string } | null };
+// A visitor's rows come without who posted or approved them.
+type Row = Omit<Addon, 'owner_name' | 'owner' | 'approved_by'> &
+	Partial<Pick<Addon, 'owner' | 'approved_by'>> & { profiles?: { username: string } | null };
+
+// Everything for someone logged in; what a visitor may read otherwise. The database
+// refuses a visitor who asks for more.
+const columns = () => (auth.session ? '*, profiles(username)' : PUBLIC_ADDON_COLUMNS);
 
 // Rows saved before versions existed carry only the single link.
 const withVersions = <T extends Partial<Addon>>(row: T) => ({
@@ -23,6 +29,7 @@ const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	versions: row.versions?.length ? row.versions : [{ url: row.repo_url ?? '', note: '' }],
 	aliases: row.aliases ?? [],
 	source: row.source ?? '',
+	owner: row.owner ?? null,
 	approved_by: row.approved_by ?? null,
 	group_id: row.group_id ?? null,
 	is_main: row.is_main ?? false
@@ -81,11 +88,13 @@ async function fetchPaged<T>(columns: string) {
 	}
 }
 
-const fetchAll = async () => (await fetchPaged<Row>('*, profiles(username)')).map(toAddon);
+const fetchAll = async () => (await fetchPaged<Row>(columns())).map(toAddon);
 
 // What tells a snapshot row apart from the row as it is now, without sending its text.
 // Grouping leaves "updated_at" alone, and the snapshot does not know who posted what.
-type Outline = Pick<Addon, 'id' | 'updated_at' | 'group_id' | 'is_main'> & { profiles: { username: string } | null };
+type Outline = Pick<Addon, 'id' | 'updated_at' | 'group_id' | 'is_main' | 'owner' | 'approved_by'> & {
+	profiles: { username: string } | null;
+};
 
 // Ids per request when fetching changed rows, and how many changed rows are still worth
 // fetching one by one rather than reading the whole table.
@@ -102,7 +111,7 @@ async function fetchLive() {
 	if (LOCAL) return fetchAll();
 	const [snapshot, outline] = await Promise.all([
 		fetchSnapshot().catch(() => [] as Addon[]),
-		fetchPaged<Outline>('id, updated_at, group_id, is_main, profiles(username)')
+		fetchPaged<Outline>('id, updated_at, group_id, is_main, owner, approved_by, profiles(username)')
 	]);
 	// What this browser already holds counts too: rows loaded earlier in the visit or saved
 	// by the last one. An admin approving imports by the hundred fetches each row once.
@@ -119,9 +128,9 @@ async function fetchLive() {
 		for (const row of data as Row[]) rows.set(row.id, toAddon(row));
 	}
 	// The outline decides what exists and in which order; a deleted addon is not in it.
-	return outline.flatMap(({ id, group_id, is_main, profiles }) => {
+	return outline.flatMap(({ id, group_id, is_main, owner, approved_by, profiles }) => {
 		const row = rows.get(id);
-		return row ? [{ ...row, group_id, is_main, owner_name: profiles?.username ?? '' }] : [];
+		return row ? [{ ...row, group_id, is_main, owner, approved_by, owner_name: profiles?.username ?? '' }] : [];
 	});
 }
 
@@ -157,7 +166,7 @@ export async function fetchAddon(slug: string) {
 	if (!supabase || !/^[a-z0-9-]+$/.test(slug)) return;
 	const { data } = await supabase
 		.from('addons')
-		.select('*, profiles(username)')
+		.select(columns())
 		.or(`slug.eq.${slug},aliases.cs.{${slug}}`)
 		.limit(1);
 	const row = (data as Row[] | null)?.[0];
