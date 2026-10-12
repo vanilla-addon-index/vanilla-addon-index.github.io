@@ -2,7 +2,7 @@ import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
 import { LOCAL, PUBLIC_ADDON_COLUMNS } from './config';
 import { tell } from './confirm.svelte';
-import { mergeFresh, newestStamp } from './fresh';
+import { mergeFresh, newestStamp, stillGone } from './fresh';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 
@@ -76,28 +76,58 @@ const PAGE = 1000;
 const ASKED_KEY = 'fresh-at';
 const ASK_EVERY = 5 * 60 * 1000;
 
+// Addons deleted in this browser that the snapshot still lists; see mergeFresh.
+const GONE_KEY = 'gone-v1';
+
+function readGone(): number[] {
+	try {
+		const ids: unknown = JSON.parse(localStorage.getItem(GONE_KEY) ?? '[]');
+		return Array.isArray(ids) ? ids.filter((id) => typeof id === 'number') : [];
+	} catch {
+		return [];
+	}
+}
+
+function writeGone(ids: number[]) {
+	try {
+		localStorage.setItem(GONE_KEY, JSON.stringify(ids));
+	} catch {
+		// Ignore quota and private-mode errors.
+	}
+}
+
 /**
- * A visitor's list: the snapshot, a static file, with whatever was posted or edited since
- * laid over it. The database is asked for those few rows only, so the answer stays small
- * however long the list is, and when it cannot be reached the snapshot stands alone.
- * An addon deleted or regrouped since the snapshot shows as it was until the next one.
+ * The list for a visitor, and for a member who is not an admin: the snapshot, a static
+ * file, with whatever was posted or edited since laid over it. The database is asked for
+ * those few rows only, so the answer stays small however long the list is and however
+ * many people ask. An addon deleted or regrouped since the snapshot shows as it was until
+ * the next one, which is at most a couple of hours away.
+ *
+ * A member is also sent the addons they posted, which is how the site knows they are
+ * theirs to edit: the snapshot does not say who posted what. And what they delete here is
+ * remembered, so that their own delete shows at once like their own posts and edits do.
+ *
+ * Says whether the database answered; without it the snapshot stands alone.
  */
-async function fetchPublic() {
+async function fetchPublic(): Promise<{ list: Addon[]; reached: boolean }> {
 	const snapshot = await fetchSnapshot();
+	const me = auth.session?.user.id;
+	const since = newestStamp(snapshot) || '1970-01-01';
 	let fresh: Addon[] = [];
+	let reached = true;
 	let asked = 0;
 	try {
 		asked = Number(localStorage.getItem(ASKED_KEY)) || 0;
 	} catch {
 		// Storage unavailable: ask every time.
 	}
-	if (supabase && Date.now() - asked > ASK_EVERY) {
-		const { data } = await supabase
-			.from('addons')
-			.select(PUBLIC_ADDON_COLUMNS)
-			.gt('updated_at', newestStamp(snapshot) || '1970-01-01')
+	// A member's answer holds their own addons, so it is asked for on every load.
+	if (supabase && (me || Date.now() - asked > ASK_EVERY)) {
+		const query = supabase.from('addons').select(columns());
+		const { data } = await (me ? query.or(`updated_at.gt."${since}",owner.eq.${me}`) : query.gt('updated_at', since))
 			.order('updated_at', { ascending: false })
 			.limit(PAGE);
+		reached = Boolean(data);
 		if (data) {
 			fresh = (data as unknown as Row[]).map(toAddon);
 			try {
@@ -107,8 +137,10 @@ async function fetchPublic() {
 			}
 		}
 	}
+	const gone = stillGone(readGone(), snapshot);
+	writeGone(gone);
 	// What an earlier visit fetched is in the list this browser kept.
-	return mergeFresh(snapshot, store.addons, fresh);
+	return { list: mergeFresh(snapshot, store.addons, fresh, gone), reached };
 }
 
 // The API returns at most 1000 rows per request.
@@ -184,14 +216,23 @@ const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
  * the database, deletions included. Each source stands in for the other when it fails.
  */
 export async function loadAddons() {
-	const live = LOCAL || Boolean(auth.session);
+	const loggedIn = Boolean(auth.session);
+	// Admins review, group and delete, so they get the list exactly as it is now.
+	const exact = LOCAL || (loggedIn && auth.isAdmin);
 	try {
-		store.addons = await (live ? fetchLive() : fetchPublic());
-		store.stale = false;
+		if (exact) {
+			store.addons = await fetchLive();
+			store.stale = false;
+		} else {
+			const { list, reached } = await fetchPublic();
+			store.addons = list;
+			// Someone logged in is told when posting will not work; a visitor has no need to know.
+			store.stale = loggedIn && !reached;
+		}
 	} catch {
 		try {
-			store.addons = await (live ? fetchSnapshot() : fetchAll());
-			store.stale = live;
+			store.addons = await (exact ? fetchSnapshot() : fetchAll());
+			store.stale = exact;
 		} catch {
 			// Keep whatever the cache gave us.
 		}
@@ -284,6 +325,8 @@ export async function deleteAddon(id: number) {
 		store.addons = previous;
 		throw new Error(error ? explain(error) : 'You are not allowed to do that.');
 	}
+	// The snapshot lists it until the next one is taken; this browser knows better.
+	writeGone([...readGone(), id]);
 	writeCache();
 }
 
