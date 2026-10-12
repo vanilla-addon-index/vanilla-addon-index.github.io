@@ -1,6 +1,6 @@
 name: Refresh
 
-# Every two hours: looks whether the addon list has changed
+# Every hour: looks whether the addon list has changed
 # since the last snapshot, and deploys only if it has. A visitor's browser asks the
 # database for whatever is newer than the snapshot, so a fresher snapshot keeps those
 # answers small; it is also what takes a deleted addon out of the list visitors see, and
@@ -8,9 +8,15 @@ name: Refresh
 #
 # Most runs find nothing changed and end after one short job. GitHub runs timers like
 # these late, sometimes by hours; nothing depends on the exact time.
+#
+# The three timed workflows start at different minutes of the hour (Nightly at 17, Backup
+# at 43, this one at 53). That only spreads them on paper, since GitHub starts them when
+# it gets to them. What keeps two runs from getting in each other's way is that each
+# workflow, and each step of a deploy, waits for the one before it: see the
+# "concurrency" entries here and in deploy.yml.
 on:
   schedule:
-    - cron: '23 */2 * * *'
+    - cron: '53 * * * *'
   workflow_dispatch:
 
 permissions:
