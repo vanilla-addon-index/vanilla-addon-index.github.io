@@ -51,6 +51,10 @@ jobs:
     environment: database
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # How many reports and suggestions wait for an admin, for the job below.
+    outputs:
+      reports: ${{ steps.nightly.outputs.reports }}
+      suggestions: ${{ steps.nightly.outputs.suggestions }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The script uses nothing that needs installing.
@@ -58,12 +62,69 @@ jobs:
         with:
           node-version: 24
       - name: Import from the wiki
+        id: nightly
         # Skips itself until the NIGHTLY_TOKEN secret exists. The token is good for this
         # job's three database calls and nothing else; `npm run nightly:token` makes one.
         env:
           NIGHTLY_TOKEN: ${{ secrets.NIGHTLY_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/nightly.mjs
+
+  notify:
+    # Tells the admins when something on the site is waiting for them: a report nobody has
+    # closed, or a member's suggestion nobody has decided. Never for anything that needs no
+    # admin, such as a new addon. The site sends no email, so this goes through GitHub: one
+    # issue, assigned to whoever should hear of it, which GitHub emails them about. It is
+    # opened when something waits, gets a comment when more arrives, and closes itself when
+    # nothing is left. Issues are public, so it holds the two numbers and nothing else.
+    name: Tell the admins what is waiting
+    needs: import
+    if: ${{ !cancelled() && needs.import.outputs.reports != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORTS: ${{ needs.import.outputs.reports }}
+          SUGGESTIONS: ${{ needs.import.outputs.suggestions }}
+          # Who is told, by their GitHub name; several are separated by commas.
+          TELL: akzkak
+          ADMIN_PAGE: https://vanilla-addon-index.github.io/admin/reports
+        run: |
+          total=$((REPORTS + SUGGESTIONS))
+          title="Waiting for an admin: $REPORTS reports, $SUGGESTIONS suggestions"
+          # The label is how the issue is found again; only people with rights here can set it.
+          gh label create needs-admin --repo "$GITHUB_REPOSITORY" --color d93f0b \
+            --description "Something on the site is waiting for an admin" --force
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label needs-admin --state open --limit 1 \
+            --json number,title --jq '.[0] | select(.) | "\(.number)\t\(.title)"')
+          number=${open%%$'\t'*}
+          before=${open#*$'\t'}
+
+          if [ "$total" -eq 0 ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "Nothing is waiting any more."
+            fi
+            exit 0
+          fi
+
+          body="On the site, $REPORTS reports and $SUGGESTIONS suggestions from members are waiting for an admin: $ADMIN_PAGE
+
+          The Nightly workflow keeps this issue up to date and closes it when nothing is left."
+          if [ -z "$number" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" --label needs-admin --assignee "$TELL"
+          elif [ "$before" != "$title" ]; then
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+            # A comment is what sends a notification; only when there is more than before.
+            was=0
+            for n in $(echo "$before" | grep -oE '[0-9]+'); do was=$((was + n)); done
+            if [ "$total" -gt "$was" ]; then
+              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "More is waiting now: $REPORTS reports and $SUGGESTIONS suggestions. $ADMIN_PAGE"
+            fi
+          fi
 
   deploy:
     # The site goes out even when the import failed; the failed job still shows.
