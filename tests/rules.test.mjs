@@ -294,7 +294,7 @@ describe('links and versions', () => {
 			{ url: 'https://github.com/a/atlas', note: 'main', added_by: 'owner', junk: 'x'.repeat(10000) },
 			{ url: 'https://gitlab.com/a/atlas' }
 		]);
-		const row = await post(db, alice, addon('Atlas', undefined, { versions }));
+		const row = await post(db, admin, addon('Atlas', undefined, { versions }));
 		assert.deepEqual(row.versions, [
 			{ url: 'https://github.com/a/atlas', note: 'main' },
 			{ url: 'https://gitlab.com/a/atlas', note: '' }
@@ -311,9 +311,32 @@ describe('links and versions', () => {
 			{ url: 'https://github.com/brues-code/pfUI', note: 'maintained' },
 			{ url: 'https://github.com/shagu/pfUI', note: 'original' }
 		]);
-		const row = await post(db, alice, { ...addon('pfUI'), versions });
+		const row = await post(db, admin, { ...addon('pfUI'), versions });
 		assert.equal(row.repo_url, 'https://github.com/brues-code/pfUI');
 		assert.deepEqual(row.link_keys.sort(), ['github.com/brues-code/pfui', 'github.com/shagu/pfui']);
+	});
+
+	test('only an admin can add a second link; a member cannot hold other repositories as mirrors', async () => {
+		const links = (...urls) => JSON.stringify(urls.map((url) => ({ url, note: '' })));
+		const set = (user, row, versions) => call(user, 'update public.addons set versions = $1 where id = $2 returning versions', [versions, row.id]);
+		const [mine, theirs, moved, mirror] = ['mine', 'theirs', 'moved', 'mirror'].map((name) => `https://github.com/someone/${name}`);
+
+		await refused(() => post(db, alice, { ...addon('Squat'), versions: links(mine, theirs) }), /posted with one link/);
+		const row = await post(db, alice, addon('Mine', mine));
+		await refused(() => set(alice, row, links(mine, theirs)), /Only an admin can add another link/);
+		// The repository moved: the one link it has can change.
+		await set(alice, row, links(moved));
+
+		// An admin adds a mirror. Its poster can reorder the two, drop one and change the
+		// main link, but still not bring in another.
+		await set(admin, row, links(moved, mirror));
+		await set(alice, row, links(mirror, moved));
+		await refused(() => set(alice, row, links(mirror, moved, theirs)), /Only an admin can add another link/);
+		await refused(() => set(alice, row, links(mirror, theirs)), /Only an admin can add another link/);
+		await set(alice, row, links(mine, mirror));
+		await set(alice, row, links(mine));
+		// The repository nobody was allowed to hold is still free to be posted.
+		await post(db, bob, addon('Theirs', theirs));
 	});
 
 	test('links must be https, and an addon needs at least one', async () => {
