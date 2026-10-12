@@ -17,7 +17,7 @@ jobs:
   check:
     # The database rules, on a throwaway copy, and the types. A failure stops the deploy.
     name: Tests and types
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -45,7 +45,7 @@ jobs:
     # The secrets are kept in this environment, which only main may use, so a workflow
     # changed on another branch is not given them at all.
     environment: database
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -76,7 +76,7 @@ jobs:
     # snapshot is read with the public key. What it made is handed on as two files.
     name: Build
     needs: migrate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -118,7 +118,7 @@ jobs:
     # Publishes what the build made. Nothing is installed or run here.
     name: Deploy
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write
@@ -144,7 +144,7 @@ jobs:
     # which is not what the site's privacy page promises.
     name: Save snapshot
     needs: deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write
