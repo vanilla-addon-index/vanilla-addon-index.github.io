@@ -389,6 +389,11 @@
 							</div>
 						{/each}
 					</details>
+				{:else if entry.details?.changed}
+					<!-- Older than 90 days: the line stays, the copy of the addon does not. -->
+					<p class="mt-1 text-sm text-muted">
+						Changed {entry.details.changed.join(', ')}. What it looked like before is no longer kept.
+					</p>
 				{/if}
 			</div>
 		{/each}

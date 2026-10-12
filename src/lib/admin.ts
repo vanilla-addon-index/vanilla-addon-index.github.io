@@ -85,6 +85,8 @@ export const ACTION_TEXT: Record<string, string> = {
 	'import.reject': 'rejected the import of',
 	'import.requeue': 'put back in the import queue',
 	'account.delete': 'deleted',
+	'user.admin': 'made an admin, as a public member of the organization:',
+	'user.unadmin': 'took the admin rights of, as no longer a public member of the organization:',
 	'user.ban': 'banned',
 	'user.unban': 'unbanned',
 	'user.autosuspend': 'was suspended automatically:',

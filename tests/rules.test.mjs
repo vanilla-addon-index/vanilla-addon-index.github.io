@@ -92,6 +92,19 @@ describe('roles', () => {
 		assert.equal((await role(owner)).admin, true);
 	});
 
+	test('an account joining or leaving the organization\'s list is logged', async () => {
+		const ids = (await db.sql(`select provider_id::bigint as id from auth.identities where provider = 'github' order by 1`)).map((r) => r.id);
+		// Storing the same list again changes nothing and logs nothing.
+		await db.storeOrgMembers(ids);
+		assert.deepEqual(await logged(), []);
+		// One the site has never seen joins, and one of the admins leaves.
+		await db.storeOrgMembers([ids[0], 4242]);
+		assert.deepEqual(
+			(await db.sql('select actor_name, action, subject from public.activity_log order by action')).map((l) => `${l.actor_name} ${l.action} ${l.subject}`),
+			['null user.admin GitHub user 4242', 'null user.unadmin admin2']
+		);
+	});
+
 	test('only the nightly job can say who the organization\'s members are', async () => {
 		const [{ provider_id: mine }] = await db.sql(`insert into auth.identities (user_id, provider, provider_id) values ($1, 'github', '77') returning provider_id`, [alice.id]);
 		const store = 'select public.store_org_members($1, $2::bigint[])';
@@ -553,6 +566,25 @@ describe('log, trash and undo', () => {
 		assert.equal((await logged()).at(-1), 'addon.revert');
 	});
 
+	test('what an addon looked like before an edit is kept for 90 days; the line itself stays', async () => {
+		const tidy = (token = NIGHTLY_TOKEN) => db.asVisitor((q) => q('select public.nightly_tidy($1) as n', [token]));
+		const row = await post(db, alice, addon('Atlas'));
+		await call(alice, `update public.addons set author = 'Old edit' where id = $1`, [row.id]);
+		await db.sql(`update public.activity_log set at = at - interval '91 days'`);
+		await call(alice, `update public.addons set author = 'New edit' where id = $1`, [row.id]);
+		await call(alice, 'delete from public.addons where id = $1', [row.id]);
+		await db.sql(`update public.addon_trash set deleted_at = deleted_at - interval '91 days'`);
+
+		await refused(() => tidy('wrong'), /Only the nightly job/);
+		await refused(() => call(admin, 'select public.nightly_tidy($1)', [NIGHTLY_TOKEN]), /permission denied/);
+		assert.equal((await tidy())[0].n, 1);
+		const edits = await db.sql(`select id, details from public.activity_log where action = 'addon.update' order by id`);
+		assert.deepEqual(edits[0].details, { changed: ['author'] });
+		assert.equal(edits[1].details.before.author, 'Old edit');
+		assert.equal((await db.sql('select * from public.addon_trash')).length, 0);
+		await refused(() => call(admin, 'select public.revert_addon($1)', [edits[0].id]), /too old to revert/);
+	});
+
 	test('only the owner can remove something from the trash for good', async () => {
 		const row = await post(db, alice, addon('Atlas'));
 		await call(admin, 'delete from public.addons where id = $1', [row.id]);
@@ -641,6 +673,10 @@ describe('limits', () => {
 
 		for (let i = 0; i < 50; i++) await post(db, admin, addon(`Admin${i}`));
 		await refused(() => post(db, admin, addon('OneTooMany')), /at most 50 addons a day/);
+
+		// Deleting one does not give the day's post back.
+		await call(alice, `delete from public.addons where name = 'Addon0'`);
+		await refused(() => post(db, alice, addon('OneTooMany')), /at most 10 addons a day/);
 
 		const items = Array.from({ length: 5 }, (_, i) => ({ name: `Wiki${i}`, url: `https://github.com/wiki/addon${i}` }));
 		await db.queueImports(items);

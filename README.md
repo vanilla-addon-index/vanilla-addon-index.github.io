@@ -85,7 +85,7 @@ GitHub does not promise that this keeps working. It sends an email before it swi
 
 ### The nightly import
 
-The [Nightly workflow](.github/workflows/nightly.yml) reads who the organization's public members are, reads the Turtle WoW wiki's addon list into the import queue for an admin to review, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else.
+The [Nightly workflow](.github/workflows/nightly.yml) reads who the organization's public members are, reads the Turtle WoW wiki's addon list into the import queue for an admin to review, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else. One of those calls says who the organization's members are, and so who is an admin: treat the token like an admin's login. Every account that joins or leaves that list is written to the admins' log.
 
 ```sh
 npm run nightly:token   # makes a token, and prints where its two halves go
@@ -116,7 +116,12 @@ The free Supabase plan keeps no backups, so the [Backup workflow](.github/workfl
 ```sh
 npm run db:backup                       # a copy on this computer, in vanilla-addon-index-backups/ in your home folder
 npm run db:backup:check -- <file>       # loads a copy into the local backend, to show it restores
+npm run db:backup:fetch                 # downloads the latest nightly copy, still encrypted, to that same folder
 gpg --decrypt backup.sql.gpg > backup.sql   # opens a nightly copy downloaded from GitHub
 ```
+
+Every night's copy is also tried out: the workflow opens the stored file with the passphrase and loads it into a throwaway database, and the run fails if that does not work or the copy holds no accounts.
+
+The nightly copies exist only on GitHub, in this repository. Run `npm run db:backup:fetch` now and then to keep one somewhere else as well; it stays encrypted, so it can be stored anywhere.
 
 To recover from losing the hosted database: create a new project, `npx supabase link` it, build its tables with `npm run db:push`, then load the backup file into it with `psql`. Without the passphrase the nightly copies cannot be opened.
