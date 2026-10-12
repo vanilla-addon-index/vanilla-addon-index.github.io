@@ -18,7 +18,7 @@ In this order. Steps 1 to 4 are done once in Supabase, 5 to 8 once on GitHub, an
 3. **Login providers:** in Supabase under Authentication → Sign In / Providers, enable Discord and GitHub with an OAuth app from each, and turn the Email provider off.
 4. **Auth URLs:** in Supabase under Authentication → URL Configuration, set the site URL to the site's address and add `http://localhost:5173` as a redirect URL.
 5. **Repository:** it must be named `<organization>.github.io`. Under Settings → Pages, set Source to "GitHub Actions".
-6. **Secrets:** add the four in the table below under Settings → Secrets and variables → Actions. Each workflow skips the part that needs a secret it does not have, so the site deploys before they are all there.
+6. **Secrets:** under Settings → Environments, create an environment named `database`, limit its deployment branches to `main`, untick "Allow administrators to bypass", and add the four secrets in the table below to it as environment secrets. Do not add them as repository secrets: those are given to a workflow on any branch. Each workflow skips the part that needs a secret it does not have, so the site deploys before they are all there.
 7. **First deploy:** push to `main`. The deploy builds the database from [supabase/migrations](supabase/migrations) and publishes the site.
 8. **Protect `main`:** under Settings → Branches, require a pull request and the two checks of the CI workflow, "Tests, types and build" and "Browser tests", for admins too. From here on a change goes out as described under [How a change goes out](#how-a-change-goes-out).
 9. **Owner:** log in on the site once, then run this in Supabase's SQL editor: `update public.profiles set is_owner = true where username = 'your-username';`. The owner can suspend admins and empty the trash, and is the one account that cannot be deleted.
@@ -34,7 +34,7 @@ In this order. Steps 1 to 4 are done once in Supabase, 5 to 8 once on GitHub, an
 | `NIGHTLY_TOKEN` | Made by `npm run nightly:token`; see [The nightly import](#the-nightly-import) | Nightly |
 | `BACKUP_PASSPHRASE` | Any long passphrase of your own. Keep a copy somewhere other than GitHub | Backup |
 
-The database password is only ever given to jobs that install nothing but the Supabase tool. The project's secret key is not used anywhere.
+The secrets live in the `database` environment, which only `main` may use, so a workflow changed on another branch is not given them. The database password is only ever given to jobs that install nothing but the Supabase tool. The project's secret key is not used anywhere.
 
 ## Working on it
 
@@ -70,6 +70,8 @@ Neither touches the hosted database.
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | three jobs in turn: rule tests and type check again; pending migrations; then a fresh snapshot, the build and the publish. Only the middle one is given the database password, and it installs nothing but the Supabase tool |
 | [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads who the organization's members are, reads the wiki into the import queue and asks GitHub about every repository, then runs Deploy |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
+
+Deploy and Nightly only touch the hosted database and the site when they run on `main`. Started by hand on another branch, they run the checks and stop there.
 
 An addon posted between two deploys has no page of its own until the next one. It shows normally to anyone who opens it; only link previews and search engines wait.
 
