@@ -1,15 +1,18 @@
 // Nightly import job, run by .github/workflows/nightly.yml.
 //   1. Reads the wiki and queues addons that are neither live nor already reviewed.
 //   2. Trims the log and the trash of what is older than 90 days.
-//   3. Asks GitHub about every queued and live repository (stars, last update, archived,
+//   3. Counts the reports and suggestions waiting for an admin, for the workflow to tell
+//      them about.
+//   4. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
 //
-// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 3. Without the token it does nothing, so
+// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 4. Without the token it does nothing, so
 // the deploy keeps working before the secret is configured.
 //
 // The job signs in like any visitor. The token is what lets it do these few things and
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
+import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 
@@ -65,7 +68,20 @@ try {
 	process.exitCode = 1;
 }
 
-// 3. GitHub -> repo_stats.
+// 3. What is waiting for an admin: handed to the workflow, which tells them on GitHub.
+// Only the two numbers leave the database.
+try {
+	const { reports, suggestions } = await db('nightly_waiting');
+	console.log(`Waiting for an admin: ${reports} reports, ${suggestions} suggestions.`);
+	if (process.env.GITHUB_OUTPUT) {
+		appendFileSync(process.env.GITHUB_OUTPUT, `reports=${reports}\nsuggestions=${suggestions}\n`);
+	}
+} catch (error) {
+	console.error(`Could not ask what is waiting: ${error.message}`);
+	process.exitCode = 1;
+}
+
+// 4. GitHub -> repo_stats.
 if (!githubToken) {
 	console.log('GITHUB_TOKEN is not set, skipping the repository stats.');
 	process.exit(0);
