@@ -152,6 +152,8 @@ export async function createDb() {
 				]);
 				members.push(githubId);
 				await storeOrgMembers(members);
+				// Setting the scene is not something that happened on the site.
+				await db.query(`delete from public.activity_log where action = 'user.admin'`);
 			}
 			return user;
 		},
