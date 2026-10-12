@@ -16,6 +16,23 @@ const toRaw = (url: string) =>
 		'https://raw.githubusercontent.com/$1/$2/$3'
 	);
 
+/**
+ * Image links in the text of a README, in document order. "base" is the README's own raw
+ * address, so that a picture kept next to it in the repository resolves to where it is.
+ */
+export function imagesIn(readme: string, base: string): string[] {
+	const images = new Set<string>();
+	for (const [, markdown, html] of readme.matchAll(IMAGE)) {
+		try {
+			const url = toRaw(new URL(markdown ?? html, base).href);
+			if (url.startsWith('https://') && !/\s/.test(url) && !NOT_A_SCREENSHOT.test(url)) images.add(url);
+		} catch {
+			// Not a usable URL.
+		}
+	}
+	return [...images].slice(0, MAX_IMAGES);
+}
+
 /** Image links found in the README of a GitHub repository, in document order. */
 export async function readmeImages(repoUrl: string): Promise<string[]> {
 	const match = REPO.exec(repoUrl.trim());
@@ -29,17 +46,6 @@ export async function readmeImages(repoUrl: string): Promise<string[]> {
 
 	const { content, download_url } = (await res.json()) as { content: string; download_url: string };
 	const bytes = Uint8Array.from(atob(content.replace(/\s/g, '')), (c) => c.charCodeAt(0));
-	const readme = new TextDecoder().decode(bytes);
-
-	const images = new Set<string>();
-	for (const [, markdown, html] of readme.matchAll(IMAGE)) {
-		try {
-			// download_url is the README's raw address, so relative paths resolve next to it.
-			const url = toRaw(new URL(markdown ?? html, download_url).href);
-			if (url.startsWith('https://') && !/\s/.test(url) && !NOT_A_SCREENSHOT.test(url)) images.add(url);
-		} catch {
-			// Not a usable URL.
-		}
-	}
-	return [...images].slice(0, MAX_IMAGES);
+	// download_url is the README's raw address, so relative paths resolve next to it.
+	return imagesIn(new TextDecoder().decode(bytes), download_url);
 }

@@ -6,6 +6,8 @@
 //   4. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
+//   5. Reads the README of each queued entry that has no screenshot, once, and stores
+//      the pictures in it for the review.
 //
 // Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 4. Without the token it does nothing, so
 // the deploy keeps working before the secret is configured.
@@ -14,6 +16,8 @@
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+import { imagesIn } from '../src/lib/github.ts';
+import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 
@@ -28,6 +32,8 @@ const BATCH = 50;
 // Each repository in the second pass asks for up to this many files.
 const TOC_BATCH = 25;
 const TOC_PATHS = 4;
+// READMEs are long; fewer of them go into one request.
+const README_BATCH = 15;
 
 // Calls one of the job's database functions. The token travels in the body.
 async function db(name, args = {}) {
@@ -92,12 +98,13 @@ if (!githubToken) {
 // Each link comes as it was written, since its key leaves out the branch and has no capital
 // letters: where to look for the .toc is read from the link itself. One key, one check.
 const repos = [];
-for (const { key, url } of await db('nightly_links')) {
+for (const { key, url, readme } of await db('nightly_links')) {
 	const place = githubPlace(url);
 	if (!place || repos.some((r) => r.key === key)) continue;
 	// What the key has after the repository: the folder, as the stored address needs it.
 	const folder = /^github\.com\/[^/]+\/[^/]+(\/.+)?$/.exec(key)?.[1] ?? '';
-	repos.push({ key, ...place, folder, ref: place.ref || 'HEAD' });
+	// "readme": a queued entry without a screenshot, whose README has not been read yet.
+	repos.push({ key, ...place, folder, ref: place.ref || 'HEAD', readme });
 }
 
 // One request to GitHub, tried up to three times: it now and then fails to answer a large
@@ -137,6 +144,9 @@ const repository = (r, n, fields) =>
 // First pass: the facts, and what sits at the top of each repository.
 const stats = [];
 const withToc = [];
+// Queued entries whose README is to be read, and what was found for each.
+const withReadme = [];
+const pictures = [];
 let unanswered = 0;
 for (let i = 0; i < repos.length; i += BATCH) {
 	const batch = repos.slice(i, i + BATCH);
@@ -187,6 +197,14 @@ for (let i = 0; i < repos.length; i += BATCH) {
 			.map((e) => `${within}${e.name}/${e.name}.toc`);
 		const paths = (atTop.length ? atTop : nested).slice(0, TOC_PATHS);
 		if (paths.length) withToc.push({ ...r, row, paths });
+
+		// The README sits in the same place, under one of a few spellings.
+		if (r.readme && repo) {
+			const file = entries.find((e) => e.type === 'blob' && /^readme(\.(md|markdown|mdown|txt|rst))?$/i.test(e.name))?.name;
+			// Without one there is nothing to find, and it is not looked for again.
+			if (file) withReadme.push({ ...r, full: repo.nameWithOwner, file: `${within}${file}` });
+			else pictures.push({ key: r.key, images: [] });
+		}
 	});
 }
 
@@ -222,6 +240,36 @@ for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 		// A repository can ship .toc files for several clients; the 1.12 one is what matters.
 		if (found.length) r.row.interface = found.includes(11200) ? 11200 : found[0];
 	});
+}
+
+// Third pass: the READMEs of queued entries that have no screenshot, for the pictures in
+// them. Kept to the sites a screenshot may be on, like any other. An entry GitHub gave
+// no answer about is left for the next run.
+for (let i = 0; i < withReadme.length; i += README_BATCH) {
+	const batch = withReadme.slice(i, i + README_BATCH);
+	const answer = await github(
+		`{${batch
+			.map((r, n) => repository(r, n, `readme: object(expression: ${JSON.stringify(`${r.ref}:${r.file}`)}) { ... on Blob { text } }`))
+			.join(' ')}}`
+	);
+	if (!answer) continue;
+	batch.forEach((r, n) => {
+		const repo = answer.data[`r${n}`];
+		if (!repo) return;
+		// Where the README is served from, so that a picture kept next to it resolves.
+		const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
+		const images = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
+		pictures.push({ key: r.key, images });
+	});
+}
+if (pictures.length) {
+	try {
+		const given = await db('store_queue_images', { items: pictures });
+		console.log(`Read ${pictures.length} READMEs for screenshots: ${given} queued entries got pictures.`);
+	} catch (error) {
+		console.error(`Could not store the screenshots found in READMEs: ${error.message}`);
+		process.exitCode = 1;
+	}
 }
 
 await db('store_repo_stats', { stats });
