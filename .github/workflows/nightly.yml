@@ -71,6 +71,7 @@ jobs:
     if: ${{ !cancelled() }}
     permissions:
       contents: write
+      actions: read
       pages: write
       id-token: write
     uses: ./.github/workflows/deploy.yml
