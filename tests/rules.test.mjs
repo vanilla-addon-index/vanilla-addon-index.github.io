@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CATEGORIES, IMAGE_HOSTS, LINK_HOSTS, PUBLIC_ADDON_COLUMNS } from '../src/lib/config.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
-import { linkKey } from '../src/lib/links.ts';
+import { githubPlace, linkKey } from '../src/lib/links.ts';
 import { NIGHTLY_TOKEN, addon, createDb, post } from './db.mjs';
 
 let db;
@@ -292,6 +292,17 @@ describe('links and versions', () => {
 			const [{ k }] = await db.sql('select public.link_key($1) as k', [url]);
 			assert.equal(linkKey(url), k, url);
 		}
+	});
+
+	test('where on GitHub a link points: repository, branch and folder, as the link spells them', () => {
+		const place = (url) => githubPlace(url) && Object.values(githubPlace(url)).join(' | ');
+		assert.equal(place('https://github.com/Lanrutcon/ABreathBeneath'), 'Lanrutcon | ABreathBeneath |  | ');
+		assert.equal(place('https://github.com/Lanrutcon/ABreathBeneath/tree/Vanilla-Port'), 'Lanrutcon | ABreathBeneath | Vanilla-Port | ');
+		assert.equal(place('https://www.github.com/Owner/Repo.git'), 'Owner | Repo |  | ');
+		assert.equal(place('https://github.com/Owner/Collection/tree/master/Addons/Atlas/?tab=readme#top'), 'Owner | Collection | master | Addons/Atlas');
+		assert.equal(place('https://github.com/Owner/Repo/blob/main/My%20Addon/Addon.zip'), 'Owner | Repo | main | My Addon/Addon.zip');
+		assert.equal(place('https://github.com/Owner/Repo/issues/3'), 'Owner | Repo |  | ');
+		assert.equal(place('https://gitlab.com/Owner/Repo/-/tree/main'), null);
 	});
 
 	test('a link that is already listed is refused, however it is spelled', async () => {
@@ -1558,8 +1569,14 @@ describe('import queue', () => {
 	test('the nightly job gets the repositories to check and stores what GitHub said about them', async () => {
 		await post(db, alice, addon('Atlas', 'https://github.com/wiki/Atlas'));
 		await queue([candidate('Bagnon')]);
-		const [{ repos }] = await nightly('select public.nightly_repos($1) as repos', NIGHTLY_TOKEN);
-		assert.deepEqual(repos, ['github.com/wiki/atlas', 'github.com/wiki/bagnon']);
+		// Each link as it was written, branch and capital letters included, next to its key.
+		await post(db, bob, addon('Port', 'https://github.com/Someone/Port/tree/Vanilla-Port'));
+		const [{ links }] = await nightly('select public.nightly_links($1) as links', NIGHTLY_TOKEN);
+		assert.deepEqual(links, [
+			{ key: 'github.com/someone/port', url: 'https://github.com/Someone/Port/tree/Vanilla-Port' },
+			{ key: 'github.com/wiki/atlas', url: 'https://github.com/wiki/Atlas' },
+			{ key: 'github.com/wiki/bagnon', url: 'https://github.com/wiki/Bagnon' }
+		]);
 
 		const store = 'select public.store_repo_stats($1, $2::jsonb) as n';
 		const bagnon = { key: 'github.com/wiki/bagnon', stars: 5, interface: 11200, canonical: 'github.com/wiki/bagnon' };
@@ -1574,7 +1591,7 @@ describe('import queue', () => {
 	});
 
 	test('the nightly token is needed for each of its calls, and cannot be read back', async () => {
-		await refused(() => nightly('select public.nightly_repos($1)', 'a guess'), /Only the nightly job/);
+		await refused(() => nightly('select public.nightly_links($1)', 'a guess'), /Only the nightly job/);
 		await refused(() => nightly('select public.store_repo_stats($1, $2::jsonb)', 'a guess', stats()), /Only the nightly job/);
 		for (const read of [db.asVisitor, (work) => db.as(owner, work), db.asService]) {
 			await refused(() => read((q) => q('select * from public.nightly_token')), /permission denied/);

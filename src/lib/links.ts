@@ -22,6 +22,30 @@ export function linkKey(url: string): string {
 		.replace(/\.git$/, '');
 }
 
+/**
+ * Where on GitHub a link points: the repository and, when the link names them, the branch
+ * and the folder or file in it. In the spelling the link has, which is what GitHub needs:
+ * a key is all lower case. Nothing for a link that is not to GitHub.
+ */
+export function githubPlace(url: string): { owner: string; name: string; ref: string; path: string } | null {
+	const parts = /^https?:\/\/(?:www\.)?github\.com\/([^/?#]+)\/([^/?#]+)(?:\/(?:tree|blob)\/([^/?#]+)(?:\/([^?#]*))?)?/i.exec(url.trim());
+	if (!parts) return null;
+	const part = (text = '') => {
+		try {
+			return decodeURIComponent(text);
+		} catch {
+			return text;
+		}
+	};
+	return {
+		owner: parts[1],
+		name: parts[2].replace(/\.git$/i, ''),
+		// A link that names no branch is to the one the repository shows first.
+		ref: part(parts[3]),
+		path: part(parts[4]).replace(/\/+$/, '')
+	};
+}
+
 /** "owner" for a github.com/owner/repo link, otherwise the host. */
 export function linkOwner(url: string): string {
 	const [host, owner] = linkKey(url).split('/');
