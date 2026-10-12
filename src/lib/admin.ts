@@ -164,7 +164,7 @@ export const restoreAddon = (trashId: number) => call<string>('restore_addon', {
 export const purgeTrash = (ids: number[]) => call<number>('purge_trash', { ids });
 
 export interface RollbackStep {
-	kind: 'restore' | 'revert' | 'delete' | 'unapprove' | 'requeue' | 'ungroup' | 'unban' | 'dismiss';
+	kind: 'restore' | 'revert' | 'delete' | 'unapprove' | 'requeue' | 'ungroup' | 'unban' | 'dismiss' | 'withdraw';
 	// The addon or account the step is about.
 	subject: string;
 	// For a revert: how many edits by other people, made since, go with it.
@@ -186,7 +186,8 @@ export const ROLLBACK_TEXT: Record<RollbackStep['kind'], string> = {
 	requeue: 'Put the rejected import back in the queue:',
 	ungroup: 'Undo a group change of',
 	unban: 'Lift the ban on',
-	dismiss: 'Dismiss their report about'
+	dismiss: 'Dismiss their report about',
+	withdraw: 'Withdraw their group suggestion for'
 };
 
 /**

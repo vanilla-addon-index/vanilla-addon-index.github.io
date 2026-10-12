@@ -791,6 +791,25 @@ describe('groups', () => {
 		await call(admin, 'select public.set_banned($1, true)', [bob.id]);
 		await refused(() => call(bob, 'select public.suggest_group($1, $2)', [third.id, original.id]), /cannot suggest/);
 	});
+
+	test('a member can make 10 suggestions a day, and a rollback withdraws the ones still waiting', async () => {
+		const others = [];
+		for (let i = 0; i < 11; i++) others.push(await post(db, owner, addon(`Other${i}`)));
+		// Posting the addons was long ago; only the suggestions are rolled back below.
+		await db.sql(`update public.activity_log set at = at - interval '5 days'`);
+		const suggest = (target) => call(bob, 'select public.suggest_group($1, $2)', [fork.id, target.id]);
+		for (const other of others.slice(0, 10)) await suggest(other);
+		await refused(() => suggest(others[10]), /at most 10 groups a day/);
+		await db.sql(`update public.activity_log set at = at - interval '2 days' where action = 'group.suggest'`);
+		await suggest(others[10]);
+
+		// One was accepted in the meantime: that was an admin's decision, and it stays.
+		const [{ id }] = await db.sql('select id from public.group_suggestions where target_id = $1', [others[0].id]);
+		await call(admin, 'select public.decide_suggestion($1, true)', [id]);
+		const result = (await call(admin, `select public.rollback_account($1, now() - interval '3 days', false) as r`, [bob.id]))[0].r;
+		assert.equal(result.steps.filter((s) => s.kind === 'withdraw').length, 10);
+		assert.deepEqual(await db.sql('select status from public.group_suggestions'), [{ status: 'accepted' }]);
+	});
 });
 
 describe('reports', () => {
@@ -1286,8 +1305,19 @@ describe('import queue', () => {
 		assert.equal(await queue(many), 120);
 		// A fifth fewer is a wiki that changed; half is a page that was not read properly.
 		assert.equal(await queue([...many.slice(0, 100), candidate('Newcomer')]), 1);
-		await refused(() => queue([...many.slice(0, 60), candidate('Another')]), /far fewer than the 121 seen so far/);
+		await refused(() => queue([...many.slice(0, 60), candidate('Another')]), /far fewer than the 101 it listed last time/);
 		assert.equal((await db.sql('select count(*)::int as n from public.import_queue'))[0].n, 121);
+	});
+
+	test('links that come and go on the wiki over time do not add up against it', async () => {
+		// The page stays the same length while all of its links are replaced, three times over.
+		for (let round = 0; round < 4; round++) {
+			const page = Array.from({ length: 110 }, (_, i) => candidate(`Round${round}Addon${i}`));
+			assert.equal(await queue(page), 110);
+		}
+		assert.equal((await db.sql('select count(*)::int as n from public.import_queue'))[0].n, 440);
+		// Nobody can read or change the measure.
+		await refused(() => call(admin, 'select * from public.wiki_listing'), /permission denied/);
 	});
 
 	test('a waiting entry takes the category the job guesses now; a decided one keeps its own', async () => {
