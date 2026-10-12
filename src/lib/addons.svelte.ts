@@ -2,6 +2,7 @@ import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
 import { LOCAL, PUBLIC_ADDON_COLUMNS } from './config';
 import { tell } from './confirm.svelte';
+import { mergeFresh, newestStamp } from './fresh';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 
@@ -70,6 +71,46 @@ async function fetchSnapshot() {
 
 const PAGE = 1000;
 
+// When this browser last asked the database what is newer than the snapshot, and how long
+// it waits before asking again. Browsing from page to page asks once, not every time.
+const ASKED_KEY = 'fresh-at';
+const ASK_EVERY = 5 * 60 * 1000;
+
+/**
+ * A visitor's list: the snapshot, a static file, with whatever was posted or edited since
+ * laid over it. The database is asked for those few rows only, so the answer stays small
+ * however long the list is, and when it cannot be reached the snapshot stands alone.
+ * An addon deleted or regrouped since the snapshot shows as it was until the next one.
+ */
+async function fetchPublic() {
+	const snapshot = await fetchSnapshot();
+	let fresh: Addon[] = [];
+	let asked = 0;
+	try {
+		asked = Number(localStorage.getItem(ASKED_KEY)) || 0;
+	} catch {
+		// Storage unavailable: ask every time.
+	}
+	if (supabase && Date.now() - asked > ASK_EVERY) {
+		const { data } = await supabase
+			.from('addons')
+			.select(PUBLIC_ADDON_COLUMNS)
+			.gt('updated_at', newestStamp(snapshot) || '1970-01-01')
+			.order('updated_at', { ascending: false })
+			.limit(PAGE);
+		if (data) {
+			fresh = (data as unknown as Row[]).map(toAddon);
+			try {
+				localStorage.setItem(ASKED_KEY, String(Date.now()));
+			} catch {
+				// Ignore quota and private-mode errors.
+			}
+		}
+	}
+	// What an earlier visit fetched is in the list this browser kept.
+	return mergeFresh(snapshot, store.addons, fresh);
+}
+
 // The API returns at most 1000 rows per request.
 async function fetchPaged<T>(columns: string) {
 	if (!supabase) throw new Error('not configured');
@@ -137,14 +178,15 @@ async function fetchLive() {
 const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
 
 /**
- * Visitors read the daily snapshot, a static file that costs the database nothing. Someone
- * logged in posts, edits and reviews, so they get the list as it is now: the snapshot,
- * brought up to date by the database. Each source stands in for the other when it fails.
+ * Visitors read the snapshot, a static file that costs the database nothing, and ask the
+ * database only for what was posted or edited since. Someone logged in posts, edits and
+ * reviews, so they get the list exactly as it is now: the snapshot, brought up to date by
+ * the database, deletions included. Each source stands in for the other when it fails.
  */
 export async function loadAddons() {
 	const live = LOCAL || Boolean(auth.session);
 	try {
-		store.addons = await (live ? fetchLive() : fetchSnapshot());
+		store.addons = await (live ? fetchLive() : fetchPublic());
 		store.stale = false;
 	} catch {
 		try {
