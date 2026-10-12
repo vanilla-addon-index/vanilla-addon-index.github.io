@@ -63,8 +63,8 @@ if (githubToken) {
 	}
 }
 
-// 2. Wiki -> queue. The database refuses a page that lists far fewer addons than it has
-// seen before, which is what a page that no longer reads properly looks like.
+// 2. Wiki -> queue. The database refuses a page that lists far fewer addons than it did
+// the last time, which is what a page that no longer reads properly looks like.
 try {
 	const { candidates, revision, problems } = await readWiki();
 	const added = await db('queue_imports', { items: candidates });
