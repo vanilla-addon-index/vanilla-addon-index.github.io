@@ -109,9 +109,12 @@ async function github(query) {
 	});
 	if (!res.ok) throw new Error(`GitHub answered ${res.status}: ${await res.text()}`);
 	// A repository or file that is gone comes back as null with an entry in "errors"; that is expected.
-	const { data } = await res.json();
-	if (!data) throw new Error('GitHub returned no data.');
-	return data;
+	const { data, errors = [] } = await res.json();
+	if (!data) throw new Error(`GitHub returned no data: ${errors[0]?.message ?? 'no reason given'}`);
+	// Which of the repositories asked for GitHub says do not exist. Anything else that came
+	// back empty (a limit reached, a timeout on GitHub's side) is not an answer.
+	const gone = new Set(errors.filter((e) => e.type === 'NOT_FOUND' && e.path?.length === 1).map((e) => e.path[0]));
+	return { data, gone };
 }
 
 const repository = (r, n, fields) =>
@@ -120,10 +123,11 @@ const repository = (r, n, fields) =>
 // First pass: the facts, and what sits at the top of each repository.
 const stats = [];
 const withToc = [];
+let unanswered = 0;
 for (let i = 0; i < repos.length; i += BATCH) {
 	const batch = repos.slice(i, i + BATCH);
 	// One aliased field per repository, so a whole batch costs one request.
-	const data = await github(
+	const { data, gone } = await github(
 		`{${batch
 			.map((r, n) =>
 				repository(
@@ -136,6 +140,9 @@ for (let i = 0; i < repos.length; i += BATCH) {
 	);
 	batch.forEach((r, n) => {
 		const repo = data[`r${n}`];
+		// No answer about this one: what was stored about it last time stays as it is,
+		// rather than a live repository being marked as gone.
+		if (!repo && !gone.has(`r${n}`)) return unanswered++;
 		const row = {
 			key: r.key,
 			stars: repo?.stargazerCount ?? 0,
@@ -166,7 +173,7 @@ for (let i = 0; i < repos.length; i += BATCH) {
 // Second pass: read those .toc files for the "## Interface:" line.
 for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 	const batch = withToc.slice(i, i + TOC_BATCH);
-	const data = await github(
+	const { data } = await github(
 		`{${batch
 			.map((r, n) =>
 				repository(
@@ -193,5 +200,6 @@ await db('store_repo_stats', { stats });
 console.log(
 	`Checked ${stats.length} repositories: ${stats.filter((s) => s.missing).length} no longer exist, ` +
 		`${stats.filter((s) => s.canonical && s.canonical !== s.key).length} have moved, ` +
-		`${stats.filter((s) => s.interface !== null).length} have a readable .toc.`
+		`${stats.filter((s) => s.interface !== null).length} have a readable .toc.` +
+		(unanswered ? ` GitHub gave no answer about ${unanswered}; what was known about those is kept.` : '')
 );
