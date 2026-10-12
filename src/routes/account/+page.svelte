@@ -145,8 +145,11 @@
 				it from its own page first.
 			</p>
 		{/if}
-		<label class="field-label mt-4" for="leave-confirm">
-			To confirm, type <span class="text-fg">{phrase}</span> below
+		<!-- The name to type stands out from the sentence around it, and is selected by a click. -->
+		<label class="mt-4 mb-1.5 block text-muted" for="leave-confirm">
+			To confirm, type
+			<span class="mx-0.5 border border-accent/50 bg-raised px-1.5 py-0.5 font-bold text-accent select-all">{phrase}</span>
+			below
 		</label>
 		<input
 			id="leave-confirm"
