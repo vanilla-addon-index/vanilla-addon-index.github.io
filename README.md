@@ -69,7 +69,7 @@ Neither touches the hosted database.
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | five jobs in turn: rule tests and type check again; pending migrations; a fresh snapshot and the build; the publish; saving the snapshot. Only the migrations job is given the database password, and it installs nothing but the Supabase tool. Only the build job installs the site's dependencies, and it can read no secret and write nowhere |
 | [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads the wiki into the import queue, trims the log and the trash, and asks GitHub about every repository, then runs Deploy |
-| [Refresh](.github/workflows/refresh.yml) | three times a day, between the nightly runs | looks whether the list has changed since the last snapshot and runs Deploy only if it has; most runs end after that one look |
+| [Refresh](.github/workflows/refresh.yml) | every two hours | looks whether the list has changed since the last snapshot and runs Deploy only if it has; most runs end after that one look |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
 Deploy and Nightly only touch the hosted database and the site when they run on `main`. Started by hand on another branch, they run the checks and stop there.
@@ -84,7 +84,7 @@ An addon posted between two deploys shows in the list and in search for everyone
 
 Nightly, Refresh and Backup run on a timer, and GitHub switches the timers of a public repository off when it has had no activity for 60 days. Nothing commits to `main` by itself, so Nightly starts each run by marking all three workflows as enabled, which starts the 60 days again.
 
-GitHub also runs these timers late, often by hours; nothing here depends on the exact time. Four short runs a day are far inside what GitHub allows a public repository, which pays nothing for them.
+GitHub also runs these timers late, often by hours; nothing here depends on the exact time. A dozen short runs a day are far inside what GitHub allows a public repository, which pays nothing for them.
 
 GitHub does not promise that this keeps working. It sends an email before it switches a timer off, so make sure notifications for this repository reach an inbox that is read. If it happens: Actions → the workflow → "Enable workflow". With the timers off there are no backups, imports or deploys, and Supabase pauses the project after about a week without use; it is restored from the Supabase dashboard.
 

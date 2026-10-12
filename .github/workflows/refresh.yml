@@ -1,6 +1,6 @@
 name: Refresh
 
-# A few times a day, between the nightly runs: looks whether the addon list has changed
+# Every two hours: looks whether the addon list has changed
 # since the last snapshot, and deploys only if it has. A visitor's browser asks the
 # database for whatever is newer than the snapshot, so a fresher snapshot keeps those
 # answers small; it is also what takes a deleted addon out of the list visitors see, and
@@ -10,7 +10,7 @@ name: Refresh
 # these late, sometimes by hours; nothing depends on the exact time.
 on:
   schedule:
-    - cron: '23 10,16,22 * * *'
+    - cron: '23 */2 * * *'
   workflow_dispatch:
 
 permissions:
