@@ -49,6 +49,11 @@ export const CATEGORIES = [
 // What the wiki import falls back to when it cannot guess. Posters must pick one themselves.
 export const DEFAULT_CATEGORY = 'Miscellaneous';
 
+// The columns of an addon a visitor may read; see the private owner migration, which must
+// list the same ones. Who posted or approved an addon is for accounts only.
+export const PUBLIC_ADDON_COLUMNS =
+	'id,slug,name,description,category,author,versions,repo_url,link_keys,aliases,images,source,group_id,is_main,created_at,updated_at';
+
 // Must match the check on addons.images in the schema migration.
 export const MAX_IMAGES = 5;
 
