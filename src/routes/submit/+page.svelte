@@ -93,6 +93,8 @@
 	let checking = $state(false);
 	// Images the poster removed stay removed when the README is read again.
 	const removed = new Set<string>();
+	// Screenshots already on the addon whose link no longer shows a picture.
+	let dead = $state<Record<string, boolean>>({});
 
 	// A member's link and screenshots must be on a site known for hosting code or pictures;
 	// an admin is not held to that, and what an addon already has stays. The database
@@ -424,13 +426,20 @@
 						<ul class="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
 							{#each form.images as image (image)}
 								<li class="relative border border-border">
-									<img
-										src={image}
-										alt=""
-										loading="lazy"
-										referrerpolicy="no-referrer"
-										class="aspect-video w-full object-contain"
-									/>
+									{#if dead[image]}
+										<!-- Said in words, where the browser would draw its broken-picture mark. -->
+										<p class="grid aspect-video place-items-center px-3 pt-6 text-center text-sm text-danger">
+											This link no longer shows a picture. Visitors do not see it; remove it or replace it.
+										</p>
+									{:else}
+										<img
+											src={image}
+											alt=""
+											referrerpolicy="no-referrer"
+											class="aspect-video w-full object-contain"
+											onerror={() => (dead[image] = true)}
+										/>
+									{/if}
 									<button
 										type="button"
 										class="btn absolute top-1 right-1 bg-bg px-2 py-0.5 text-sm hover:border-danger/50 hover:text-danger"
