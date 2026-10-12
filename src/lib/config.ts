@@ -63,7 +63,6 @@ export const LINK_HOSTS = [
 	'bitbucket.org',
 	'sourceforge.net',
 	'gitea.com',
-	'git.sr.ht',
 	'octowow.st/git'
 ];
 export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co'];
