@@ -7,6 +7,9 @@
 //   node scripts/backup.mjs <file>          the same, to that file
 //   node scripts/backup.mjs check <file>    loads a backup into the local backend and counts
 //                                           what arrived, to show it can be restored
+//   node scripts/backup.mjs fetch           downloads the latest nightly copy from GitHub,
+//                                           still encrypted, to that same folder: a copy
+//                                           that does not depend on GitHub. Needs `gh`.
 //
 // A backup holds private data: usernames, email addresses, the log, reports. A copy made
 // on this computer is not encrypted, so it is kept out of the project folder, which may
@@ -16,9 +19,10 @@
 // To restore after losing the hosted database: create a project, link it, build its tables
 // with `npm run db:push`, then load the backup file with psql against the new database.
 import { execSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { REPO_URL } from '../src/lib/config.ts';
 
 // The site's own tables, and the accounts with the logins they are tied to.
 const SCHEMAS = 'public,auth';
@@ -75,14 +79,33 @@ function check(file) {
 		TABLES.map((t) => `select '${t}', count(*) from ${t.includes('.') ? t : `public.${t}`}`).join(' union all ') + ';',
 		['-At', '-F', ': ']
 	);
+	// A backup without a single account in it loaded, but is not a backup of the site.
+	if (!/^auth\.users: [1-9]/m.test(counts)) throw new Error(`The backup holds no accounts:\n${counts}`);
 	console.log(`The backup restores. Rows per table:\n${counts.trim().replace(/^/gm, '  ')}`);
 	console.log('The local backend now holds real data. Run "npm run local" to put the test data back.');
+}
+
+/** The latest nightly copy, as GitHub keeps it: encrypted. Opening it needs the passphrase. */
+function fetchLatest() {
+	const repo = new URL(REPO_URL).pathname.slice(1);
+	const [run] = JSON.parse(
+		execSync(`gh run list --repo ${repo} --workflow Backup --status success --limit 1 --json databaseId,createdAt`).toString()
+	);
+	if (!run) throw new Error('No Backup run has succeeded yet.');
+	const folder = join(FOLDER, `nightly-${run.createdAt.slice(0, 19).replace(/[T:]/g, '-')}`);
+	if (existsSync(folder)) return console.log(`The latest nightly copy is already in ${folder}.`);
+	execSync(`gh run download ${run.databaseId} --repo ${repo} --name backup-${run.databaseId} --dir "${folder}"`, {
+		stdio: 'inherit'
+	});
+	console.log(`Downloaded the nightly copy of ${run.createdAt} to ${folder}. It is encrypted; the README says how to open it.`);
 }
 
 const [first, second] = process.argv.slice(2);
 if (first === 'check') {
 	if (!second) throw new Error('Usage: node scripts/backup.mjs check <file>');
 	check(second);
+} else if (first === 'fetch') {
+	fetchLatest();
 } else {
 	dump(first ?? join(FOLDER, `${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.sql`));
 }

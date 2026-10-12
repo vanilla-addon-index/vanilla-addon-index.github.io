@@ -25,7 +25,7 @@ jobs:
     # The secrets are kept in this environment, which only main may use.
     environment: database
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -70,3 +70,17 @@ jobs:
           path: backup.sql.gpg
           retention-days: 90
           if-no-files-found: error
+
+      - name: Check that it restores
+        if: steps.ready.outputs.go
+        # A backup nobody has tried to restore is a hope, not a backup. The stored file is
+        # opened with the passphrase and loaded into a throwaway database built from the
+        # migrations inside this run; a copy that does not load, or holds no accounts,
+        # fails the run. The copy is kept either way: it is uploaded before this step.
+        env:
+          SUPABASE_CLI: supabase
+        run: |
+          supabase start -x realtime,storage-api,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor
+          gpg --batch --yes --decrypt --passphrase "$BACKUP_PASSPHRASE" --output restored.sql backup.sql.gpg
+          node scripts/backup.mjs check restored.sql
+          rm restored.sql
