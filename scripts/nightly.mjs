@@ -14,6 +14,7 @@
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+import { githubPlace } from '../src/lib/links.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 
 const token = process.env.NIGHTLY_TOKEN;
@@ -88,10 +89,16 @@ if (!githubToken) {
 }
 
 // A key is a repository, or a folder in one for a repository that holds many addons.
-const repos = (await db('nightly_repos'))
-	.map((key) => /^github\.com\/([\w.-]+)\/([\w.-]+)(\/.+)?$/.exec(key))
-	.filter(Boolean)
-	.map(([key, owner, name, folder = '']) => ({ key, owner, name, folder }));
+// Each link comes as it was written, since its key leaves out the branch and has no capital
+// letters: where to look for the .toc is read from the link itself. One key, one check.
+const repos = [];
+for (const { key, url } of await db('nightly_links')) {
+	const place = githubPlace(url);
+	if (!place || repos.some((r) => r.key === key)) continue;
+	// What the key has after the repository: the folder, as the stored address needs it.
+	const folder = /^github\.com\/[^/]+\/[^/]+(\/.+)?$/.exec(key)?.[1] ?? '';
+	repos.push({ key, ...place, folder, ref: place.ref || 'HEAD' });
+}
 
 // One request to GitHub, tried up to three times: it now and then fails to answer a large
 // request in time. Gives nothing when it still has not answered, and the run is marked as
@@ -140,7 +147,7 @@ for (let i = 0; i < repos.length; i += BATCH) {
 				repository(
 					r,
 					n,
-					'nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } top: object(expression: "HEAD:") { ... on Tree { entries { name type } } }'
+					`nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } top: object(expression: ${JSON.stringify(`${r.ref}:${r.path}`)}) { ... on Tree { entries { name type } } }`
 				)
 			)
 			.join(' ')}}`
@@ -169,15 +176,15 @@ for (let i = 0; i < repos.length; i += BATCH) {
 		};
 		stats.push(row);
 
-		// An addon's .toc is at the top, or one folder down in a folder of the same name.
-		// For a folder of a collection the facts above are the whole repository's, and its
-		// .toc is not looked for: the key no longer has the folder's capital letters.
-		if (r.folder) return;
+		// An addon's .toc is at the top of what the link points to (the repository, a branch
+		// of it, or a folder in it), or one folder down in a folder of the same name. For a
+		// folder of a collection the facts above are still the whole repository's.
+		const within = r.path ? `${r.path}/` : '';
 		const entries = repo?.top?.entries ?? [];
-		const atTop = entries.filter((e) => e.type === 'blob' && /\.toc$/i.test(e.name)).map((e) => e.name);
+		const atTop = entries.filter((e) => e.type === 'blob' && /\.toc$/i.test(e.name)).map((e) => `${within}${e.name}`);
 		const nested = entries
 			.filter((e) => e.type === 'tree' && !e.name.startsWith('.'))
-			.map((e) => `${e.name}/${e.name}.toc`);
+			.map((e) => `${within}${e.name}/${e.name}.toc`);
 		const paths = (atTop.length ? atTop : nested).slice(0, TOC_PATHS);
 		if (paths.length) withToc.push({ ...r, row, paths });
 	});
@@ -193,7 +200,7 @@ for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 					r,
 					n,
 					r.paths
-						.map((p, f) => `f${f}: object(expression: ${JSON.stringify(`HEAD:${p}`)}) { ... on Blob { text } }`)
+						.map((p, f) => `f${f}: object(expression: ${JSON.stringify(`${r.ref}:${p}`)}) { ... on Blob { text } }`)
 						.join(' ')
 				)
 			)
