@@ -86,6 +86,10 @@
 			</li>
 			<li>A deleted addon stays in a trash that only admins can open for 90 days.</li>
 			<li>
+				The admins' log keeps what an addon looked like before each edit for 90 days. After that
+				it only says who changed which fields, and when.
+			</li>
+			<li>
 				A full backup is made every night, encrypted, and deleted after 90 days. Something removed
 				from the site is gone from the backups 90 days later.
 			</li>

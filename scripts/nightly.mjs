@@ -1,11 +1,12 @@
 // Nightly import job, run by .github/workflows/nightly.yml.
 //   1. Asks GitHub who the organization's public members are: they are the site's admins.
 //   2. Reads the wiki and queues addons that are neither live nor already reviewed.
-//   3. Asks GitHub about every queued and live repository (stars, last update, archived,
+//   3. Trims the log and the trash of what is older than 90 days.
+//   4. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
 //
-// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for steps 1 and 3. Without the token it does nothing, so
+// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for steps 1 and 4. Without the token it does nothing, so
 // the deploy keeps working before the secret is configured.
 //
 // The job signs in like any visitor. The token is what lets it do these few things and
@@ -78,7 +79,17 @@ try {
 	process.exitCode = 1;
 }
 
-// 3. GitHub -> repo_stats.
+// 3. Housekeeping: what an addon looked like before an edit, and what is in the trash,
+// are kept for 90 days.
+try {
+	const trimmed = await db('nightly_tidy');
+	console.log(`Tidied up: ${trimmed} old log line${trimmed === 1 ? '' : 's'} trimmed.`);
+} catch (error) {
+	console.error(`Could not tidy up: ${error.message}`);
+	process.exitCode = 1;
+}
+
+// 4. GitHub -> repo_stats.
 if (!githubToken) {
 	console.log('GITHUB_TOKEN is not set, skipping the organization members and repository stats.');
 	process.exit(0);
