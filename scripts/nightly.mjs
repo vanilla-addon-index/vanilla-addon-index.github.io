@@ -1,17 +1,16 @@
 // Nightly import job, run by .github/workflows/nightly.yml.
-//   1. Asks GitHub who the organization's public members are: they are the site's admins.
-//   2. Reads the wiki and queues addons that are neither live nor already reviewed.
-//   3. Trims the log and the trash of what is older than 90 days.
-//   4. Asks GitHub about every queued and live repository (stars, last update, archived,
+//   1. Reads the wiki and queues addons that are neither live nor already reviewed.
+//   2. Trims the log and the trash of what is older than 90 days.
+//   3. Asks GitHub about every queued and live repository (stars, last update, archived,
 //      fork parent, current address, and the game version its .toc file declares) and
 //      stores the answers for the review page.
 //
-// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for steps 1 and 4. Without the token it does nothing, so
+// Needs NIGHTLY_TOKEN, and GITHUB_TOKEN for step 3. Without the token it does nothing, so
 // the deploy keeps working before the secret is configured.
 //
 // The job signs in like any visitor. The token is what lets it do these few things and
-// nothing else; see the nightly token and org members migrations, and `npm run nightly:token` to make one.
-import { GITHUB_ORG, SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+// nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 
 const token = process.env.NIGHTLY_TOKEN;
@@ -41,30 +40,7 @@ async function db(name, args = {}) {
 	return res.json();
 }
 
-// 1. GitHub -> organization members. First, and on its own: the list stops counting after
-// three days, so a wiki that is down must not keep it from being refreshed.
-if (githubToken) {
-	try {
-		const ids = [];
-		for (let page = 1; ; page++) {
-			const res = await fetch(`https://api.github.com/orgs/${GITHUB_ORG}/public_members?per_page=100&page=${page}`, {
-				headers: { Authorization: `Bearer ${githubToken}`, 'User-Agent': 'vanilla-addon-index' }
-			});
-			if (!res.ok) throw new Error(`GitHub answered ${res.status}: ${await res.text()}`);
-			const members = await res.json();
-			ids.push(...members.map((m) => m.id));
-			if (members.length < 100) break;
-		}
-		const stored = await db('store_org_members', { ids });
-		console.log(`The organization has ${stored} public member${stored === 1 ? '' : 's'}.`);
-	} catch (error) {
-		// The rest still runs; the run is marked as failed so that this is seen.
-		console.error(`Could not refresh the organization's members: ${error.message}`);
-		process.exitCode = 1;
-	}
-}
-
-// 2. Wiki -> queue. The database refuses a page that lists far fewer addons than it did
+// 1. Wiki -> queue. The database refuses a page that lists far fewer addons than it did
 // the last time, which is what a page that no longer reads properly looks like.
 try {
 	const { candidates, revision, problems } = await readWiki();
@@ -79,7 +55,7 @@ try {
 	process.exitCode = 1;
 }
 
-// 3. Housekeeping: what an addon looked like before an edit, and what is in the trash,
+// 2. Housekeeping: what an addon looked like before an edit, and what is in the trash,
 // are kept for 90 days.
 try {
 	const trimmed = await db('nightly_tidy');
@@ -89,9 +65,9 @@ try {
 	process.exitCode = 1;
 }
 
-// 4. GitHub -> repo_stats.
+// 3. GitHub -> repo_stats.
 if (!githubToken) {
-	console.log('GITHUB_TOKEN is not set, skipping the organization members and repository stats.');
+	console.log('GITHUB_TOKEN is not set, skipping the repository stats.');
 	process.exit(0);
 }
 

@@ -8,6 +8,7 @@
 		loadLogAbout,
 		loginsOf,
 		rollbackAccount,
+		setAdmin,
 		setBanned,
 		type LogEntry,
 		type Rollback,
@@ -112,6 +113,31 @@
 		working = false;
 	}
 
+	// The owner appoints the admins, and nobody else does.
+	async function appoint(value: boolean) {
+		if (!user) return;
+		const question = value
+			? {
+					title: `Make ${user.username} an admin?`,
+					body: 'They will be able to edit and delete any addon, review imports and reports, and ban members. Everything they do is logged and can be undone, and you can take the role away again.',
+					action: 'Make admin'
+				}
+			: {
+					title: `Remove ${user.username} as an admin?`,
+					body: 'They become an ordinary member again. What they did as an admin stays as it is.',
+					action: 'Remove admin',
+					danger: true
+				};
+		if (!(await ask(question))) return;
+		try {
+			await setAdmin(user.id, value);
+			await load(user.username);
+			notice = value ? `${user?.username} is an admin.` : `${user?.username} is no longer an admin.`;
+		} catch (e) {
+			error = (e as Error).message;
+		}
+	}
+
 	async function ban(value: boolean) {
 		if (!user) return;
 		const question = !value
@@ -179,6 +205,11 @@
 				</dl>
 			</div>
 			{#if mayBan}
+				{#if auth.isOwner}
+					<button class="btn w-full" onclick={() => appoint(user?.role !== 'admin')}>
+						{user.role === 'admin' ? 'Remove admin' : 'Make admin'}
+					</button>
+				{/if}
 				{#if user.banned}
 					<button class="btn w-full" onclick={() => ban(false)}>Lift the ban</button>
 				{:else}

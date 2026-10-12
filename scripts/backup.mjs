@@ -34,9 +34,7 @@ const LEFT_OUT = [
 	'auth.flow_state',
 	'auth.one_time_tokens',
 	'auth.audit_log_entries',
-	'auth.schema_migrations',
-	// A cache of who is in the GitHub organization; the migrations create it and it refills itself.
-	'public.org_cache'
+	'auth.schema_migrations'
 ].join(',');
 // The Supabase tool: the project's own copy, or the one the backup workflow installs.
 const CLI = process.env.SUPABASE_CLI ?? 'npx supabase';

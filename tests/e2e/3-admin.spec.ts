@@ -264,3 +264,30 @@ test('an admin cannot suspend another admin or empty the trash; the owner can', 
 	await page.goto('/admin/users/profile?name=admin2');
 	await expect(page.getByRole('button', { name: 'Suspend' })).toBeVisible();
 });
+
+test('the owner makes a member an admin and takes the role away again; an admin cannot', async ({ page }) => {
+	await loginAs(page, 'admin');
+	await page.goto('/admin/users/profile?name=member2');
+	await expect(page.getByRole('heading', { level: 1, name: 'member2' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Make admin' })).toHaveCount(0);
+	await page.goto('/account');
+	await page.getByRole('button', { name: 'Log out' }).click();
+	await expect(page.getByRole('navigation').getByRole('link', { name: 'Log in' })).toBeVisible();
+
+	await loginAs(page, 'owner');
+	await page.goto('/admin/users/profile?name=member2');
+	await page.getByRole('button', { name: 'Make admin' }).click();
+	await confirm(page, 'Make admin');
+	await expect(page.getByText('member2 is an admin.')).toBeVisible();
+	await expect(page.getByRole('complementary').getByText('Admin', { exact: true })).toBeVisible();
+	await page.goto('/admin/log?kind=user');
+	await expect(logLine(page, /owner made an admin of member2/)).toBeVisible();
+
+	// From the list of accounts as well, where it is taken away again.
+	await page.goto('/admin/users');
+	const row = page.locator('div.border-b', { hasText: 'member2' });
+	await row.getByRole('button', { name: 'Remove admin' }).click();
+	await confirm(page, 'Remove admin');
+	await expect(page.getByText('member2 is no longer an admin.')).toBeVisible();
+	await expect(row.getByRole('button', { name: 'Make admin' })).toBeVisible();
+});

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { listUsers, loginsOf, remembered, setBanned, type UserRow } from '#lib/admin.ts';
+	import { listUsers, loginsOf, remembered, setAdmin, setBanned, type UserRow } from '#lib/admin.ts';
 	import { ownedBy, ownedText } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
@@ -31,6 +31,31 @@
 	// Admins may ban members. Only the owner may suspend an admin, and nobody the owner.
 	const mayBan = (user: UserRow) =>
 		user.id !== auth.session?.user.id && user.role !== 'owner' && (user.role === 'member' || auth.isOwner);
+
+	// The owner appoints the admins, and nobody else does.
+	async function appoint(user: UserRow, value: boolean) {
+		const question = value
+			? {
+					title: `Make ${user.username} an admin?`,
+					body: 'They will be able to edit and delete any addon, review imports and reports, and ban members. Everything they do is logged and can be undone, and you can take the role away again.',
+					action: 'Make admin'
+				}
+			: {
+					title: `Remove ${user.username} as an admin?`,
+					body: 'They become an ordinary member again. What they did as an admin stays as it is.',
+					action: 'Remove admin',
+					danger: true
+				};
+		if (!(await ask(question))) return;
+		error = notice = '';
+		try {
+			await setAdmin(user.id, value);
+			await search();
+			notice = value ? `${user.username} is an admin.` : `${user.username} is no longer an admin.`;
+		} catch (e) {
+			error = (e as Error).message;
+		}
+	}
 
 	async function ban(user: UserRow, value: boolean) {
 		const verb = user.role === 'admin' ? 'Suspend' : 'Ban';
@@ -97,6 +122,11 @@
 				</div>
 				{#if mayBan(user)}
 					<div class="flex flex-wrap gap-2">
+						{#if auth.isOwner}
+							<button class="btn py-1" onclick={() => appoint(user, user.role !== 'admin')}>
+								{user.role === 'admin' ? 'Remove admin' : 'Make admin'}
+							</button>
+						{/if}
 						{#if user.banned}
 							<button class="btn py-1" onclick={() => ban(user, false)}>Lift the ban</button>
 						{:else}
