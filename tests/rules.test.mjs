@@ -305,7 +305,7 @@ describe('links and versions', () => {
 			'https://gitlab.com/group/sub/addon/-/tree/main': 'group',
 			'https://GitLab.com/aead/aBindings?ref=x#top': 'aead',
 			'https://codeberg.org/someone/addon/': 'someone',
-			'https://bitbucket.org/Team/addon/src/master/': 'Team',
+			'https://bitbucket.org/Team/addon/src/master/': '',
 			'https://gitea.com/someone/addon': 'someone',
 			'https://octowow.st/git/ShempError/BulwarkFrame': 'ShempError',
 			'https://octowow.st/git/ShempError': '',
