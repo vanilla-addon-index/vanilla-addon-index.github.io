@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CATEGORIES, IMAGE_HOSTS, LINK_HOSTS, PUBLIC_ADDON_COLUMNS } from '../src/lib/config.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
-import { githubPlace, linkKey } from '../src/lib/links.ts';
+import { githubPlace, linkAuthor, linkKey } from '../src/lib/links.ts';
 import { NIGHTLY_TOKEN, addon, createDb, post } from './db.mjs';
 
 let db;
@@ -291,6 +291,34 @@ describe('links and versions', () => {
 		for (const url of links) {
 			const [{ k }] = await db.sql('select public.link_key($1) as k', [url]);
 			assert.equal(linkKey(url), k, url);
+		}
+	});
+
+	test('the site and the database read the same owner from a link, on every site that names one', async () => {
+		const owners = {
+			'https://github.com/Shagu/pfQuest': 'Shagu',
+			'http://www.github.com/shagu/pfQuest.git': 'shagu',
+			'https://github.com/laytya/Vanilla-Addons/blob/master/Cryolysis.zip': 'laytya',
+			'  https://github.com/Someone/Addon  ': 'Someone',
+			'https://github.com/someone': '',
+			'https://gitlab.com/Artur91425/Automaton': 'Artur91425',
+			'https://gitlab.com/group/sub/addon/-/tree/main': 'group',
+			'https://GitLab.com/aead/aBindings?ref=x#top': 'aead',
+			'https://codeberg.org/someone/addon/': 'someone',
+			'https://bitbucket.org/Team/addon/src/master/': 'Team',
+			'https://gitea.com/someone/addon': 'someone',
+			'https://octowow.st/git/ShempError/BulwarkFrame': 'ShempError',
+			'https://octowow.st/git/ShempError': '',
+			'https://octowow.st/forum/someone/thread': '',
+			'https://sourceforge.net/projects/thing/files': '',
+			'https://example.com/addons/thing.zip?download=1': '',
+			'gitlab.com/owner/addon': 'owner',
+			'not a link': '',
+			'': ''
+		};
+		for (const [url, owner] of Object.entries(owners)) {
+			assert.equal(linkAuthor(url), owner, url);
+			assert.equal((await db.sql('select public.link_author($1) as a', [url]))[0].a, owner, url);
 		}
 	});
 
