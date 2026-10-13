@@ -2,9 +2,9 @@
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
-	import { SITE_NAME } from '#lib/config.ts';
+	import { CATEGORIES, SITE_NAME } from '#lib/config.ts';
 	import { imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
-	import { linkKey } from '#lib/links.ts';
+	import { linkAuthor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
 
@@ -15,8 +15,9 @@
 		problem: 'Obsolete or dead'
 	} as const;
 	type Verdict = Exclude<keyof typeof FILTERS, 'all'>;
+	// "incomplete" cuts across the verdicts: entries that would be published with a gap.
 	// "rejected" is not a filter on the queue but a second list: what was turned down.
-	type View = keyof typeof FILTERS | 'rejected';
+	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
 
 	const STALE_YEARS = 5;
 	// The interface number a 1.12 addon declares in its .toc file.
@@ -60,10 +61,29 @@
 		notes: string[];
 		// A live addon this entry probably belongs to.
 		match?: Addon;
+		// What approving it untouched would publish without: any of category, author,
+		// description and link.
+		missing: string[];
+	}
+
+	// The author is the one the link names, which is what approving publishes.
+	function gaps(item: QueueItem) {
+		const missing: string[] = [];
+		if (!(CATEGORIES as readonly string[]).includes(item.category)) missing.push('category');
+		if (!linkAuthor(item.url)) missing.push('author');
+		if (!item.description.trim()) missing.push('description');
+		if (!item.url.trim()) missing.push('link');
+		return missing;
 	}
 
 	function review(item: QueueItem): Review {
+		return { ...judge(item), missing: gaps(item) };
+	}
+
+	function judge(item: QueueItem): Omit<Review, 'missing'> {
 		const notes: string[] = [];
+		const missing = gaps(item);
+		if (missing.length) notes.push(`Missing: ${missing.join(', ')}.`);
 		const stats = imports.stats[item.key];
 		const name = plain(item.name);
 
@@ -140,8 +160,12 @@
 		const haystack = `${item.name} ${item.description} ${item.url} ${item.category}`.toLowerCase();
 		return words.every((w) => haystack.includes(w));
 	};
+	const incomplete = $derived(reviewed.filter((r) => r.missing.length).length);
 	const visible = $derived(
-		reviewed.filter(({ item, verdict }) => (view === 'all' || verdict === view) && matches(item))
+		reviewed.filter(
+			({ item, verdict, missing }) =>
+				(view === 'all' || (view === 'incomplete' ? missing.length > 0 : verdict === view)) && matches(item)
+		)
 	);
 	const visibleRejected = $derived(imports.rejected.filter(matches));
 	const total = $derived(view === 'rejected' ? visibleRejected.length : visible.length);
@@ -290,6 +314,7 @@
 						value === 'all' ? reviewed.length : (totals[value as Verdict]?.length ?? 0)
 					)}
 				{/each}
+				{@render choice('incomplete', 'Missing details', incomplete)}
 				<h2 class="label mt-2 border-t border-border px-3 pt-3">Decided</h2>
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
 			</div>
