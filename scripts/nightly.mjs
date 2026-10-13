@@ -3,9 +3,10 @@
 //   2. Trims the log and the trash of what is older than 90 days.
 //   3. Counts the reports and suggestions waiting for an admin, for the workflow to tell
 //      them about.
-//   4. Asks GitHub about every queued and live repository (stars, last update, archived,
-//      fork parent, current address, and the game version its .toc file declares) and
-//      stores the answers for the review page.
+//   4. Asks GitHub, GitLab, Codeberg and gitea.com about every queued and live repository
+//      kept there (stars, last update, archived, fork parent, current address, and the
+//      game version its .toc file declares) and stores the answers for the review page.
+//      GitHub is asked with the workflow's own token; the others need none.
 //   5. Looks at the screenshots of each queued entry, once: keeps the wiki's that still
 //      load, adds the ones in the repository's README, and stores them for the review.
 //
@@ -16,6 +17,7 @@
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+import { askForge, forgePlace } from '../src/lib/forges.ts';
 import { imagesIn, uncamo } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
@@ -88,7 +90,7 @@ try {
 	process.exitCode = 1;
 }
 
-// 4. GitHub -> repo_stats.
+// 4. GitHub and the other sites -> repo_stats.
 if (!githubToken) {
 	console.log('GITHUB_TOKEN is not set, skipping the repository stats.');
 	process.exit(0);
@@ -98,6 +100,8 @@ if (!githubToken) {
 // Each link comes as it was written, since its key leaves out the branch and has no capital
 // letters: where to look for the .toc is read from the link itself. One key, one check.
 const repos = [];
+// The same for a repository on GitLab, Codeberg or gitea.com.
+const elsewhere = [];
 // Whether a picture is still there. Only a plain "gone" counts: a host that is slow, or
 // that turns this job away while it serves browsers, gets the benefit of the doubt.
 async function gone(image) {
@@ -137,8 +141,13 @@ for (let i = 0; i < toLookAt.length; i += 10) {
 
 for (const { key, url, readme } of links) {
 	const place = githubPlace(url);
-	// Not on GitHub: there is no README to read, so the pictures that are left are it.
-	if (!place && readme) pictures.push({ key, images: wikiPictures.get(key) ?? [] });
+	const other = place ? null : forgePlace(url);
+	if (other && !elsewhere.some((r) => r.key === key)) {
+		elsewhere.push({ key, place: other, readme, wiki: wikiPictures.get(key) ?? [] });
+	}
+	// On a site that is not asked: there is no README to read, so the pictures that are
+	// left are it.
+	if (!place && !other && readme) pictures.push({ key, images: wikiPictures.get(key) ?? [] });
 	if (!place || repos.some((r) => r.key === key)) continue;
 	// What the key has after the repository: the folder, as the stored address needs it.
 	const folder = /^github\.com\/[^/]+\/[^/]+(\/.+)?$/.exec(key)?.[1] ?? '';
@@ -302,6 +311,65 @@ for (let i = 0; i < withReadme.length; i += README_BATCH) {
 		pictures.push({ key: r.key, images: [...new Set([...r.wiki, ...found])].slice(0, 5) });
 	});
 }
+// The other sites, a few repositories at a time and each with a handful of small
+// requests: they are asked without a login, as any visitor may, and are owed good manners.
+// One answer: its status and what was sent. Nothing for a site that is slow, turns the
+// job away, or answers with a web page where data was asked for.
+async function ask(url, as) {
+	try {
+		const res = await fetch(url, {
+			signal: AbortSignal.timeout(15_000),
+			headers: { 'User-Agent': 'vanilla-addon-index', Accept: as === 'json' ? 'application/json' : 'text/plain' }
+		});
+		const type = res.headers.get('content-type') ?? '';
+		if (res.status === 404) {
+			await res.body?.cancel();
+			return { status: 404 };
+		}
+		if (!res.ok || (as === 'json' ? !/json/i.test(type) : /html/i.test(type))) {
+			await res.body?.cancel();
+			return null;
+		}
+		return { status: 200, body: as === 'json' ? await res.json() : await res.text() };
+	} catch {
+		return null;
+	}
+}
+
+let silent = 0;
+for (let i = 0; i < elsewhere.length; i += 4) {
+	await Promise.all(
+		elsewhere.slice(i, i + 4).map(async ({ key, place, readme, wiki }) => {
+			const facts = await askForge(place, ask, readme);
+			// No answer: what was stored last time stays, and its pictures wait for the next run.
+			if (!facts) return silent++;
+			const asked = `${place.host}/${place.project}`.toLowerCase();
+			const now = `${place.host}/${facts.project}`.toLowerCase();
+			stats.push({
+				key,
+				stars: facts.stars,
+				pushed_at: facts.pushed_at,
+				archived: facts.archived,
+				fork_of: facts.fork_of ? `${place.host}/${facts.fork_of}`.toLowerCase() : null,
+				// A renamed or moved repository answers with its current address. What the key
+				// has after the repository stays on it.
+				canonical: facts.missing ? null : now !== asked && key.startsWith(asked) ? now + key.slice(asked.length) : key,
+				interface: facts.interface,
+				missing: facts.missing
+			});
+			if (!readme || facts.missing) return;
+			const found = facts.readme ? imagesIn(facts.readme.text, facts.readme.base).filter((image) => hostAllowed(image, 'image')) : [];
+			pictures.push({ key, images: [...new Set([...wiki, ...found])].slice(0, 5) });
+		})
+	);
+}
+if (elsewhere.length) {
+	console.log(
+		`Asked GitLab, Codeberg and gitea.com about ${elsewhere.length} repositories` +
+			(silent ? `; ${silent} got no answer, and what was known about those is kept.` : '.')
+	);
+}
+
 if (pictures.length) {
 	try {
 		const given = await db('store_queue_images', { items: pictures });
