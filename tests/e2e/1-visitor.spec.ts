@@ -4,12 +4,18 @@ import { expect, test } from './test.ts';
 
 test('the list loads, and search and categories narrow it', async ({ page }) => {
 	await page.goto('/');
-	await expect(page.getByText(/^\d+ of \d+ addons$/)).toBeVisible();
+	await expect(page.getByRole('link', { name: /^Member Map/ })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+
+	// Sorted by name, the list has a bar of letters, and each jumps to its heading.
+	const letters = page.getByRole('navigation', { name: 'Jump to a letter' });
+	await expect(letters.getByRole('button', { name: '#', exact: true })).toBeDisabled();
+	await letters.getByRole('button', { name: 'R', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'R', exact: true })).toBeInViewport();
 
 	await page.getByLabel('Search addons').fill('member bags');
 	await expect(page.getByRole('link', { name: /^Member Bags/ })).toBeVisible();
-	await expect(page.getByText(/^1 of \d+ addons$/)).toBeVisible();
+	await expect(page.getByRole('link', { name: /^Member Map/ })).toHaveCount(0);
 	// The search is in the address, so it can be shared.
 	await expect(page).toHaveURL(/q=member\+bags/);
 

@@ -268,7 +268,7 @@
 				</div>
 			{/if}
 			<h2 class="label">Addons posted · {owned.posted.length}</h2>
-			<div class="panel">
+			<div class="panel addon-list">
 				{#each owned.posted as addon (addon.id)}
 					<AddonCard {addon} />
 				{:else}
@@ -283,7 +283,7 @@
 						<span class="inline-block transition-transform group-open:rotate-90">▸</span>
 						Imports approved · {owned.imported.length}
 					</summary>
-					<div class="panel">
+					<div class="panel addon-list">
 						{#each owned.imported as addon (addon.id)}
 							<AddonCard {addon} />
 						{/each}

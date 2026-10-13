@@ -1,12 +1,15 @@
 @import 'tailwindcss';
 @import '@fontsource/pt-sans-narrow/latin-400.css';
 @import '@fontsource/pt-sans-narrow/latin-700.css';
+@import '@fontsource-variable/inter/wght.css';
 
 /* Shapes borrowed from pfUI: translucent black panels, 1px pixel borders, square corners
    and its narrow font. Colours borrowed from the original game box: logo gold on the
    browns and olive greens of the cover's map, ring and dwarf. Dark only, like the addon. */
 @theme {
 	--font-sans: 'PT Sans Narrow', 'Arial Narrow', system-ui, sans-serif;
+	/* Regular-width face for what is read as sentences: list rows and descriptions. */
+	--font-read: 'Inter Variable', system-ui, sans-serif;
 	--color-bg: #0c0a07;
 	/* Translucent, so the backdrop shows through the way the game world does in pfUI. */
 	--color-surface: rgb(8 6 3 / 0.42);
@@ -29,15 +32,18 @@
 	}
 	/* Stand-in for the game world behind the panels. A fixed layer scrolls cheaper than
 	   background-attachment: fixed. */
-	body::before {
-		content: '';
-		@apply fixed inset-0 -z-10;
-		background:
+	:root {
+		--backdrop:
 			radial-gradient(60rem 40rem at 8% 0%, rgb(56 134 62 / 0.3), transparent 70%),
 			radial-gradient(50rem 40rem at 96% 12%, rgb(150 116 44 / 0.18), transparent 70%),
 			radial-gradient(60rem 36rem at 72% 110%, rgb(38 132 84 / 0.24), transparent 70%),
 			radial-gradient(40rem 30rem at 0% 105%, rgb(124 82 34 / 0.12), transparent 70%),
 			radial-gradient(44rem 34rem at 104% 62%, rgb(40 104 156 / 0.15), transparent 70%);
+	}
+	body::before {
+		content: '';
+		@apply fixed inset-0 -z-10;
+		background: var(--backdrop);
 	}
 	/* Native dropdown lists ignore alpha, so give them a solid backdrop. */
 	option {
@@ -56,6 +62,20 @@
 @layer components {
 	.panel {
 		@apply border border-border bg-surface;
+	}
+	/* Painted exactly like the page behind it, but solid: for something that stays put while
+	   the list scrolls underneath. Only for small things; fixed backgrounds repaint on scroll. */
+	.backdrop {
+		background: var(--backdrop), var(--color-bg);
+		background-attachment: fixed;
+	}
+	/* A panel of AddonCard rows. The link and category columns are as wide as the widest
+	   one in the list and shared by every row, so they line up without reserved space. */
+	.addon-list {
+		@apply sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-4;
+	}
+	.addon-list > * {
+		@apply sm:col-span-full;
 	}
 	.btn {
 		@apply inline-flex cursor-pointer items-center justify-center gap-2 border border-border bg-surface px-3 py-1.5 leading-tight transition-colors duration-100 hover:border-accent/40 hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50;

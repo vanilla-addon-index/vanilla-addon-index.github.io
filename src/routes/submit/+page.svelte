@@ -487,7 +487,7 @@
 
 			<h2 class="section-title mt-8">Preview</h2>
 			<p class="mb-2 text-muted">How it will look in the list.</p>
-			<div class="panel">
+			<div class="panel addon-list">
 				<AddonCard
 					preview
 					addon={{
@@ -495,8 +495,7 @@
 						name: form.name,
 						description: form.description,
 						category: form.category,
-						repo_url: mainLink,
-						versions: form.versions
+						repo_url: mainLink
 					}}
 				/>
 			</div>
