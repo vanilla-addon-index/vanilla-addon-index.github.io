@@ -74,12 +74,13 @@
 	const LETTERS = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
 	const letters = $derived(new Set(blocks.map((b) => letterOf(b.main.name))));
 	let bar = $state<HTMLElement>();
+	let controls = $state<HTMLElement>();
 	let list = $state<HTMLElement>();
 	let current = $state('');
 
 	function track() {
 		// A little below the bar, so the heading a jump lands on counts as reached.
-		const edge = (bar?.getBoundingClientRect().bottom ?? 0) + 16;
+		const edge = Math.max(bar?.getBoundingClientRect().bottom ?? 0, 0) + 16;
 		let reached = '';
 		for (const heading of list?.querySelectorAll('h2') ?? []) {
 			if (heading.getBoundingClientRect().top > edge) break;
@@ -91,6 +92,18 @@
 		void blocks;
 		track();
 	});
+
+	// Puts a letter's heading right under the search box and the bar, where they rest once
+	// the page has scrolled. On a phone nothing rests there, and the heading goes to the top.
+	function jump(letter: string) {
+		const heading = document.getElementById(`letter-${letter}`);
+		if (!heading || !controls) return;
+		const resting =
+			getComputedStyle(controls).position === 'sticky'
+				? parseFloat(getComputedStyle(controls).top) + controls.offsetHeight
+				: 0;
+		window.scrollBy(0, heading.getBoundingClientRect().top - resting);
+	}
 
 	const counts = $derived(Object.groupBy(store.addons, (a) => a.category));
 
@@ -137,8 +150,10 @@
 {/snippet}
 
 <div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
-	<!-- Stays in view beside the list; on a window too short for it, it scrolls by itself. -->
-	<aside class="panel hidden max-h-screen overflow-y-auto py-1 md:sticky md:top-0 md:block">
+	<!-- Stays where it is beside the list; on a window too short for it, it scrolls by itself. -->
+	<aside
+		class="panel hidden max-h-[calc(100vh-var(--header-h)-1.25rem)] overflow-y-auto py-1 md:sticky md:top-[calc(var(--header-h)+1.25rem)] md:block"
+	>
 		<h2 class="label px-3 pt-2">Categories</h2>
 		{@render categoryButton('', 'All addons', store.addons.length)}
 		{#each CATEGORIES as c (c)}
@@ -147,52 +162,53 @@
 	</aside>
 
 	<section>
-		<div class="flex flex-wrap gap-2">
-			<input
-				class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
-				type="search"
-				placeholder="Search {store.addons.length || ''} addons by name, description, author or link"
-				aria-label="Search addons"
-				bind:value={query}
-			/>
-			<select class="input w-auto flex-1 sm:flex-none md:hidden" aria-label="Category" bind:value={category}>
-				<option value="">All categories</option>
-				{#each CATEGORIES as c (c)}
-					<option value={c}>{c} ({counts[c]?.length ?? 0})</option>
-				{/each}
-			</select>
-			<select class="input w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort}>
-				{#each Object.entries(SORTS) as [value, label] (value)}
-					<option {value}>{label}</option>
-				{/each}
-			</select>
+		<!-- The search box and the letter bar stay where they are while the list scrolls. They
+		     bring the gaps around them along, painted like the page, so rows vanish at the lower
+		     edge of the gap under them and never show above or between them. -->
+		<div bind:this={controls} class="backdrop -mt-5 pt-5 pb-2 sm:sticky sm:top-(--header-h) sm:z-10">
+			<div class="flex flex-wrap gap-2">
+				<input
+					class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
+					type="search"
+					placeholder="Search {store.addons.length || ''} addons by name, description, author or link"
+					aria-label="Search addons"
+					bind:value={query}
+				/>
+				<select class="input w-auto flex-1 sm:flex-none md:hidden" aria-label="Category" bind:value={category}>
+					<option value="">All categories</option>
+					{#each CATEGORIES as c (c)}
+						<option value={c}>{c} ({counts[c]?.length ?? 0})</option>
+					{/each}
+				</select>
+				<select class="input w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort}>
+					{#each Object.entries(SORTS) as [value, label] (value)}
+						<option {value}>{label}</option>
+					{/each}
+				</select>
+			</div>
+
+			{#if sort === 'name' && blocks.length}
+					<nav bind:this={bar} class="panel mt-2 grid grid-cols-9 px-1 sm:flex" aria-label="Jump to a letter">
+						{#each LETTERS as letter (letter)}
+							<button
+								class={[
+									'min-w-6 py-0.5 text-center text-sm font-bold transition-colors duration-100 sm:flex-1',
+									!letters.has(letter)
+										? 'text-muted/30'
+										: ['cursor-pointer hover:bg-raised hover:text-accent', letter === current ? 'text-accent' : 'text-muted']
+								]}
+								disabled={!letters.has(letter)}
+								aria-current={letter === current ? 'true' : undefined}
+								onclick={() => jump(letter)}
+							>
+								{letter}
+							</button>
+						{/each}
+					</nav>
+			{/if}
 		</div>
 
-		{#if sort === 'name' && blocks.length}
-			<!-- The bar brings the gap under it along when it sticks: rows vanish at the gap's
-			     lower edge, behind a strip painted like the page, and never touch the bar. -->
-			<div class="backdrop mt-2 -mb-2 pb-2 sm:sticky sm:top-0 sm:z-10">
-				<nav bind:this={bar} class="panel grid grid-cols-9 px-1 sm:flex" aria-label="Jump to a letter">
-					{#each LETTERS as letter (letter)}
-						<button
-							class={[
-								'min-w-6 py-0.5 text-center text-sm font-bold transition-colors duration-100 sm:flex-1',
-								!letters.has(letter)
-									? 'text-muted/30'
-									: ['cursor-pointer hover:bg-raised hover:text-accent', letter === current ? 'text-accent' : 'text-muted']
-							]}
-							disabled={!letters.has(letter)}
-							aria-current={letter === current ? 'true' : undefined}
-							onclick={() => document.getElementById(`letter-${letter}`)?.scrollIntoView()}
-						>
-							{letter}
-						</button>
-					{/each}
-				</nav>
-			</div>
-		{/if}
-
-		<div class="panel addon-list mt-2" bind:this={list}>
+		<div class="panel addon-list" bind:this={list}>
 			{#if !store.loaded}
 				<p class="px-3 py-8 text-center text-muted">Loading addons…</p>
 			{:else if blocks.length}
@@ -200,7 +216,7 @@
 					{#if sort === 'name' && (i === 0 || letterOf(blocks[i - 1].main.name) !== letterOf(main.name))}
 						<h2
 							id="letter-{letterOf(main.name)}"
-							class="label mb-0 scroll-mt-10 border-b border-border/50 px-3 pt-2 pb-0.5 text-accent/70"
+							class="label mb-0 border-b border-border/50 px-3 pt-2 pb-0.5 text-accent/70"
 						>
 							{letterOf(main.name)}
 						</h2>
