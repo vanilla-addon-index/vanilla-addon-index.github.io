@@ -19,7 +19,7 @@
 	// "rejected" is not a filter on the queue but a second list: what was turned down.
 	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
 
-	const STALE_YEARS = 5;
+	const STALE_YEARS = 8;
 	// The interface number a 1.12 addon declares in its .toc file.
 	const VANILLA_INTERFACE = 11200;
 	const PAGE = 100;
