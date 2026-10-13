@@ -52,6 +52,12 @@
 		if (auth.isAdmin) countReports();
 	});
 
+	// The header stays at the top of the window; what sticks under it needs its height.
+	let headerHeight = $state(0);
+	$effect(() => {
+		document.documentElement.style.setProperty('--header-h', `${headerHeight}px`);
+	});
+
 	onNavigate((navigation) => {
 		if (!document.startViewTransition) return;
 		// Same page, different search or filter: the list updates in place, with no fade.
@@ -75,37 +81,40 @@
 	</p>
 {:else}
 <div class="flex min-h-screen flex-col">
-	<header class="border-b border-border bg-surface">
-		<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
-			<a href={resolve('/')} class="shrink-0">
-				<img src={logo} alt={SITE_NAME} width="471" height="53" class="h-7 w-auto" />
-			</a>
-			<nav class="ml-auto flex items-center gap-2">
-				{#if auth.banned}
-					<!-- Shown but switched off; the notice below says why. -->
-					<span class="btn btn-primary pointer-events-none opacity-40" aria-disabled="true">Submit addon</span>
-				{:else}
-					<a href={resolve('/submit')} class="btn btn-primary">Submit addon</a>
-				{/if}
-				{#if auth.isAdmin}
-					<a href={resolve(reports.open ? '/admin/reports' : '/admin/import')} class="btn">
-						Admin
-						{#if reports.open}
-							<span class="text-accent" aria-label="{reports.open} reports waiting">{reports.open}</span>
-						{/if}
-					</a>
-				{/if}
-				{#if auth.username}
-					<a href={resolve('/account')} class="btn">{auth.username}</a>
-				{:else if !auth.ready}
-					<!-- Holds the space until the login state is known, so nothing flashes or shifts. -->
-					<span class="btn invisible" aria-hidden="true">Log in</span>
-				{:else if auth.session}
-					<a href={resolve('/account')} class="btn">Account</a>
-				{:else}
-					<a href={loginHref(page.url)} class="btn">Log in</a>
-				{/if}
-			</nav>
+	<!-- Painted like the page under its tint, so nothing scrolling behind it shows through. -->
+	<header bind:offsetHeight={headerHeight} class="backdrop sm:sticky sm:top-0 sm:z-20">
+		<div class="border-b border-border bg-surface">
+			<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
+				<a href={resolve('/')} class="shrink-0">
+					<img src={logo} alt={SITE_NAME} width="471" height="53" class="h-7 w-auto" />
+				</a>
+				<nav class="ml-auto flex items-center gap-2">
+					{#if auth.banned}
+						<!-- Shown but switched off; the notice below says why. -->
+						<span class="btn btn-primary pointer-events-none opacity-40" aria-disabled="true">Submit addon</span>
+					{:else}
+						<a href={resolve('/submit')} class="btn btn-primary">Submit addon</a>
+					{/if}
+					{#if auth.isAdmin}
+						<a href={resolve(reports.open ? '/admin/reports' : '/admin/import')} class="btn">
+							Admin
+							{#if reports.open}
+								<span class="text-accent" aria-label="{reports.open} reports waiting">{reports.open}</span>
+							{/if}
+						</a>
+					{/if}
+					{#if auth.username}
+						<a href={resolve('/account')} class="btn">{auth.username}</a>
+					{:else if !auth.ready}
+						<!-- Holds the space until the login state is known, so nothing flashes or shifts. -->
+						<span class="btn invisible" aria-hidden="true">Log in</span>
+					{:else if auth.session}
+						<a href={resolve('/account')} class="btn">Account</a>
+					{:else}
+						<a href={loginHref(page.url)} class="btn">Log in</a>
+					{/if}
+				</nav>
+			</div>
 		</div>
 	</header>
 
