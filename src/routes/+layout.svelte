@@ -52,10 +52,13 @@
 		if (auth.isAdmin) countReports();
 	});
 
-	// The header stays at the top of the window; what sticks under it needs its height.
+	// The header stays at the top of the window and the footer at the bottom; what sticks
+	// between them needs their heights.
 	let headerHeight = $state(0);
+	let footerHeight = $state(0);
 	$effect(() => {
 		document.documentElement.style.setProperty('--header-h', `${headerHeight}px`);
+		document.documentElement.style.setProperty('--footer-h', `${footerHeight}px`);
 	});
 
 	onNavigate((navigation) => {
@@ -118,7 +121,7 @@
 		</div>
 	</header>
 
-	<main class="mx-auto w-full max-w-6xl flex-1 px-4 pt-5 pb-16">
+	<main class="mx-auto w-full max-w-6xl flex-1 px-4 pt-5 pb-16 sm:pb-0">
 		{#if !configured}
 			<p class="panel mb-4 px-3 py-2 text-muted">
 				Preview mode: the database is not connected yet, so posting and login are disabled.
@@ -135,11 +138,15 @@
 		{@render children()}
 	</main>
 
-	<footer class="border-t border-border">
-		<div class="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-sm text-muted">
-			<span>Interface\AddOns, indexed. Free and open source.</span>
-			<a href={resolve('/about')} class="ml-auto hover:text-accent">About and privacy</a>
-			<a href={REPO_URL} class="hover:text-accent">Source on GitHub</a>
+	<!-- It brings the gap above it along, as the header's side does: the page ends, and a
+	     long one vanishes, a little above the footer's line and never against it. -->
+	<footer bind:offsetHeight={footerHeight} class="backdrop sm:sticky sm:bottom-0 sm:z-20 sm:pt-5">
+		<div class="border-t border-border">
+			<div class="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-sm text-muted">
+				<span>Interface\AddOns, indexed. Free and open source.</span>
+				<a href={resolve('/about')} class="ml-auto hover:text-accent">About and privacy</a>
+				<a href={REPO_URL} class="hover:text-accent">Source on GitHub</a>
+			</div>
 		</div>
 	</footer>
 </div>

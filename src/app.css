@@ -26,9 +26,10 @@
 		color-scheme: dark;
 		/* The narrow face reads small; this brings it level with a regular 16px font. */
 		font-size: 112.5%;
-		/* A link into a page lands below the header that stays at the top. */
+		/* A link into a page lands between the header and footer that stay in place. */
 		@variant sm {
 			scroll-padding-top: var(--header-h, 0px);
+			scroll-padding-bottom: var(--footer-h, 0px);
 		}
 	}
 	body {

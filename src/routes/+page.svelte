@@ -137,7 +137,7 @@
 {#snippet categoryButton(value: string, label: string, count: number)}
 	<button
 		class={[
-			'flex w-full cursor-pointer justify-between border-l-2 px-3 py-1 text-left transition-colors duration-100 hover:bg-raised',
+			'flex w-full cursor-pointer justify-between border-l-2 px-3 py-0.5 text-left transition-colors duration-100 hover:bg-raised',
 			category === value ? 'border-accent text-accent' : 'border-transparent',
 			!count && category !== value && 'text-muted'
 		]}
@@ -152,7 +152,7 @@
 <div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
 	<!-- Stays where it is beside the list; on a window too short for it, it scrolls by itself. -->
 	<aside
-		class="panel hidden max-h-[calc(100vh-var(--header-h)-1.25rem)] overflow-y-auto py-1 md:sticky md:top-[calc(var(--header-h)+1.25rem)] md:block"
+		class="panel hidden max-h-[calc(100vh-var(--header-h)-var(--footer-h)-1.25rem)] overflow-y-auto py-1 md:sticky md:top-[calc(var(--header-h)+1.25rem)] md:block"
 	>
 		<h2 class="label px-3 pt-2">Categories</h2>
 		{@render categoryButton('', 'All addons', store.addons.length)}
