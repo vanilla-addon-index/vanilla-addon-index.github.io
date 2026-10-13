@@ -47,7 +47,7 @@ export function githubPlace(url: string): { owner: string; name: string; ref: st
 }
 
 // The sites whose links read host/owner/repository: every site a member's link may be on.
-const OWNER_FIRST = ['github.com', 'gitlab.com', 'codeberg.org', 'bitbucket.org', 'gitea.com', 'octowow.st'];
+const OWNER_FIRST = ['github.com', 'gitlab.com', 'codeberg.org', 'gitea.com', 'octowow.st'];
 
 /**
  * Who a repository belongs to, spelled the way its link spells it: "Artur91425" for
