@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
 	import { approve, approveInto, publishEdited, reject, type QueueItem } from '#lib/imports.svelte.ts';
+	import { linkAuthor } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 
 	type Props = {
@@ -24,7 +25,7 @@
 	const original = $derived({
 		name: item.name.slice(0, 60),
 		category: item.category,
-		author: item.key.startsWith('github.com/') ? (item.url.split('/')[3] ?? '') : '',
+		author: linkAuthor(item.url),
 		description: item.description,
 		images: item.images.slice(0, MAX_IMAGES)
 	});

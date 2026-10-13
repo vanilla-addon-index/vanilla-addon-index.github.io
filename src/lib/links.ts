@@ -46,19 +46,34 @@ export function githubPlace(url: string): { owner: string; name: string; ref: st
 	};
 }
 
-/** "owner" for a github.com/owner/repo link, otherwise the host. */
+// The sites whose links read host/owner/repository: every site a member's link may be on.
+const OWNER_FIRST = ['github.com', 'gitlab.com', 'codeberg.org', 'bitbucket.org', 'gitea.com', 'octowow.st'];
+
+/**
+ * Who a repository belongs to, spelled the way its link spells it: "Artur91425" for
+ * gitlab.com/Artur91425/Automaton. Nothing for a link that names no owner or is on some
+ * other site. public.link_author() in the link author migration has the same rules, and
+ * a test compares the two: change both or neither.
+ */
+export function linkAuthor(url: string): string {
+	const parts = /^(?:https?:\/\/)?(?:www\.)?([^/?#]+)\/([^?#]*)/i.exec(url.trim());
+	if (!parts) return '';
+	const host = parts[1].toLowerCase();
+	let path = parts[2].split('/').filter(Boolean);
+	// octowow.st keeps its repositories under /git.
+	if (host === 'octowow.st') path = path[0]?.toLowerCase() === 'git' ? path.slice(1) : [];
+	return OWNER_FIRST.includes(host) && path.length >= 2 ? path[0] : '';
+}
+
+/** Who owns the repository a link points to, otherwise the host. */
 export function linkOwner(url: string): string {
-	const [host, owner] = linkKey(url).split('/');
-	return host === 'github.com' && owner ? owner : host;
+	return linkAuthor(url) || linkKey(url).split('/')[0];
 }
 /**
  * Who to credit an addon to in a list: the author it was posted with, or else the owner
- * of its GitHub repository. Empty when neither is known, unless a name is needed to tell
+ * of its repository. Empty when neither is known, unless a name is needed to tell
  * same-named addons apart, in which case the host stands in.
  */
 export function creditFor(addon: { author: string; repo_url: string }, needed = false): string {
-	if (addon.author) return addon.author;
-	const [host, owner] = linkKey(addon.repo_url).split('/');
-	if (host === 'github.com' && owner) return owner;
-	return needed ? host : '';
+	return addon.author || linkAuthor(addon.repo_url) || (needed ? linkKey(addon.repo_url).split('/')[0] : '');
 }
