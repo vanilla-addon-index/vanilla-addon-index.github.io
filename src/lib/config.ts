@@ -61,7 +61,6 @@ export const LINK_HOSTS = [
 	'gitlab.com',
 	'codeberg.org',
 	'bitbucket.org',
-	'sourceforge.net',
 	'gitea.com',
 	'octowow.st/git'
 ];
