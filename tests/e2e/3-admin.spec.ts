@@ -23,6 +23,22 @@ test('the report a member sent shows up, with a count on the Admin button, and c
 	await expect(admin).not.toContainText('1');
 });
 
+test('the queue narrows to the entries that would be published with something missing', async ({ page }) => {
+	await loginAs(page, 'admin');
+	await page.goto('/admin/import');
+	const entries = page.locator('[data-entry]');
+	await expect(entries.first()).toBeVisible();
+	const all = await entries.count();
+
+	await page.getByRole('button', { name: /^Missing details/ }).click();
+	// Each says what it lacks; the test queue has a few with no description.
+	await expect(entries.first()).toContainText('Missing: description.');
+	const incomplete = await entries.count();
+	expect(incomplete).toBeGreaterThan(0);
+	expect(incomplete).toBeLessThan(all);
+	await expect(entries.filter({ hasText: 'Missing:' })).toHaveCount(incomplete);
+});
+
 test('an import is approved as it is, another with changes, and one is rejected and put back', async ({ page }) => {
 	await loginAs(page, 'admin');
 	await page.goto('/admin/import');
