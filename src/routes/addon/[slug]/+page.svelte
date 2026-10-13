@@ -328,7 +328,7 @@
 			<!-- For anyone who spots a dead link or something harmful. Reporting needs an
 			     account, so a visitor is sent to log in first. -->
 			{#if !auth.banned}
-				<p class="text-right text-sm">
+				<p class="pr-[calc(0.75rem+1px)] text-right text-sm">
 					{#if auth.session}
 						<button class="cursor-pointer text-muted hover:text-accent hover:underline" onclick={() => report?.open()}>
 							Report this addon
