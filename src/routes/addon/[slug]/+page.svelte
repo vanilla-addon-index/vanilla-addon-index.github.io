@@ -172,7 +172,7 @@
 			</div>
 
 			{#if addon.description}
-				<p class="mt-4 leading-relaxed break-words whitespace-pre-line">{addon.description}</p>
+				<p class="mt-4 font-read text-[0.9rem] leading-relaxed break-words whitespace-pre-line">{addon.description}</p>
 			{/if}
 
 			{#if shots.length}

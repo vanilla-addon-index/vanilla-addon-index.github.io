@@ -101,7 +101,7 @@
 
 		<section>
 			<h2 class="label">Your addons</h2>
-			<div class="panel">
+			<div class="panel addon-list">
 				{#each mine as addon (addon.id)}
 					<AddonCard {addon} />
 				{:else}
@@ -116,7 +116,7 @@
 						<span class="inline-block transition-transform group-open:rotate-90">▸</span>
 						Imports you approved · {imported.length}
 					</summary>
-					<div class="panel">
+					<div class="panel addon-list">
 						{#each imported as addon (addon.id)}
 							<AddonCard {addon} />
 						{/each}
