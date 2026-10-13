@@ -29,7 +29,7 @@
 			It is a hobby project run by {@render out('https://github.com/akzkak', 'akzkak')}, free and
 			without ads. The {@render out(REPO_URL, 'source is on GitHub')}. Part of the list was
 			imported from the {@render out(`${WIKI}/wiki/${WIKI_PAGE}`, WIKI_NAME)}, whose text is
-			licensed CC BY-SA; those entries say so on their page.
+			licensed CC BY-SA.
 		</p>
 		<p class="mt-3 text-muted">
 			This site is not affiliated with or endorsed by Blizzard Entertainment or by any game

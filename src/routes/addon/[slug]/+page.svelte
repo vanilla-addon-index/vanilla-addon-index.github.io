@@ -24,7 +24,6 @@
 	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
-	import { WIKI, WIKI_PAGE } from '#lib/wiki.ts';
 
 	const found = $derived(findAddon(page.params.slug));
 	// While a delete is under way the addon is already gone from the list; the copy
@@ -290,18 +289,6 @@
 				{@render fact('Added', date(addon.created_at))}
 				{@render fact('Updated', date(addon.updated_at))}
 			</dl>
-			{#if addon.source}
-				<!-- Wiki text is CC BY-SA, which asks for this credit. -->
-				<p class="text-sm text-muted">
-					Imported from the
-					<a
-						href="{WIKI}/wiki/{WIKI_PAGE}"
-						target="_blank"
-						rel="noopener"
-						class="underline hover:text-accent">{addon.source}</a
-					>, CC BY-SA.
-				</p>
-			{/if}
 
 			{#each suggestions as suggestion (suggestion.target_id)}
 				{@const target = store.addons.find((a) => a.id === suggestion.target_id)}
