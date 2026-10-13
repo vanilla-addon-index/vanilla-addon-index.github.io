@@ -123,7 +123,8 @@
 				`${item.alts.length} other version${item.alts.length === 1 ? '' : 's'} on the wiki, queued separately and grouped with this one when published.`
 			);
 		}
-		if (!item.key.startsWith('github.com/')) notes.push(`Hosted on ${item.key.split('/')[0]}, so there is no update date.`);
+		// Only some sites are asked about their repositories; see the nightly job.
+		if (!stats && !item.key.startsWith('github.com/')) notes.push(`Hosted on ${item.key.split('/')[0]}, so there is no update date.`);
 
 		const year = stats?.pushed_at ? new Date(stats.pushed_at).getFullYear() : undefined;
 		const stale = year !== undefined && year <= new Date().getFullYear() - STALE_YEARS;

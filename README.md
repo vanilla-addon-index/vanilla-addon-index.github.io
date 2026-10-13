@@ -68,7 +68,7 @@ Neither touches the hosted database.
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | on every pull request | the database rule tests, the type check and a build; and the site in a real browser against a throwaway backend |
 | [Deploy](.github/workflows/deploy.yml) | on every change to `main`, after Nightly, or by hand | five jobs in turn: rule tests and type check again; pending migrations; a fresh snapshot and the build; the publish; saving the snapshot. Only the migrations job is given the database password, and it installs nothing but the Supabase tool. Only the build job installs the site's dependencies, and it can read no secret and write nowhere |
-| [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads the wiki into the import queue, trims the log and the trash, and asks GitHub about every repository, then runs Deploy |
+| [Nightly](.github/workflows/nightly.yml) | once a day | keeps GitHub from switching the daily timers off, reads the wiki into the import queue, trims the log and the trash, and asks GitHub, GitLab, Codeberg and gitea.com about every repository kept there, then runs Deploy |
 | [Refresh](.github/workflows/refresh.yml) | every hour | looks whether the list has changed since the last snapshot and runs Deploy only if it has; most runs end after that one look |
 | [Backup](.github/workflows/backup.yml) | once a day | an encrypted copy of the database; see [Backups](#backups) |
 
@@ -98,7 +98,7 @@ Nobody reviews an addon before it is listed, so a member's link must be on a sit
 
 ### The nightly import
 
-The [Nightly workflow](.github/workflows/nightly.yml) reads the Turtle WoW wiki's addon list into the import queue for an admin to review, trims the log and the trash of what is older than 90 days, and asks GitHub about every repository. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else: it cannot post, edit, delete, or make anyone an admin.
+The [Nightly workflow](.github/workflows/nightly.yml) reads the Turtle WoW wiki's addon list into the import queue for an admin to review, trims the log and the trash of what is older than 90 days, and asks GitHub, GitLab, Codeberg and gitea.com about every repository kept there: stars, last update, and the game version its `.toc` declares. GitHub is asked with the workflow's own token; the others are asked without a login, as any visitor may. A site that does not answer a script, as octowow.st does not while it is fending off attacks, is left alone. It signs in like any visitor and holds a token of its own, which is good for those few database calls and nothing else: it cannot post, edit, delete, or make anyone an admin.
 
 ```sh
 npm run nightly:token   # makes a token, and prints where its two halves go
