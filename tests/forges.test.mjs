@@ -91,8 +91,10 @@ describe('what GitLab says about a repository', () => {
 			archived: false,
 			fork_of: 'Someone/Automaton',
 			interface: 11200,
+			interface_checked: true,
 			missing: false,
-			readme: { text: '![shot](img/a.png)', base: 'https://gitlab.com/Artur91425/Automaton/-/raw/master/README.md' }
+			readme: { text: '![shot](img/a.png)', base: 'https://gitlab.com/Artur91425/Automaton/-/raw/master/README.md' },
+			readme_checked: true
 		});
 		assert.equal(asked.length, 5);
 	});
@@ -120,6 +122,34 @@ describe('what GitLab says about a repository', () => {
 		const gone = await askForge(forgePlace('https://gitlab.com/someone/gone'), site({ [`${api}/someone%2Fgone`]: 404 }).ask);
 		assert.equal(gone.missing, true);
 		assert.equal(await askForge(forgePlace('https://gitlab.com/someone/slow'), site({}).ask), null);
+	});
+
+	test('failed directories, individual toc files and READMEs remain incomplete', async () => {
+		const listing = `${api}/77/repository/tree?per_page=100&ref=master`;
+		const base = { [`${api}/Artur91425%2FAutomaton`]: project };
+		const place = forgePlace('https://gitlab.com/Artur91425/Automaton');
+		const failedDirectory = await askForge(place, site(base).ask, true);
+		assert.equal(failedDirectory.interface_checked, false);
+		assert.equal(failedDirectory.readme_checked, false);
+		const files = {
+			...base,
+			[listing]: [{name:'Addon.toc',type:'blob'}, {name:'Other.toc',type:'blob'}, {name:'README.md',type:'blob'}],
+			[`${api}/77/repository/files/Addon.toc/raw?ref=master`]: '## Interface: 20400'
+		};
+		const failedFiles = await askForge(place, site(files).ask, true);
+		assert.equal(failedFiles.interface_checked, false);
+		assert.equal(failedFiles.interface, null);
+		assert.equal(failedFiles.readme_checked, false);
+		const absent = await askForge(place, site({ ...base, [listing]: [] }).ask, true);
+		assert.equal(absent.interface_checked, true);
+		assert.equal(absent.readme_checked, true);
+		const deletedFiles = await askForge(place, site({ ...files,
+			[`${api}/77/repository/files/Other.toc/raw?ref=master`]: 404,
+			[`${api}/77/repository/files/README.md/raw?ref=master`]: 404
+		}).ask, true);
+		assert.equal(deletedFiles.interface_checked, true);
+		assert.equal(deletedFiles.interface, 20400);
+		assert.equal(deletedFiles.readme_checked, true);
 	});
 });
 
@@ -157,8 +187,10 @@ describe('what a Gitea site says about a repository', () => {
 			fork_of: null,
 			// Several clients: the 1.12 one is what matters.
 			interface: 11200,
+			interface_checked: true,
 			missing: false,
-			readme: { text: 'See ![a](a.png)', base: 'https://codeberg.org/New/Addon/raw/branch/main/readme.txt' }
+			readme: { text: 'See ![a](a.png)', base: 'https://codeberg.org/New/Addon/raw/branch/main/readme.txt' },
+			readme_checked: true
 		});
 	});
 

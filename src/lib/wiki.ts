@@ -3,6 +3,7 @@
 import { CATEGORIES, DEFAULT_CATEGORY, MAX_IMAGES } from './config.ts';
 import { uncamo } from './github.ts';
 import { linkKey } from './links.ts';
+import { request } from './request.ts';
 
 export const WIKI = 'https://turtle-wow.fandom.com';
 export const WIKI_PAGE = 'Addons';
@@ -254,10 +255,9 @@ export function parseWiki(wikitext: string): Omit<WikiRead, 'revision'> {
 
 export async function readWiki(): Promise<WikiRead> {
 	// origin=* lets a browser page call the API without the wiki's cookies.
-	const res = await fetch(
-		`${WIKI}/api.php?action=parse&page=${WIKI_PAGE}&prop=wikitext|revid&format=json&formatversion=2&origin=*`
+	const { parse } = await request<{ parse: { wikitext: string; revid: number } }>(
+		`${WIKI}/api.php?action=parse&page=${WIKI_PAGE}&prop=wikitext|revid&format=json&formatversion=2&origin=*`,
+		{ read: (response) => response.json() }
 	);
-	if (!res.ok) throw new Error(`The wiki answered ${res.status}`);
-	const { parse } = (await res.json()) as { parse: { wikitext: string; revid: number } };
 	return { revision: parse.revid, ...parseWiki(parse.wikitext) };
 }

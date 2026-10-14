@@ -37,9 +37,12 @@ export interface ForgeFacts {
 	/** "owner/repo" of the repository this one was forked from. */
 	fork_of: string | null;
 	interface: number | null;
+	/** False means a partial check: preserve the previously known game version. */
+	interface_checked: boolean;
 	missing: boolean;
 	/** The README's text and its own raw address, when it was asked for and there is one. */
 	readme: { text: string; base: string } | null;
+	readme_checked: boolean;
 }
 
 const decode = (text: string) => {
@@ -167,7 +170,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 	const answer = await ask(site.repo(place), 'json');
 	if (!answer) return null;
 	if (answer.status === 404) {
-		return { project: place.project, stars: 0, pushed_at: null, code_update: null, archived: false, fork_of: null, interface: null, missing: true, readme: null };
+		return { project: place.project, stars: 0, pushed_at: null, code_update: null, archived: false, fork_of: null, interface: null, interface_checked: true, missing: true, readme: null, readme_checked: false };
 	}
 	if (answer.status !== 200 || !answer.body || typeof answer.body !== 'object') return null;
 
@@ -183,12 +186,18 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 		archived: repo.archived,
 		fork_of: repo.parent,
 		interface: null,
+		interface_checked: false,
 		missing: false,
-		readme: null
+		readme: null,
+		readme_checked: false
 	};
 	// A repository with nothing in it has no branch to read.
 	const ref = place.ref || repo.branch;
-	if (!ref) return facts;
+	if (!ref) {
+		facts.interface_checked = true;
+		facts.readme_checked = wantReadme;
+		return facts;
+	}
 
 	// The public date only uses commits; general activity remains an admin hint.
 	const commits = await ask(site.commits(api, ref, place.path), 'json');
@@ -199,11 +208,12 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 	}
 
 	const listing = await ask(site.list(api, ref, place.path), 'json');
-	const entries = Array.isArray(listing?.body) ? listing.body.map(site.entry) : [];
+	if (listing?.status !== 200 || !Array.isArray(listing.body)) return facts;
+	const entries = listing.body.map(site.entry);
 	const within = place.path ? `${place.path}/` : '';
-	const text = async (path: string) => {
+	const text = async (path: string): Promise<string | null> => {
 		const file = await ask(site.file(api, ref, path), 'text');
-		return file?.status === 200 && typeof file.body === 'string' ? file.body : '';
+		return file?.status === 404 ? '' : file?.status === 200 && typeof file.body === 'string' ? file.body : null;
 	};
 
 	// An addon's .toc is at the top of what the link points to, or one folder down in a
@@ -211,16 +221,21 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 	const atTop = entries.filter((e) => !e.folder && /\.toc$/i.test(e.name)).map((e) => `${within}${e.name}`);
 	const nested = entries.filter((e) => e.folder && !e.name.startsWith('.')).map((e) => `${within}${e.name}/${e.name}.toc`);
 	const found: number[] = [];
+	facts.interface_checked = true;
 	for (const path of (atTop.length ? atTop : nested).slice(0, TOC_PATHS)) {
-		const number = /^##\s*Interface:\s*(\d+)/im.exec(await text(path))?.[1];
+		const content = await text(path);
+		if (content === null) facts.interface_checked = false;
+		const number = /^##\s*Interface:\s*(\d+)/im.exec(content ?? '')?.[1];
 		if (number) found.push(Number(number));
 	}
 	// A repository can ship .toc files for several clients; the 1.12 one is what matters.
-	if (found.length) facts.interface = found.includes(VANILLA_INTERFACE) ? VANILLA_INTERFACE : found[0];
+	if (facts.interface_checked && found.length) facts.interface = found.includes(VANILLA_INTERFACE) ? VANILLA_INTERFACE : found[0];
 
 	if (wantReadme) {
 		const name = entries.find((e) => !e.folder && /^readme(\.(md|markdown|mdown|txt|rst))?$/i.test(e.name))?.name;
-		if (name) facts.readme = { text: await text(`${within}${name}`), base: site.raw(place, repo.project, ref, `${within}${name}`) };
+		const content = name ? await text(`${within}${name}`) : '';
+		facts.readme_checked = content !== null;
+		if (name && content !== null) facts.readme = { text: content, base: site.raw(place, repo.project, ref, `${within}${name}`) };
 	}
 	return facts;
 }

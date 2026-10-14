@@ -108,7 +108,11 @@ The [Nightly workflow](.github/workflows/nightly.yml) reads the Turtle WoW wiki'
 npm run nightly:token   # makes a token, and prints where its two halves go
 ```
 
-The token goes to GitHub as the `NIGHTLY_TOKEN` secret, and its hash into the database with the one statement the command prints. Doing it again replaces the token; the old one stops working at once. Until the secret exists the import skips itself and the site still deploys.
+The token goes to GitHub as the `NIGHTLY_TOKEN` secret, and its hash into the database with the one statement the command prints. Doing it again replaces the token; the old one stops working at once. Missing nightly tokens fail the import explicitly rather than reporting a successful skipped run.
+
+Nightly first validates the code and applies pending migrations through [Prepare](.github/workflows/prepare.yml), then imports and deploys. A preparation failure stops the import and publication. The same preparation is shared with ordinary deployments; dependency installation and tests run separately from the database credentials. Nightly reuses its successful preparation for the deployment in that run.
+
+Network requests have deadlines covering both connection and response reading, with bounded backoff for temporary failures. Rate-limit waits honour the server's headers; long waits stop requests to that host for the rest of its reset period rather than repeatedly hitting it. Failed directory, `.toc`, README or image checks retain known information and leave unfinished screenshot reviews eligible for the next run. A successful check that confirms something is absent can still clear that detail.
 
 The wiki page is hand-written, so the import guards against reading it badly: a page that lists far fewer addons than it did the last time is refused whole, and the run fails so that it is noticed. If the wiki really has shrunk by more than a fifth, run `delete from public.wiki_listing;` in Supabase's SQL editor once and the next page is taken as it is. [tests/wiki.test.mjs](tests/wiki.test.mjs) pins what the parser makes of a saved copy of the page. `node scripts/wiki-import.mjs` shows what it makes of the page as it is now: a dry run that writes a report to `wiki-import/` and changes nothing.
 
