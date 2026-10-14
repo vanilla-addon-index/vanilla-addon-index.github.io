@@ -30,6 +30,7 @@ const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	versions: row.versions?.length ? row.versions : [{ url: row.repo_url ?? '', note: '' }],
 	aliases: row.aliases ?? [],
 	source: row.source ?? '',
+	code_update: row.code_update ?? null,
 	owner: row.owner ?? null,
 	approved_by: row.approved_by ?? null,
 	group_id: row.group_id ?? null,

@@ -1,3 +1,9 @@
+export interface CodeUpdate {
+	date: string;
+	/** Commit history for the linked branch and folder. */
+	url: string;
+}
+
 export interface Version {
 	url: string;
 	note: string;
@@ -29,6 +35,7 @@ export interface Addon {
 	approved_by: string | null;
 	created_at: string;
 	updated_at: string;
+	code_update: CodeUpdate | null;
 }
 
 export type AddonInput = Pick<

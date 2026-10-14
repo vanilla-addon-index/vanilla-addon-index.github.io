@@ -87,6 +87,7 @@ describe('what GitLab says about a repository', () => {
 			stars: 3,
 			// The last commit, not the last time anything at all happened.
 			pushed_at: '2024-06-14T14:00:48Z',
+			code_update: { date: '2024-06-14T14:00:48Z', url: 'https://gitlab.com/Artur91425/Automaton/-/commits/master' },
 			archived: false,
 			fork_of: 'Someone/Automaton',
 			interface: 11200,
@@ -109,6 +110,8 @@ describe('what GitLab says about a repository', () => {
 		assert.equal(facts.interface, 20400);
 		// The commits could not be read, so the site's own date stands in.
 		assert.equal(facts.pushed_at, '2025-03-01T00:00:00Z');
+		// General activity must never be shown as a public code update.
+		assert.equal(facts.code_update, null);
 		// Not asked for.
 		assert.equal(facts.readme, null);
 	});
@@ -149,6 +152,7 @@ describe('what a Gitea site says about a repository', () => {
 			project: 'New/Addon',
 			stars: 12,
 			pushed_at: '2023-05-05T10:00:00+02:00',
+			code_update: { date: '2023-05-05T10:00:00+02:00', url: 'https://codeberg.org/New/Addon/commits/branch/main' },
 			archived: true,
 			fork_of: null,
 			// Several clients: the 1.12 one is what matters.
