@@ -37,6 +37,18 @@ test('the queue narrows to the entries that would be published with something mi
 	expect(incomplete).toBeGreaterThan(0);
 	expect(incomplete).toBeLessThan(all);
 	await expect(entries.filter({ hasText: 'Missing:' })).toHaveCount(incomplete);
+	await expect(entries.filter({ hasText: 'Looks fine.' })).toHaveCount(0);
+	const names = await entries.getByLabel('Name', { exact: true }).evaluateAll((inputs) =>
+		inputs.map((input) => (input as HTMLInputElement).value)
+	);
+
+	const fine = page.getByRole('button', { name: /^Looks fine/ });
+	const fineCount = Number((await fine.innerText()).match(/\d+/)![0]);
+	await fine.click();
+	await expect(entries).toHaveCount(fineCount);
+	expect(fineCount).toBeGreaterThan(0);
+	await expect(entries.filter({ hasText: 'Missing:' })).toHaveCount(0);
+	for (const name of names) await expect(entry(page, name)).toHaveCount(0);
 });
 
 test('an import is approved as it is, another with changes, and one is rejected and put back', async ({ page }) => {
