@@ -169,12 +169,15 @@ test('branch links retain separate dates while only the first branch supplies re
 	assert.equal(calls.filter((c) => c.name === 'store_code_updates').flatMap((c) => c.args.updates).length, 2);
 });
 
-test('other-host checkpoints survive an interruption in the next group', () => {
+test('other-host checkpoints survive an interruption while another worker is active', () => {
 	const calls = run('forge-late-stop');
 	for (const [name, field] of [['store_repo_stats', 'stats'], ['store_code_updates', 'updates'], ['store_queue_images', 'items']]) {
 		const writes = calls.filter((c) => c.name === name);
-		assert.equal(writes.length, 2, name);
-		assert.equal(writes.flatMap((c) => c.args[field]).length, 8, name);
+		// Seven checks have checkpointed before a worker starts the ninth.
+		// The eighth may be between its independent stores at interruption.
+		const rows = writes.flatMap((c) => c.args[field]);
+		assert.ok(rows.length >= 7 && rows.length <= 8, name);
+		assert.equal(new Set(rows.map((row) => row.key ?? row.url)).size, rows.length, name);
 	}
 });
 

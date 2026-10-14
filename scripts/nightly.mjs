@@ -26,6 +26,7 @@ import { askGithub, fieldFailed, groupChecks, githubRepositoryKey, sharedGithubC
 import { request } from '../src/lib/request.ts';
 import { NightlyMetrics } from '../src/lib/nightly-metrics.ts';
 import { createForgeRequests } from '../src/lib/nightly-rest.ts';
+import { runWorkers } from '../src/lib/nightly-workers.ts';
 import { advanceGithubCache, githubCache, githubFiles, githubScope, gitOid, validDate } from '../src/lib/nightly-cache.ts';
 
 const token = process.env.NIGHTLY_TOKEN;
@@ -50,6 +51,8 @@ const TOC_BATCH = 25;
 const TOC_PATHS = 4;
 // READMEs are long; fewer of them go into one request.
 const README_BATCH = 15;
+// Independent queues: at most two repository checks per unauthenticated host.
+const FORGE_WORKERS = 2;
 
 // Calls one of the job's database functions. The token travels in the body.
 async function db(name, args = {}) {
@@ -228,7 +231,14 @@ metrics.count('commit_dates_left_unchanged', new Set([...repos, ...elsewhere].ma
 // Save each completed batch before asking for more. Each store has its own failure
 // boundary, so refused statistics cannot discard dates or completed screenshot checks.
 // The request helper retries safe RPCs; successful batches are never replayed here.
-async function saveProgress() {
+let saving = Promise.resolve();
+function saveProgress() {
+	// All producers share one writer. A later checkpoint also drains results queued
+	// while an earlier write was in flight, without overlapping database requests.
+	saving = saving.then(flushProgress);
+	return saving;
+}
+async function flushProgress() {
 	for (const [name, field, pending, count] of [
 		['store_repo_stats', 'stats', pendingStats, 'stats'],
 		['store_code_updates', 'updates', codeUpdates, 'dates'],
@@ -310,243 +320,262 @@ function applyGithubDetails(r, repo, errors, alias, history, tree) {
 	}
 }
 
-const finishedMetadata = metrics.start('GitHub metadata');
-const repositoryGroups = groupChecks(repos, githubRepositoryKey);
-let metadataCompleted = 0;
-for (let i = 0; i < repositoryGroups.length; i += BATCH) {
-	const groups = repositoryGroups.slice(i, i + BATCH);
-	const batch = groups.flat();
-	metadataCompleted += batch.length;
-	metrics.count('github_repository_checks_requested', groups.length);
-	metrics.count('github_metadata_checks_requested', batch.length);
-	const answer = await sharedGithubChecks(batch, githubRepositoryKey, (members) => {
-		const refs = [...new Set(members.map((r) => r.ref))];
-		for (const r of members) r.headField = refs.indexOf(r.ref) ? `head${refs.indexOf(r.ref)}` : 'head';
-		return `id nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${refs.map((ref, n) => `${n ? `head${n}` : 'head'}: object(expression: ${JSON.stringify(ref)}) { ... on Commit { oid } }`).join(' ')}`;
-	}, (query) => github(query, 'GitHub metadata'), (saved) => metrics.count('github_metadata_fields_shared', saved));
-	if (!answer) {
-		unanswered += batch.length;
-		metrics.count('github_metadata_checks_failed', batch.length);
-		metrics.count('github_history_checks_without_result', batch.length);
+async function checkGithub() {
+	const finishedMetadata = metrics.start('GitHub metadata');
+	const repositoryGroups = groupChecks(repos, githubRepositoryKey);
+	let metadataCompleted = 0;
+	for (let i = 0; i < repositoryGroups.length; i += BATCH) {
+		const groups = repositoryGroups.slice(i, i + BATCH);
+		const batch = groups.flat();
+		metadataCompleted += batch.length;
+		metrics.count('github_repository_checks_requested', groups.length);
+		metrics.count('github_metadata_checks_requested', batch.length);
+		const answer = await sharedGithubChecks(batch, githubRepositoryKey, (members) => {
+			const refs = [...new Set(members.map((r) => r.ref))];
+			for (const r of members) r.headField = refs.indexOf(r.ref) ? `head${refs.indexOf(r.ref)}` : 'head';
+			return `id nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${refs.map((ref, n) => `${n ? `head${n}` : 'head'}: object(expression: ${JSON.stringify(ref)}) { ... on Commit { oid } }`).join(' ')}`;
+		}, (query) => github(query, 'GitHub metadata'), (saved) => metrics.count('github_metadata_fields_shared', saved));
+		if (!answer) {
+			unanswered += batch.length;
+			metrics.count('github_metadata_checks_failed', batch.length);
+			metrics.count('github_history_checks_without_result', batch.length);
+			metrics.progress('GitHub metadata', metadataCompleted, repos.length);
+			continue;
+		}
+		const detail = [];
+		const { data, gone, errors } = answer;
+		batch.forEach((r, n) => {
+			const alias = `r${n}`;
+			const repo = data[alias];
+			if (!repo && !gone.has(alias)) { metrics.count('github_metadata_checks_failed'); return unanswered++; }
+			if (repo) {
+				r.state = !fieldFailed(errors, [alias, r.headField]) ? advanceGithubCache(r.previous, r.scope, repo.id, repo.nameWithOwner, repo[r.headField]?.oid) : undefined;
+				r.readRef = r.state?.head ?? r.ref;
+			}
+			const valid = !repo || !['nameWithOwner', 'stargazerCount', 'pushedAt', 'isArchived', 'parent'].some((field) => fieldFailed(errors, [alias, field]) || !(field in repo));
+			if (valid) {
+				const row = {
+					key: r.key, stars: repo?.stargazerCount ?? 0, pushed_at: repo?.pushedAt ?? null,
+					archived: repo?.isArchived ?? false,
+					fork_of: repo?.parent ? `github.com/${repo.parent.nameWithOwner.toLowerCase()}` : null,
+					canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}${r.folder}` : null,
+					interface: null, interface_checked: !repo, missing: !repo
+				};
+				r.row = row;
+				stats.push(row);
+				if (!reviewStats.has(row.key)) { reviewStats.set(row.key, row); pendingStats.push(row); }
+			} else { metrics.count('github_metadata_checks_failed'); unanswered++; }
+			if (!repo) { metrics.count('github_history_checks_without_result'); return; }
+			if (r.state?.history) {
+				const date = r.state.history.date;
+				applyGithubDetails(r, { ...repo, code: { history: { nodes: date ? [{ committedDate: date }] : [] } } }, [], alias, true, false);
+				cacheHit('github_history');
+			}
+			if (r.state?.tree && r.row) {
+				applyGithubDetails(r, { ...repo, top: r.state.tree }, [], alias, false, true);
+				cacheHit('github_directory');
+			}
+			r.wantHistory = !r.state?.history;
+			r.wantTree = Boolean(r.row) && !r.state?.tree;
+			if (r.wantHistory || r.wantTree) detail.push(r);
+		});
+		// Follow-ups are pinned to the checked commit, never to a branch that may have moved.
+		// Save this batch before moving to the next metadata batch, including on cold starts.
+		if (detail.length) {
+			const finished = metrics.start('GitHub history + files', false);
+			metrics.count('github_history_checks_requested', detail.filter((r) => r.wantHistory).length);
+			const details = await sharedGithubChecks(detail, (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.path]), (members) => {
+				const r = members[0];
+				return `nameWithOwner ${members.some((m) => m.wantHistory) ? githubCodeQuery(r.readRef, r.path) : ''} ${members.some((m) => m.wantTree) ? `top: object(expression: ${JSON.stringify(`${r.readRef}:${r.path}`)}) { ... on Tree { oid entries { name type oid } } }` : ''}`;
+			}, (query) => github(query, 'GitHub history + files'), (saved) => metrics.count('github_detail_fields_shared', saved));
+			if (details) detail.forEach((r, n) => { applyGithubDetails(r, details.data[`r${n}`], details.errors, `r${n}`, r.wantHistory, r.wantTree); queueCache(r); });
+			else {
+				metrics.count('github_history_checks_without_result', detail.filter((r) => r.wantHistory).length);
+				metrics.count('github_directory_checks_failed', detail.filter((r) => r.wantTree).length);
+			}
+			finished();
+		}
+		await saveProgress();
 		metrics.progress('GitHub metadata', metadataCompleted, repos.length);
-		continue;
 	}
-	const detail = [];
-	const { data, gone, errors } = answer;
-	batch.forEach((r, n) => {
-		const alias = `r${n}`;
-		const repo = data[alias];
-		if (!repo && !gone.has(alias)) { metrics.count('github_metadata_checks_failed'); return unanswered++; }
-		if (repo) {
-			r.state = !fieldFailed(errors, [alias, r.headField]) ? advanceGithubCache(r.previous, r.scope, repo.id, repo.nameWithOwner, repo[r.headField]?.oid) : undefined;
-			r.readRef = r.state?.head ?? r.ref;
-		}
-		const valid = !repo || !['nameWithOwner', 'stargazerCount', 'pushedAt', 'isArchived', 'parent'].some((field) => fieldFailed(errors, [alias, field]) || !(field in repo));
-		if (valid) {
-			const row = {
-				key: r.key, stars: repo?.stargazerCount ?? 0, pushed_at: repo?.pushedAt ?? null,
-				archived: repo?.isArchived ?? false,
-				fork_of: repo?.parent ? `github.com/${repo.parent.nameWithOwner.toLowerCase()}` : null,
-				canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}${r.folder}` : null,
-				interface: null, interface_checked: !repo, missing: !repo
-			};
-			r.row = row;
-			stats.push(row);
-			if (!reviewStats.has(row.key)) { reviewStats.set(row.key, row); pendingStats.push(row); }
-		} else { metrics.count('github_metadata_checks_failed'); unanswered++; }
-		if (!repo) { metrics.count('github_history_checks_without_result'); return; }
-		if (r.state?.history) {
-			const date = r.state.history.date;
-			applyGithubDetails(r, { ...repo, code: { history: { nodes: date ? [{ committedDate: date }] : [] } } }, [], alias, true, false);
-			cacheHit('github_history');
-		}
-		if (r.state?.tree && r.row) {
-			applyGithubDetails(r, { ...repo, top: r.state.tree }, [], alias, false, true);
-			cacheHit('github_directory');
-		}
-		r.wantHistory = !r.state?.history;
-		r.wantTree = Boolean(r.row) && !r.state?.tree;
-		if (r.wantHistory || r.wantTree) detail.push(r);
-	});
-	// Follow-ups are pinned to the checked commit, never to a branch that may have moved.
-	// Save this batch before moving to the next metadata batch, including on cold starts.
-	if (detail.length) {
-		const finished = metrics.start('GitHub history + files', false);
-		metrics.count('github_history_checks_requested', detail.filter((r) => r.wantHistory).length);
-		const details = await sharedGithubChecks(detail, (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.path]), (members) => {
+	finishedMetadata();
+
+	// Second pass: read those .toc files for the "## Interface:" line.
+	const finishedToc = metrics.start('GitHub .toc');
+	const tocKey = (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.paths]);
+	const tocGroups = groupChecks(withToc, tocKey);
+	let tocCompleted = 0;
+	for (let i = 0; i < tocGroups.length; i += TOC_BATCH) {
+		const batch = tocGroups.slice(i, i + TOC_BATCH).flat();
+		tocCompleted += batch.length;
+		metrics.count('github_toc_files_requested', batch.reduce((n, r) => n + r.paths.length, 0));
+		const answer = await sharedGithubChecks(batch, tocKey, (members) => {
 			const r = members[0];
-			return `nameWithOwner ${members.some((m) => m.wantHistory) ? githubCodeQuery(r.readRef, r.path) : ''} ${members.some((m) => m.wantTree) ? `top: object(expression: ${JSON.stringify(`${r.readRef}:${r.path}`)}) { ... on Tree { oid entries { name type oid } } }` : ''}`;
-		}, (query) => github(query, 'GitHub history + files'), (saved) => metrics.count('github_detail_fields_shared', saved));
-		if (details) detail.forEach((r, n) => { applyGithubDetails(r, details.data[`r${n}`], details.errors, `r${n}`, r.wantHistory, r.wantTree); queueCache(r); });
-		else {
-			metrics.count('github_history_checks_without_result', detail.filter((r) => r.wantHistory).length);
-			metrics.count('github_directory_checks_failed', detail.filter((r) => r.wantTree).length);
+			return r.paths.map((p, f) => `f${f}: object(expression: ${JSON.stringify(`${r.readRef}:${p}`)}) { ... on Blob { oid text } }`).join(' ');
+		}, (query) => github(query, 'GitHub .toc'), (saved) => metrics.count('github_toc_fields_shared', saved));
+		// Other facts can still be stored, but incomplete file reads cannot clear a game version.
+		if (!answer) {
+			for (const r of batch) r.row.interface_checked = false;
+			unanswered += batch.length;
+			metrics.count('github_toc_checks_failed', batch.length);
+			metrics.progress('GitHub .toc', tocCompleted, withToc.length);
+			continue;
 		}
-		finished();
-	}
-	await saveProgress();
-	metrics.progress('GitHub metadata', metadataCompleted, repos.length);
-}
-finishedMetadata();
-
-// Second pass: read those .toc files for the "## Interface:" line.
-const finishedToc = metrics.start('GitHub .toc');
-const tocKey = (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.paths]);
-const tocGroups = groupChecks(withToc, tocKey);
-let tocCompleted = 0;
-for (let i = 0; i < tocGroups.length; i += TOC_BATCH) {
-	const batch = tocGroups.slice(i, i + TOC_BATCH).flat();
-	tocCompleted += batch.length;
-	metrics.count('github_toc_files_requested', batch.reduce((n, r) => n + r.paths.length, 0));
-	const answer = await sharedGithubChecks(batch, tocKey, (members) => {
-		const r = members[0];
-		return r.paths.map((p, f) => `f${f}: object(expression: ${JSON.stringify(`${r.readRef}:${p}`)}) { ... on Blob { oid text } }`).join(' ');
-	}, (query) => github(query, 'GitHub .toc'), (saved) => metrics.count('github_toc_fields_shared', saved));
-	// Other facts can still be stored, but incomplete file reads cannot clear a game version.
-	if (!answer) {
-		for (const r of batch) r.row.interface_checked = false;
-		unanswered += batch.length;
-		metrics.count('github_toc_checks_failed', batch.length);
+		const { data, errors } = answer;
+		batch.forEach((r, n) => {
+			r.row.interface_checked = r.paths.every((_, f) => !fieldFailed(errors, [`r${n}`, `f${f}`]) &&
+				(data[`r${n}`]?.[`f${f}`] === null || typeof data[`r${n}`]?.[`f${f}`]?.text === 'string'));
+			if (!r.row.interface_checked) {
+				metrics.count('github_toc_checks_failed');
+				return;
+			}
+			const found = r.paths
+				.map((_, f) => /^##\s*Interface:\s*(\d+)/im.exec(data[`r${n}`]?.[`f${f}`]?.text ?? '')?.[1])
+				.filter(Boolean)
+				.map(Number);
+			// A repository can ship .toc files for several clients; the 1.12 one is what matters.
+			if (found.length) r.row.interface = found.includes(11200) ? 11200 : found[0];
+			if (r.state && r.signature) {
+				r.state.toc = { signature: r.signature, interface: r.row.interface,
+					files: r.paths.map((path, f) => ({ path, oid: data[`r${n}`]?.[`f${f}`]?.oid ?? null })) };
+				queueCache(r.source);
+			}
+		});
+		for (const { row } of batch) {
+			if (reviewStats.get(row.key) === row && row.interface_checked) pendingStats.push(row);
+		}
+		await saveProgress();
 		metrics.progress('GitHub .toc', tocCompleted, withToc.length);
-		continue;
 	}
-	const { data, errors } = answer;
-	batch.forEach((r, n) => {
-		r.row.interface_checked = r.paths.every((_, f) => !fieldFailed(errors, [`r${n}`, `f${f}`]) &&
-			(data[`r${n}`]?.[`f${f}`] === null || typeof data[`r${n}`]?.[`f${f}`]?.text === 'string'));
-		if (!r.row.interface_checked) {
-			metrics.count('github_toc_checks_failed');
-			return;
-		}
-		const found = r.paths
-			.map((_, f) => /^##\s*Interface:\s*(\d+)/im.exec(data[`r${n}`]?.[`f${f}`]?.text ?? '')?.[1])
-			.filter(Boolean)
-			.map(Number);
-		// A repository can ship .toc files for several clients; the 1.12 one is what matters.
-		if (found.length) r.row.interface = found.includes(11200) ? 11200 : found[0];
-		if (r.state && r.signature) {
-			r.state.toc = { signature: r.signature, interface: r.row.interface,
-				files: r.paths.map((path, f) => ({ path, oid: data[`r${n}`]?.[`f${f}`]?.oid ?? null })) };
-			queueCache(r.source);
-		}
-	});
-	for (const { row } of batch) {
-		if (reviewStats.get(row.key) === row && row.interface_checked) pendingStats.push(row);
-	}
-	await saveProgress();
-	metrics.progress('GitHub .toc', tocCompleted, withToc.length);
-}
-finishedToc();
+	finishedToc();
 
-// Third pass: the READMEs of queued entries that have no screenshot, for the pictures in
-// them. Kept to the sites a screenshot may be on, like any other. An entry GitHub gave
-// no answer about is left for the next run.
-const finishedReadme = metrics.start('GitHub README');
-const readmeKey = (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.file]);
-const readmeGroups = groupChecks(withReadme, readmeKey);
-let readmeCompleted = 0;
-for (let i = 0; i < readmeGroups.length; i += README_BATCH) {
-	const batch = readmeGroups.slice(i, i + README_BATCH).flat();
-	readmeCompleted += batch.length;
-	metrics.count('github_readme_checks_requested', batch.length);
-	const answer = await sharedGithubChecks(batch, readmeKey, (members) => {
-		const r = members[0];
-		return `readme: object(expression: ${JSON.stringify(`${r.readRef}:${r.file}`)}) { ... on Blob { oid text } }`;
-	}, (query) => github(query, 'GitHub README'), (saved) => metrics.count('github_readme_fields_shared', saved));
-	if (!answer) {
-		metrics.count('github_readme_checks_failed', batch.length);
+	// Third pass: the READMEs of queued entries that have no screenshot, for the pictures in
+	// them. Kept to the sites a screenshot may be on, like any other. An entry GitHub gave
+	// no answer about is left for the next run.
+	const finishedReadme = metrics.start('GitHub README');
+	const readmeKey = (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.file]);
+	const readmeGroups = groupChecks(withReadme, readmeKey);
+	let readmeCompleted = 0;
+	for (let i = 0; i < readmeGroups.length; i += README_BATCH) {
+		const batch = readmeGroups.slice(i, i + README_BATCH).flat();
+		readmeCompleted += batch.length;
+		metrics.count('github_readme_checks_requested', batch.length);
+		const answer = await sharedGithubChecks(batch, readmeKey, (members) => {
+			const r = members[0];
+			return `readme: object(expression: ${JSON.stringify(`${r.readRef}:${r.file}`)}) { ... on Blob { oid text } }`;
+		}, (query) => github(query, 'GitHub README'), (saved) => metrics.count('github_readme_fields_shared', saved));
+		if (!answer) {
+			metrics.count('github_readme_checks_failed', batch.length);
+			metrics.progress('GitHub README', readmeCompleted, withReadme.length);
+			continue;
+		}
+		batch.forEach((r, n) => {
+			const repo = answer.data[`r${n}`];
+			if (!repo || fieldFailed(answer.errors, [`r${n}`, 'readme']) ||
+				(repo.readme !== null && typeof repo.readme?.text !== 'string')) {
+				metrics.count('github_readme_checks_failed');
+				return;
+			}
+			// Where the README is served from, so that a picture kept next to it resolves.
+			const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
+			const found = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
+			if (r.state && gitOid(r.fileOid)) {
+				r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, 5) };
+				queueCache(r.source);
+			}
+			// The wiki's first, since someone chose those; then the README's, each picture once.
+			savePictures(r.key, [...new Set([...r.wiki, ...found])].slice(0, 5));
+		});
+		await saveProgress();
 		metrics.progress('GitHub README', readmeCompleted, withReadme.length);
-		continue;
 	}
-	batch.forEach((r, n) => {
-		const repo = answer.data[`r${n}`];
-		if (!repo || fieldFailed(answer.errors, [`r${n}`, 'readme']) ||
-			(repo.readme !== null && typeof repo.readme?.text !== 'string')) {
-			metrics.count('github_readme_checks_failed');
-			return;
-		}
-		// Where the README is served from, so that a picture kept next to it resolves.
-		const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
-		const found = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
-		if (r.state && gitOid(r.fileOid)) {
-			r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, 5) };
-			queueCache(r.source);
-		}
-		// The wiki's first, since someone chose those; then the README's, each picture once.
-		savePictures(r.key, [...new Set([...r.wiki, ...found])].slice(0, 5));
-	});
-	await saveProgress();
-	metrics.progress('GitHub README', readmeCompleted, withReadme.length);
+	finishedReadme();
 }
-finishedReadme();
-// The other sites, a few repositories at a time and each with a handful of small
-// requests: they are asked without a login, as any visitor may, and are owed good manners.
-// One shared request per endpoint, including in-flight work from this wave. Conditional
-// repository responses persist independently of branch results in the existing private cache.
-const forgeRequests = createForgeRequests({
-	previous: elsewhere.flatMap((r) => r.cache?.http?.endpoint === forgeRepositoryEndpoint(r.place) ? [r.cache.http] : []),
-	observe: (url) => metrics.observe(new URL(url).hostname === 'gitlab.com' ? 'GitLab' : new URL(url).hostname === 'codeberg.org' ? 'Codeberg' : 'Gitea'),
-	hit: cacheHit
-});
 
-let silent = 0;
-const finishedOtherHosts = metrics.start('Other hosts');
-for (let i = 0; i < elsewhere.length; i += 4) {
-	await Promise.all(
-		elsewhere.slice(i, i + 4).map(async ({ key, url, place, readme, wiki, cache }) => {
-			let branchState;
-			const facts = await askForge(place, forgeRequests.ask, readme, {
-				previous: cache, save: (state) => { branchState = state; }, hit: cacheHit
-			});
-			const http = forgeRequests.metadata(forgeRepositoryEndpoint(place));
-			const state = { ...(branchState ?? cache ?? { version: 1, kind: 'forge-http' }) };
-			delete state.http;
-			if (http) state.http = http;
-			if ((branchState || http || cache?.http) && JSON.stringify(state) !== JSON.stringify(cache)) pendingCache.push({ url, state });
-			// No answer: what was stored last time stays, and its pictures wait for the next run.
-			if (!facts) {
-				metrics.count('other_host_metadata_checks_failed');
-				return silent++;
+async function checkOtherHosts() {
+	// Each host has its own bounded queue; a slow check cannot hold up another host
+	// or a free worker. Requests within each repository remain sequential.
+	// One shared request per endpoint, including in-flight work. Conditional
+	// repository responses persist independently of branch results in the existing private cache.
+	const forgeRequests = createForgeRequests({
+		previous: elsewhere.flatMap((r) => r.cache?.http?.endpoint === forgeRepositoryEndpoint(r.place) ? [r.cache.http] : []),
+		observe: (url) => metrics.observe(new URL(url).hostname === 'gitlab.com' ? 'GitLab' : new URL(url).hostname === 'codeberg.org' ? 'Codeberg' : 'Gitea'),
+		hit: cacheHit
+	});
+
+	let silent = 0;
+	const finishedOtherHosts = metrics.start('Other hosts');
+	let completed = 0;
+	const queues = ['gitlab.com', 'codeberg.org', 'gitea.com'].map((host) =>
+		runWorkers(elsewhere.filter((r) => r.place.host === host), FORGE_WORKERS, async ({ key, url, place, readme, wiki, cache }) => {
+			try {
+				let branchState;
+				const facts = await askForge(place, forgeRequests.ask, readme, {
+					previous: cache, save: (state) => { branchState = state; }, hit: cacheHit
+				});
+				const http = forgeRequests.metadata(forgeRepositoryEndpoint(place));
+				const state = { ...(branchState ?? cache ?? { version: 1, kind: 'forge-http' }) };
+				delete state.http;
+				if (http) state.http = http;
+				if ((branchState || http || cache?.http) && JSON.stringify(state) !== JSON.stringify(cache)) pendingCache.push({ url, state });
+				// No answer: what was stored last time stays, and its pictures wait for the next run.
+				if (!facts) {
+					metrics.count('other_host_metadata_checks_failed');
+					return silent++;
+				}
+				if (!facts.code_update) metrics.count('other_host_history_checks_without_result');
+				if (!facts.interface_checked) metrics.count('other_host_toc_checks_failed');
+				if (readme && !facts.readme_checked) metrics.count('other_host_readme_checks_failed');
+				if (facts.code_update) codeUpdates.push({ url, date: facts.code_update.date, history_url: facts.code_update.url });
+				const asked = `${place.host}/${place.project}`.toLowerCase();
+				const now = `${place.host}/${facts.project}`.toLowerCase();
+				const row = {
+					key,
+					stars: facts.stars,
+					pushed_at: facts.pushed_at,
+					archived: facts.archived,
+					fork_of: facts.fork_of ? `${place.host}/${facts.fork_of}`.toLowerCase() : null,
+					// A renamed or moved repository answers with its current address. What the key
+					// has after the repository stays on it.
+					canonical: facts.missing ? null : now !== asked && key.startsWith(asked) ? now + key.slice(asked.length) : key,
+					interface: facts.interface,
+					interface_checked: facts.interface_checked,
+					missing: facts.missing
+				};
+				stats.push(row);
+				if (!reviewStats.has(key)) {
+					reviewStats.set(key, row);
+					pendingStats.push(row);
+				}
+				if (!readme || facts.missing || !facts.readme_checked) return;
+				const found = facts.readme ? imagesIn(facts.readme.text, facts.readme.base).filter((image) => hostAllowed(image, 'image')) : [];
+				savePictures(key, [...new Set([...wiki, ...found])].slice(0, 5));
+			} finally {
+				await saveProgress();
+				metrics.progress('Other hosts', ++completed, elsewhere.length);
 			}
-			if (!facts.code_update) metrics.count('other_host_history_checks_without_result');
-			if (!facts.interface_checked) metrics.count('other_host_toc_checks_failed');
-			if (readme && !facts.readme_checked) metrics.count('other_host_readme_checks_failed');
-			if (facts.code_update) codeUpdates.push({ url, date: facts.code_update.date, history_url: facts.code_update.url });
-			const asked = `${place.host}/${place.project}`.toLowerCase();
-			const now = `${place.host}/${facts.project}`.toLowerCase();
-			const row = {
-				key,
-				stars: facts.stars,
-				pushed_at: facts.pushed_at,
-				archived: facts.archived,
-				fork_of: facts.fork_of ? `${place.host}/${facts.fork_of}`.toLowerCase() : null,
-				// A renamed or moved repository answers with its current address. What the key
-				// has after the repository stays on it.
-				canonical: facts.missing ? null : now !== asked && key.startsWith(asked) ? now + key.slice(asked.length) : key,
-				interface: facts.interface,
-				interface_checked: facts.interface_checked,
-				missing: facts.missing
-			};
-			stats.push(row);
-			if (!reviewStats.has(key)) {
-				reviewStats.set(key, row);
-				pendingStats.push(row);
-			}
-			if (!readme || facts.missing || !facts.readme_checked) return;
-			const found = facts.readme ? imagesIn(facts.readme.text, facts.readme.base).filter((image) => hostAllowed(image, 'image')) : [];
-			savePictures(key, [...new Set([...wiki, ...found])].slice(0, 5));
 		})
 	);
-	await saveProgress();
-	metrics.progress('Other hosts', Math.min(i + 4, elsewhere.length), elsewhere.length);
+	const outcomes = await Promise.allSettled(queues);
+	finishedOtherHosts();
+	if (elsewhere.length) {
+		console.log(
+			`Asked GitLab, Codeberg and gitea.com about ${elsewhere.length} repositories` +
+				(silent ? `; ${silent} got no answer, and what was known about those is kept.` : '.')
+		);
+	}
+
+	for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
 }
-finishedOtherHosts();
-if (elsewhere.length) {
-	console.log(
-		`Asked GitLab, Codeberg and gitea.com about ${elsewhere.length} repositories` +
-			(silent ? `; ${silent} got no answer, and what was known about those is kept.` : '.')
-	);
+
+// Start every independent host before waiting for any of them. Settle all work so
+// an unexpected host failure cannot discard other hosts' completed checkpoints.
+const outcomes = await Promise.allSettled([checkGithub(), checkOtherHosts()]);
+for (const outcome of outcomes) if (outcome.status === 'rejected') {
+	console.error('Repository processing failed: ' + outcome.reason.message);
+	process.exitCode = 1;
 }
+await saveProgress();
 
 console.log(`Saved ${saved.stats} repository fact records, commit dates for ${saved.dates} addon links, and ${saved.pictures} completed screenshot checks; unanswered checks retain their last known facts.`);
 
