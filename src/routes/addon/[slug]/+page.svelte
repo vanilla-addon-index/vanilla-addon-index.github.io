@@ -31,7 +31,7 @@
 	let kept = $state.raw<Addon>();
 	let leaving = $state(false);
 	const addon = $derived(leaving ? kept : found);
-	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 
 	let error = $state('');
 	let report = $state<ReturnType<typeof ReportDialog>>();
@@ -286,8 +286,18 @@
 						<dd class="truncate"><UserLink name={addon.owner_name} /></dd>
 					</div>
 				{/if}
-				{@render fact('Added', date(addon.created_at))}
-				{@render fact('Updated', date(addon.updated_at))}
+				<div class="flex justify-between gap-4 border-b border-border px-3 py-1.5 last:border-b-0">
+					<dt class="text-muted">Last code update</dt>
+					<dd>
+						{#if addon.code_update}
+							<a href={addon.code_update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history">
+								<time datetime={addon.code_update.date}>{date(addon.code_update.date)}</time>
+							</a>
+						{:else}
+							<span class="text-muted">Unknown</span>
+						{/if}
+					</dd>
+				</div>
 			</dl>
 
 			{#each suggestions as suggestion (suggestion.target_id)}

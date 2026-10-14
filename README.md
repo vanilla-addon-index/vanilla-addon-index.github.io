@@ -80,6 +80,10 @@ An addon posted between two deploys shows in the list and in search for everyone
 
 ## Keeping it running
 
+Addon pages show **Last code update**, the latest commit on the primary link's branch and, when present, addon folder. Nightly reads this from GitHub, GitLab, Codeberg and gitea.com; each fork and branch keeps its own date. The date and link to commit history are included in `addons.json`, so visitors can read them from the snapshot. Failed checks retain the last known date; links with no known commit date show **Unknown**. Repository activity such as issues or pushes to other branches never supplies this public date. Listing posts and edits remain in History, without an entry for each automatic repository check.
+
+After first deploying the code-update migration, run Nightly on `main` to populate the dates and refresh the snapshot. Existing repository activity dates are not used as a substitute for verified commit dates.
+
 ### The daily timers
 
 Nightly, Refresh and Backup run on a timer, and GitHub switches the timers of a public repository off when it has had no activity for 60 days. Nothing commits to `main` by itself, so Nightly starts each run by marking all three workflows as enabled, which starts the 60 days again.

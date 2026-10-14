@@ -3,6 +3,8 @@
 // Nothing here fetches by itself: whoever calls hands in the function that does, so the
 // job decides about timeouts and manners, and a test can answer in a site's place.
 
+import type { CodeUpdate } from './types.ts';
+
 const GITEA_HOSTS = ['codeberg.org', 'gitea.com'];
 // The interface number a 1.12 addon declares in its .toc file.
 const VANILLA_INTERFACE = 11200;
@@ -30,6 +32,7 @@ export interface ForgeFacts {
 	project: string;
 	stars: number;
 	pushed_at: string | null;
+	code_update: CodeUpdate | null;
 	archived: boolean;
 	/** "owner/repo" of the repository this one was forked from. */
 	fork_of: string | null;
@@ -117,7 +120,9 @@ const SITES = {
 			branch: (r.default_branch as string | undefined) ?? '',
 			parent: (r.forked_from_project?.path_with_namespace as string | undefined) ?? null
 		}),
-		commits: (api: string, ref: string) => `${api}/repository/commits?per_page=1&ref_name=${encodeURIComponent(ref)}`,
+		commits: (api: string, ref: string, path: string) => `${api}/repository/commits?per_page=1&ref_name=${encodeURIComponent(ref)}${path ? `&path=${encodeURIComponent(path)}` : ''}`,
+		history: (p: ForgePlace, project: string, ref: string) =>
+			`https://${p.host}/${encodePath(project)}/-/commits/${encodeURIComponent(ref)}${p.path ? `/${encodePath(p.path)}` : ''}`,
 		commitDate: (c: Record<string, any>) => c?.committed_date as string | undefined,
 		list: (api: string, ref: string, path: string) =>
 			`${api}/repository/tree?per_page=100&ref=${encodeURIComponent(ref)}${path ? `&path=${encodeURIComponent(path)}` : ''}`,
@@ -138,8 +143,10 @@ const SITES = {
 			branch: (r.default_branch as string | undefined) ?? '',
 			parent: (r.parent?.full_name as string | undefined) ?? null
 		}),
-		commits: (api: string, ref: string) =>
-			`${api}/commits?limit=1&stat=false&verification=false&files=false&sha=${encodeURIComponent(ref)}`,
+		commits: (api: string, ref: string, path: string) =>
+			`${api}/commits?limit=1&stat=false&verification=false&files=false&sha=${encodeURIComponent(ref)}${path ? `&path=${encodeURIComponent(path)}` : ''}`,
+		history: (p: ForgePlace, project: string, ref: string) =>
+			`https://${p.host}/${encodePath(project)}/commits/${p.refKind}/${encodeURIComponent(ref)}${p.path ? `/${encodePath(p.path)}` : ''}`,
 		commitDate: (c: Record<string, any>) => (c?.commit?.committer?.date ?? c?.created) as string | undefined,
 		list: (api: string, ref: string, path: string) => `${api}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
 		entry: (e: Record<string, any>): Entry => ({ name: String(e.name), folder: e.type === 'dir' }),
@@ -160,7 +167,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 	const answer = await ask(site.repo(place), 'json');
 	if (!answer) return null;
 	if (answer.status === 404) {
-		return { project: place.project, stars: 0, pushed_at: null, archived: false, fork_of: null, interface: null, missing: true, readme: null };
+		return { project: place.project, stars: 0, pushed_at: null, code_update: null, archived: false, fork_of: null, interface: null, missing: true, readme: null };
 	}
 	if (answer.status !== 200 || !answer.body || typeof answer.body !== 'object') return null;
 
@@ -172,6 +179,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 		project: repo.project,
 		stars: repo.stars,
 		pushed_at: repo.active,
+		code_update: null,
 		archived: repo.archived,
 		fork_of: repo.parent,
 		interface: null,
@@ -182,11 +190,13 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false):
 	const ref = place.ref || repo.branch;
 	if (!ref) return facts;
 
-	// When code last went in. The site's own "last active" also counts issues and the
-	// like, so it only stands in when the commits cannot be read.
-	const commits = await ask(site.commits(api, ref), 'json');
-	const last = Array.isArray(commits?.body) ? site.commitDate(commits.body[0]) : undefined;
-	if (last) facts.pushed_at = last;
+	// The public date only uses commits; general activity remains an admin hint.
+	const commits = await ask(site.commits(api, ref, place.path), 'json');
+	const last = commits?.status === 200 && Array.isArray(commits.body) ? site.commitDate(commits.body[0]) : undefined;
+	if (last && Number.isFinite(Date.parse(last))) {
+		facts.pushed_at = last;
+		facts.code_update = { date: last, url: site.history(place, repo.project, ref) };
+	}
 
 	const listing = await ask(site.list(api, ref, place.path), 'json');
 	const entries = Array.isArray(listing?.body) ? listing.body.map(site.entry) : [];

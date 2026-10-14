@@ -126,6 +126,9 @@ where key = ${quote(queued[1].key)};
 update public.import_queue set name = 'BagHelper' where key = ${quote(queued[2].key)};
 
 -- Seeding is not something that happened on the site.
+insert into public.repo_code_updates (url, committed_at, history_url)
+select repo_url, '2024-06-14T14:00:48Z', repo_url || '/commits/HEAD' from public.addons where name = 'RaidHelper';
+update public.addons set code_update = null where name = 'RaidHelper';
 delete from public.activity_log;
 `;
 }

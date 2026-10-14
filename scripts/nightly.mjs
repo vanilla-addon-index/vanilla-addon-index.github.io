@@ -17,6 +17,7 @@
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+import { githubCodeQuery, githubCodeUpdate } from '../src/lib/code-updates.ts';
 import { askForge, forgePlace } from '../src/lib/forges.ts';
 import { imagesIn, uncamo } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
@@ -142,18 +143,18 @@ for (let i = 0; i < toLookAt.length; i += 10) {
 for (const { key, url, readme } of links) {
 	const place = githubPlace(url);
 	const other = place ? null : forgePlace(url);
-	if (other && !elsewhere.some((r) => r.key === key)) {
-		elsewhere.push({ key, place: other, readme, wiki: wikiPictures.get(key) ?? [] });
+	if (other && !elsewhere.some((r) => r.url === url)) {
+		elsewhere.push({ key, url, place: other, readme, wiki: wikiPictures.get(key) ?? [] });
 	}
 	// On a site that is not asked: there is no README to read, so the pictures that are
 	// left are it.
 	if (!place && !other && readme) pictures.push({ key, images: wikiPictures.get(key) ?? [] });
-	if (!place || repos.some((r) => r.key === key)) continue;
+	if (!place || repos.some((r) => r.url === url)) continue;
 	// What the key has after the repository: the folder, as the stored address needs it.
 	const folder = /^github\.com\/[^/]+\/[^/]+(\/.+)?$/.exec(key)?.[1] ?? '';
 	// "readme": a queued entry whose pictures have not been looked at yet; "wiki": the
 	// ones it has from the wiki that still load.
-	repos.push({ key, ...place, folder, ref: place.ref || 'HEAD', readme, wiki: wikiPictures.get(key) ?? [] });
+	repos.push({ key, url, ...place, folder, ref: place.ref || 'HEAD', readme, wiki: wikiPictures.get(key) ?? [] });
 }
 
 // One request to GitHub, tried up to three times: it now and then fails to answer a large
@@ -192,6 +193,7 @@ const repository = (r, n, fields) =>
 
 // First pass: the facts, and what sits at the top of each repository.
 const stats = [];
+const codeUpdates = [];
 const withToc = [];
 // Queued entries whose README is to be read.
 const withReadme = [];
@@ -205,7 +207,7 @@ for (let i = 0; i < repos.length; i += BATCH) {
 				repository(
 					r,
 					n,
-					`nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } top: object(expression: ${JSON.stringify(`${r.ref}:${r.path}`)}) { ... on Tree { entries { name type } } }`
+					`nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${githubCodeQuery(r.ref, r.path)} top: object(expression: ${JSON.stringify(`${r.ref}:${r.path}`)}) { ... on Tree { entries { name type } } }`
 				)
 			)
 			.join(' ')}}`
@@ -218,6 +220,8 @@ for (let i = 0; i < repos.length; i += BATCH) {
 	const { data, gone } = answer;
 	batch.forEach((r, n) => {
 		const repo = data[`r${n}`];
+		const update = repo ? githubCodeUpdate(repo, r.ref, r.path) : null;
+		if (update) codeUpdates.push({ url: r.url, date: update.date, history_url: update.url });
 		// No answer about this one: what was stored about it last time stays as it is,
 		// rather than a live repository being marked as gone.
 		if (!repo && !gone.has(`r${n}`)) return unanswered++;
@@ -339,10 +343,11 @@ async function ask(url, as) {
 let silent = 0;
 for (let i = 0; i < elsewhere.length; i += 4) {
 	await Promise.all(
-		elsewhere.slice(i, i + 4).map(async ({ key, place, readme, wiki }) => {
+		elsewhere.slice(i, i + 4).map(async ({ key, url, place, readme, wiki }) => {
 			const facts = await askForge(place, ask, readme);
 			// No answer: what was stored last time stays, and its pictures wait for the next run.
 			if (!facts) return silent++;
+			if (facts.code_update) codeUpdates.push({ url, date: facts.code_update.date, history_url: facts.code_update.url });
 			const asked = `${place.host}/${place.project}`.toLowerCase();
 			const now = `${place.host}/${facts.project}`.toLowerCase();
 			stats.push({
@@ -380,7 +385,12 @@ if (pictures.length) {
 	}
 }
 
-await db('store_repo_stats', { stats });
+// Different branches share a review key, but retain their own public commit dates.
+const reviewStats = new Map();
+for (const row of stats) if (!reviewStats.has(row.key)) reviewStats.set(row.key, row);
+await db('store_repo_stats', { stats: [...reviewStats.values()] });
+await db('store_code_updates', { updates: codeUpdates });
+console.log(`Stored commit dates for ${codeUpdates.length} addon links; unanswered checks retain their last known date.`);
 console.log(
 	`Checked ${stats.length} repositories: ${stats.filter((s) => s.missing).length} no longer exist, ` +
 		`${stats.filter((s) => s.canonical && s.canonical !== s.key).length} have moved, ` +
