@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { advanceGithubCache, githubCache, githubFiles, githubScope } from '../src/lib/nightly-cache.ts';
+import { linkKey } from '../src/lib/links.ts';
 
 const hash = (char) => char.repeat(40);
 const url = 'https://github.com/a/addon';
@@ -127,4 +128,68 @@ test('cache scope preserves branch and folder case, repository identity, and nes
 	const selected = githubFiles([{name:'Nested', type:'tree', oid:hash('b')}], 'Folder', 4);
 	assert.deepEqual(selected.paths, ['Folder/Nested/Nested.toc']);
 	assert.match(selected.signature, new RegExp(hash('b')));
+});
+
+test('shared repository metadata preserves exact branch and folder dates under original URL spellings', () => {
+	const addresses = [url, url + '/tree/vanilla', url + '/tree/HEAD/One', url + '/tree/HEAD/Two', 'https://www.github.com/A/Addon.git'];
+	const options = {links:addresses.map((address) => ({key:linkKey(address),url:address,readme:false})),
+		branchHeads:{HEAD:hash('a'),vanilla:hash('e')}, dates:{[hash('e')]:'2025-01-01T00:00:00Z'},
+		pathDates:{One:'2020-01-01T00:00:00Z',Two:'2019-01-01T00:00:00Z'}};
+	const cold = run(options);
+	const query = cold.calls.find((c) => c.name === 'metadata').query;
+	assert.equal((query.match(/repository\(/g) ?? []).length,1);
+	assert.equal((query.match(/object\(expression:/g) ?? []).length,2); // HEAD and vanilla, regardless of folders.
+	const dates = cold.calls.filter((c) => c.name === 'store_code_updates').flatMap((c) => c.args.updates);
+	assert.deepEqual(dates.map((d) => d.url),addresses);
+	assert.deepEqual(dates.map((d) => d.date.slice(0,4)),['2024','2025','2020','2019','2024']);
+	assert.equal(cold.metrics.counters.github_metadata_fields_shared,4);
+	assert.equal(cold.metrics.counters.github_detail_fields_shared,1);
+	const warm = run({...options,cache:cold.cache});
+	assert.equal(count(warm,'metadata'),1);
+	assert.equal(count(warm,'details'),0);
+	assert.equal(count(warm,'toc'),0);
+});
+
+test('equivalent spellings share detail and file work even across the former batch boundaries', () => {
+	const links = Array.from({length:32},(_,i) => ({key:linkKey(url),url:url+'?source='+i,readme:true}));
+	const result = run({links});
+	for (const phase of ['metadata','details','toc','readme']) {
+		assert.equal(count(result,phase),1,phase);
+		assert.equal((result.calls.find((c) => c.name === phase).query.match(/repository\(/g) ?? []).length,1,phase);
+	}
+	assert.equal(Object.keys(result.cache).length,32);
+	assert.equal(result.calls.filter((c) => c.name === 'store_code_updates').flatMap((c) => c.args.updates).length,32);
+});
+
+test('REST repository validators persist through importer checkpoints and serve all links after 304', () => {
+	const addresses = ['https://codeberg.org/a/Addon','https://codeberg.org/a/Addon/src/branch/vanilla','https://codeberg.org/a/Addon/src/branch/vanilla/Folder'];
+	const options = {links:addresses.map((address) => ({key:linkKey(address),url:address,readme:false})),
+		branchHeads:{main:hash('a'),vanilla:hash('e')},dates:{[hash('e')]:'2025-01-01T00:00:00Z'}};
+	const cold = run(options);
+	const metadata = cold.calls.filter((c) => c.name === 'rest' && c.url.endsWith('/repos/a/Addon'));
+	assert.equal(metadata.length,1);
+	for (const address of addresses) assert.equal(cold.cache[address].http.etag,'"repo-v1"');
+	const dates = cold.calls.filter((c) => c.name === 'store_code_updates').flatMap((c) => c.args.updates);
+	assert.deepEqual(dates.map((d) => d.url).sort(),addresses.toSorted());
+	assert.deepEqual(dates.map((d) => d.date.slice(0,4)).sort(),['2020','2024','2025']);
+	const warm = run({...options,cache:cold.cache,http304:true});
+	const requests = warm.calls.filter((c) => c.name === 'rest');
+	assert.equal(requests.length,3); // One conditional metadata request, two branch checks.
+	assert.equal(requests.find((c) => c.url.endsWith('/repos/a/Addon')).headers['If-None-Match'],'"repo-v1"');
+	assert.equal(warm.metrics.counters.rest_not_modified_cache_hits,1);
+	assert.ok(warm.metrics.counters.rest_shared_request_cache_hits >= 2);
+	const missing = run({...options,cache:cold.cache,httpMissing:true});
+	assert.ok(facts(missing).every((row) => row.missing));
+	for (const address of addresses) assert.equal(missing.cache[address].http,undefined);
+});
+
+test('REST validators can checkpoint independently when an empty repository has no branch cache', () => {
+	const address = 'https://codeberg.org/a/Addon';
+	const options = {emptyRepo:true,links:[{key:linkKey(address),url:address,readme:false}]};
+	const cold = run(options);
+	assert.equal(cold.cache[address].kind,'forge-http');
+	assert.equal(cold.cache[address].http.etag,'"repo-v1"');
+	const warm = run({...options,cache:cold.cache,http304:true});
+	assert.equal(warm.calls.filter((c) => c.name === 'rest').length,1);
+	assert.equal(facts(warm)[0].interface_checked,true);
 });

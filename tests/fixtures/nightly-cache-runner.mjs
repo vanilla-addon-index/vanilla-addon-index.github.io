@@ -7,7 +7,7 @@ const head = options.head ?? hash('a');
 const tree = options.tree ?? hash('b');
 const toc = options.toc ?? hash('c');
 const readme = options.readme ?? hash('d');
-const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 globalThis.fetch = async (url, init = {}) => {
 	if (url.includes('turtle-wow.fandom.com/api.php')) return json({ parse: { revid: 1, wikitext: '===Full Addons List===\n* [https://github.com/a/addon Addon] description\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections==' } });
 	if (url.includes('/rest/v1/rpc/')) {
@@ -21,27 +21,52 @@ globalThis.fetch = async (url, init = {}) => {
 		return json(0);
 	}
 	if (url === 'https://i.imgur.com/wiki.png') return new Response('', { status: 403 });
+	if (url.startsWith('https://codeberg.org/api/v1/')) {
+		calls.push({name:'rest',url,headers:init.headers});
+		if (url.endsWith('/repos/a/Addon')) {
+			if (options.http304) return new Response(null,{status:304});
+			if (options.httpMissing) return new Response(null,{status:404});
+			return json({id:1,full_name:'a/Addon',default_branch:options.emptyRepo ? '' : 'main',stars_count:options.stars ?? 3,archived:false,updated_at:'2026-10-14T12:00:00Z'},200,{etag:'"repo-v1"'});
+		}
+		if (url.includes('/commits?')) {
+			const ref = new URL(url).searchParams.get('sha');
+			const branchHead = options.branchHeads?.[ref] ?? head;
+			const date = new URL(url).searchParams.get('path') ? '2020-01-01T00:00:00Z' : options.dates?.[branchHead] ?? '2024-01-01T00:00:00Z';
+			return json([{sha:branchHead,commit:{committer:{date}}}]);
+		}
+		if (url.includes('/contents/')) return json([]);
+		throw new Error('Unexpected REST fixture endpoint: '+url);
+	}
 	if (url !== 'https://api.github.com/graphql') throw new Error('Unexpected fixture endpoint: ' + url);
 	const query = JSON.parse(init.body).query;
 	const phase = query.includes('stargazerCount') ? 'metadata' : query.includes('code:') || query.includes('top:') ? 'details' : query.includes('f0:') ? 'toc' : 'readme';
 	calls.push({ name: phase, query });
 	const data = {};
 	const errors = [];
-	for (const [, alias, owner, name] of query.matchAll(/(r\d+): repository\(owner: "([^"]+)", name: "([^"]+)"/g)) {
+	const aliases = [...query.matchAll(/(r\d+): repository\(owner: "([^"]+)", name: "([^"]+)"/g)];
+	for (const [index, match] of aliases.entries()) {
+		const [,alias,owner,name] = match;
+		const fragment = query.slice(match.index, aliases[index+1]?.index ?? query.length);
 		let value;
 		if (phase === 'metadata') value = {
-			id: options.identity ?? 'repo-' + owner + '/' + name,
-			nameWithOwner: options.canonical ?? owner + '/' + name, stargazerCount: options.stars ?? 3,
+			id: options.identity ?? 'repo-' + owner.toLowerCase() + '/' + name.toLowerCase(),
+			nameWithOwner: options.canonical ?? owner.toLowerCase() + '/' + name.toLowerCase(), stargazerCount: options.stars ?? 3,
 			pushedAt: '2026-01-01T00:00:00Z', isArchived: Boolean(options.archived), parent: null,
 			head: options.fail === 'head' ? null : { oid: head }
 		};
+		if (phase === 'metadata') for (const [,field,expression] of fragment.matchAll(/(head\d*): object\(expression: ("(?:[^"\\]|\\.)*")\)/g)) {
+			const ref = JSON.parse(expression);
+			value[field] = options.fail === 'head' ? null : {oid:options.branchHeads?.[ref] ?? head};
+		}
 		if (phase === 'metadata' && (options.missing || options.fail === 'metadata')) {
 			value = null;
 			errors.push({ type: options.missing ? 'NOT_FOUND' : 'INTERNAL', path: [alias] });
 		}
 		if (phase === 'details') {
-			value = { nameWithOwner: options.canonical ?? owner + '/' + name,
-				code: { history: { nodes: [{ committedDate: options.date ?? '2024-01-01T00:00:00Z' }] } },
+			const path = JSON.parse(/history\(first: 1, path: ("(?:[^"\\]|\\.)*")/.exec(fragment)?.[1] ?? '""');
+			const commit = JSON.parse(/code: object\(expression: ("(?:[^"\\]|\\.)*")/.exec(fragment)?.[1] ?? '""');
+			value = { nameWithOwner: options.canonical ?? owner.toLowerCase() + '/' + name.toLowerCase(),
+				code: { history: { nodes: [{ committedDate: options.pathDates?.[path] ?? options.dates?.[commit] ?? options.date ?? '2024-01-01T00:00:00Z' }] } },
 				top: options.empty ? { oid: tree, entries: [] } : { oid: tree, entries: [
 					{ name: 'Addon.toc', type: 'blob', oid: toc }, { name: 'README.md', type: 'blob', oid: readme }
 				] }
