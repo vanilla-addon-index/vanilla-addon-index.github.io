@@ -11,71 +11,30 @@ on:
   push:
     branches: [main]
   workflow_call:
+    inputs:
+      prepared:
+        description: The calling workflow has successfully validated this commit and applied its migrations.
+        type: boolean
+        default: false
   workflow_dispatch:
 
 jobs:
-  check:
-    # The database rules, on a throwaway copy, and the types. A failure stops the deploy.
-    name: Tests and types
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+  prepare:
+    if: ${{ !inputs.prepared }}
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run check
-
-  migrate:
-    # Brings the hosted database up to supabase/migrations before the site that needs it
-    # goes out. A failure stops the deploy, so the site is never ahead of its database.
-    # This job installs the Supabase tool and nothing else.
-    #
-    # From main only. A run started by hand on another branch would otherwise apply that
-    # branch's migrations, which nobody has merged, to the hosted database. There it stops
-    # after the checks: this job is skipped, and the deploy that needs it with it.
-    name: Database migrations
-    needs: check
-    if: github.ref == 'refs/heads/main'
-    # The secrets are kept in this environment, which only main may use, so a workflow
-    # changed on another branch is not given them at all.
-    environment: database
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    # One at a time; the next one waits.
-    concurrency:
-      group: migrate
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The version the lockfile names, so it is the tool the migrations were tested with.
-      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
-      - name: Apply database migrations
-        # Skips itself until both secrets exist; `npm run db:push` does the same by hand.
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "SUPABASE_ACCESS_TOKEN or SUPABASE_DB_PASSWORD is not set, skipping migrations."
-            exit 0
-          fi
-          supabase link --project-ref mefmmugajnbbotioplfw
-          supabase db push --linked
+    uses: ./.github/workflows/prepare.yml
+    secrets: inherit
 
   build:
     # Builds the site. This is the one job that installs the site's dependencies and runs
     # their code, so it is given nothing: no secret, and no right to write anywhere. The
     # snapshot is read with the public key. What it made is handed on as two files.
     name: Build
-    needs: migrate
+    needs: prepare
+    # Nightly already ran this exact preparation before importing. A failed preparation
+    # cannot be bypassed by the default build path.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (needs.prepare.result == 'success' || (inputs.prepared && needs.prepare.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

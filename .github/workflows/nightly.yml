@@ -42,7 +42,14 @@ jobs:
             echo "$workflow is enabled."
           done
 
+  prepare:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/prepare.yml
+    secrets: inherit
+
   import:
+    needs: prepare
     # From main only: a run started by hand on another branch would otherwise write to the
     # hosted database with that branch's script, which nobody has merged.
     name: Import from the wiki
@@ -63,8 +70,8 @@ jobs:
           node-version: 24
       - name: Import from the wiki
         id: nightly
-        # Skips itself until the NIGHTLY_TOKEN secret exists. The token is good for this
-        # job's three database calls and nothing else; `npm run nightly:token` makes one.
+        # Missing tokens fail before the import starts; `npm run nightly:token` makes
+        # the narrow database token used by the nightly RPCs.
         env:
           NIGHTLY_TOKEN: ${{ secrets.NIGHTLY_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -128,12 +135,14 @@ jobs:
 
   deploy:
     # The site goes out even when the import failed; the failed job still shows.
-    needs: import
-    if: ${{ !cancelled() }}
+    needs: [prepare, import]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.prepare.result == 'success' }}
     permissions:
       contents: write
       actions: read
       pages: write
       id-token: write
     uses: ./.github/workflows/deploy.yml
+    with:
+      prepared: true
     secrets: inherit

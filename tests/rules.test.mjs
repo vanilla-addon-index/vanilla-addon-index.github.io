@@ -1681,6 +1681,18 @@ describe('import queue', () => {
 		await refused(() => call(admin, `insert into public.repo_stats (key) values ('github.com/a/b')`));
 	});
 
+	test('partial repository checks preserve known versions while successful absence can clear them', async () => {
+		await queue([candidate('Bagnon')]);
+		const store = (row) => nightly('select public.store_repo_stats($1, $2::jsonb)', NIGHTLY_TOKEN, stats({ key: 'github.com/wiki/bagnon', ...row }));
+		await store({ stars: 5, interface: 11200 });
+		await store({ stars: 6, interface: null, interface_checked: false });
+		assert.deepEqual(await db.sql('select stars, interface from public.repo_stats'), [{ stars: 6, interface: 11200 }]);
+		await store({ stars: 7, interface: null, interface_checked: true });
+		assert.deepEqual(await db.sql('select stars, interface from public.repo_stats'), [{ stars: 7, interface: null }]);
+		await store({ interface: null, interface_checked: false });
+		assert.equal((await db.sql('select interface from public.repo_stats'))[0].interface, null);
+	});
+
 	test('the pictures of a waiting entry are looked at once, and what is settled replaces what it had', async () => {
 		const shot = (name) => `https://raw.githubusercontent.com/wiki/${name}/main/shot.png`;
 		await queue([candidate('Bare'), candidate('Shown', undefined, { images: [shot('dead'), shot('wiki')] }), candidate('Empty'), candidate('Gone')]);
