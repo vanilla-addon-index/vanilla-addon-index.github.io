@@ -13,11 +13,20 @@ node_modules
 Thumbs.db
 desktop.ini
 
-# Env
+# Local environment values, including test credentials. Only the example is source.
 .env
 .env.*
 !.env.example
-!.env.test
+.envrc
+.direnv/
+
+# Local credentials and private keys
+.netrc
+.npmrc.local
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Vite
 vite.config.js.timestamp-*
@@ -32,12 +41,29 @@ vite.config.ts.timestamp-*
 
 # Local tooling and editor settings
 .claude/
+.codex/
 .vscode/
 .idea/
 
 # Logs
 *.log
 npm-debug.log*
+
+# Caches, coverage and scratch output
+.cache/
+.nyc_output/
+coverage/
+*.tsbuildinfo
+/tmp/
+/temp/
+
+# Editor backups and merge leftovers
+*~
+*.swp
+*.swo
+*.bak
+*.orig
+*.rej
 
 # File sync leftovers
 .stfolder
@@ -57,6 +83,21 @@ supabase/snippets
 /playwright-report
 /blob-report
 /playwright/.cache
+/playwright/.auth
 
 # Full backups of the hosted database (scripts/backup.mjs). Private data: never commit.
 /backups
+
+# Database copies can also be written to an explicitly chosen file outside /backups.
+# Keep SQL source migrations; dumps (including compressed/encrypted copies) stay local.
+*.sql
+!/supabase/migrations/*.sql
+*.sql.*
+*.dump
+*.dump.*
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
