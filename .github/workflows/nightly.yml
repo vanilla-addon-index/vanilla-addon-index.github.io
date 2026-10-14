@@ -142,7 +142,12 @@ jobs:
       actions: read
       pages: write
       id-token: write
-    uses: ./.github/workflows/deploy.yml
+    # The calling job holds this lock until publication AND snapshot saving finish.
+    concurrency:
+      group: publication
+      cancel-in-progress: false
+      queue: max
+    uses: ./.github/workflows/publish.yml
     with:
       prepared: true
     secrets: inherit

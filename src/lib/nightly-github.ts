@@ -1,4 +1,4 @@
-import { rateLimitFailure, request, RequestFailure } from './request.ts';
+import { rateLimitFailure, request, RequestFailure, type RequestMetrics } from './request.ts';
 
 export interface GithubAnswer {
 	data: Record<string, any>;
@@ -11,8 +11,9 @@ export function fieldFailed(errors: GithubAnswer['errors'], path: (string | numb
 		error.path.slice(0, Math.min(error.path.length, path.length)).every((part, i) => part === path[i]));
 }
 
-export async function askGithub(query: string, token: string): Promise<GithubAnswer> {
+export async function askGithub(query: string, token: string, observe?: (metrics: RequestMetrics) => void): Promise<GithubAnswer> {
 	return request('https://api.github.com/graphql', {
+		observe,
 		init: { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'vanilla-addon-index' }, body: JSON.stringify({ query }) },
 		read: async (response) => {
 			const { data, errors = [] } = await response.json();
