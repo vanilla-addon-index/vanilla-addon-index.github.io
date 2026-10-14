@@ -1,7 +1,7 @@
 import type { RequestMetrics } from './request.ts';
 
 export const NIGHTLY_PHASES = [
-	'Wiki', 'Screenshots', 'GitHub metadata + history', 'GitHub .toc', 'GitHub README',
+	'Wiki', 'Screenshots', 'GitHub metadata', 'GitHub history + files', 'GitHub .toc', 'GitHub README',
 	'Other hosts', 'GitLab', 'Codeberg', 'Gitea', 'Database reads', 'Database writes'
 ] as const;
 export type NightlyPhase = typeof NIGHTLY_PHASES[number];
@@ -78,10 +78,10 @@ export class NightlyMetrics {
 				const r = phases[name];
 				return `| ${name} | ${(r.wallMs / 1000).toFixed(1)} | ${(r.requestMs / 1000).toFixed(1)} | ${r.attempts} | ${r.retries} | ${r.failedRequests} | ${r.failedAttempts} | ${r.rateLimited} | ${(r.retryDelayMs / 1000).toFixed(1)} |`;
 			}), '',
-			'Phase times include checkpoint writes. Request seconds include retries and waits; parallel requests can overlap. Host rows show request cost inside Other hosts. Times are not additive. Metadata and commit history currently share one GitHub request.', '',
+			'Phase times include checkpoint writes. Request seconds include retries and waits; parallel requests can overlap. Host rows show request cost inside Other hosts. Times are not additive. GitHub metadata resolves the branch commit first; history and directory follow-ups share a separate request when needed.', '',
 			'| Check | Count |', '|---|---:|',
 			...Object.entries(counters).map(([name, count]) => `| ${name} | ${count} |`), '',
-			'Cache hits are zero until persistent caching is enabled. Dates left unchanged retain a previous date when one exists; otherwise they remain unknown.', ''
+			'Cache hits count reused history, directories, file checks and host results; one link can produce several hits. Dates left unchanged retain a previous date when one exists; otherwise they remain unknown.', ''
 		].join('\n');
 	}
 }

@@ -21,7 +21,7 @@ test('phase timing includes active work on failure, keeps overlapping requests d
 	metrics.count('commit_dates_left_unchanged', 3);
 	metrics.count('commit_dates_left_unchanged', -1);
 	const summary = metrics.markdown();
-	assert.match(summary, /Metadata and commit history currently share one GitHub request/);
+	assert.match(summary, /GitHub metadata resolves the branch commit first/);
 	assert.match(summary, /\| commit_dates_left_unchanged \| 2 \|/);
 	assert.match(summary, /\| cache_hits \| 0 \|/);
 });

@@ -25,6 +25,7 @@ import { readWiki } from '../src/lib/wiki.ts';
 import { askGithub, fieldFailed } from '../src/lib/nightly-github.ts';
 import { request } from '../src/lib/request.ts';
 import { NightlyMetrics } from '../src/lib/nightly-metrics.ts';
+import { advanceGithubCache, githubCache, githubFiles, githubScope, gitOid, validDate } from '../src/lib/nightly-cache.ts';
 
 const token = process.env.NIGHTLY_TOKEN;
 const githubToken = process.env.GITHUB_TOKEN;
@@ -180,11 +181,11 @@ finishedScreenshots();
 metrics.count('screenshot_checks_requested', toLookAt.length);
 metrics.count('screenshot_checks_incomplete', incompletePictures.size);
 
-for (const { key, url, readme } of links) {
+for (const { key, url, readme, cache } of links) {
 	const place = githubPlace(url);
 	const other = place ? null : forgePlace(url);
 	if (other && !elsewhere.some((r) => r.url === url)) {
-		elsewhere.push({ key, url, place: other, readme, wiki: wikiPictures.get(key) ?? [] });
+		elsewhere.push({ key, url, place: other, readme, cache, wiki: wikiPictures.get(key) ?? [] });
 	}
 	// On a site that is not asked: there is no README to read, so the pictures that are
 	// left are it.
@@ -194,7 +195,9 @@ for (const { key, url, readme } of links) {
 	const folder = /^github\.com\/[^/]+\/[^/]+(\/.+)?$/.exec(key)?.[1] ?? '';
 	// "readme": a queued entry whose pictures have not been looked at yet; "wiki": the
 	// ones it has from the wiki that still load.
-	repos.push({ key, url, ...place, folder, ref: place.ref || 'HEAD', readme, wiki: wikiPictures.get(key) ?? [] });
+	const ref = place.ref || 'HEAD';
+	const scope = githubScope(place.owner, place.name, ref, place.path);
+	repos.push({ key, url, ...place, folder, ref, scope, previous: githubCache(cache, scope), readme, wiki: wikiPictures.get(key) ?? [] });
 }
 
 // One request to GitHub, tried up to three times: it now and then fails to answer a large
@@ -215,13 +218,14 @@ async function github(query, phase) {
 const repository = (r, n, fields) =>
 	`r${n}: repository(owner: ${JSON.stringify(r.owner)}, name: ${JSON.stringify(r.name)}) { ${fields} }`;
 
-// First pass: the facts, and what sits at the top of each repository.
+// First pass: mutable facts and branch IDs, then only the immutable checks not cached.
 const stats = [];
 const codeUpdates = [];
 // One review row per key, as before; every exact branch/folder URL keeps its own date.
 const reviewStats = new Map();
 const pendingStats = [];
-const saved = { stats: 0, dates: 0, pictures: 0 };
+const saved = { stats: 0, dates: 0, pictures: 0, cache: 0 };
+const pendingCache = [];
 const savedDates = new Set();
 metrics.count('commit_dates_left_unchanged', new Set([...repos, ...elsewhere].map((r) => r.url)).size);
 
@@ -232,7 +236,8 @@ async function saveProgress() {
 	for (const [name, field, pending, count] of [
 		['store_repo_stats', 'stats', pendingStats, 'stats'],
 		['store_code_updates', 'updates', codeUpdates, 'dates'],
-		['store_queue_images', 'items', pictures, 'pictures']
+		['store_queue_images', 'items', pictures, 'pictures'],
+		['store_repo_check_cache', 'items', pendingCache, 'cache']
 	]) {
 		while (pending.length) {
 			const batch = pending.splice(0, BATCH);
@@ -261,95 +266,122 @@ const withToc = [];
 // Queued entries whose README is to be read.
 const withReadme = [];
 let unanswered = 0;
-const finishedMetadata = metrics.start('GitHub metadata + history');
+const cacheHit = (kind) => { metrics.count('cache_hits'); metrics.count(`${kind}_cache_hits`); };
+function queueCache(r) {
+	if (!r.state) return;
+	const json = JSON.stringify(r.state);
+	if (json === (r.queuedCache ?? JSON.stringify(r.previous))) return;
+	pendingCache.push({ url: r.url, state: JSON.parse(json) });
+	r.queuedCache = json;
+}
+
+function applyGithubDetails(r, repo, errors, alias, history, tree) {
+	if (history) {
+		const checked = repo && !fieldFailed(errors, [alias, 'code']) && Array.isArray(repo.code?.history?.nodes);
+		const update = checked ? githubCodeUpdate(repo, r.ref, r.path) : null;
+		if (update) codeUpdates.push({ url: r.url, date: update.date, history_url: update.url });
+		else metrics.count('github_history_checks_without_result');
+		if (r.state && checked && (repo.code.history.nodes.length === 0 || validDate(repo.code.history.nodes[0]?.committedDate))) {
+			r.state.history = { date: update?.date ?? null };
+		}
+	}
+	if (!tree || !r.row) return;
+	const checked = repo && !fieldFailed(errors, [alias, 'top']) && (repo.top === null || Array.isArray(repo.top?.entries));
+	if (!checked) { metrics.count('github_directory_checks_failed'); return; }
+	const selection = githubFiles(repo.top?.entries ?? [], r.path, TOC_PATHS);
+	const { paths, signature, readme } = selection;
+	if (r.state && (repo.top === null || gitOid(repo.top?.oid)) && selection.entries.every((e) => gitOid(e.oid))) {
+		r.state.tree = { oid: repo.top?.oid ?? null, entries: selection.entries };
+	}
+	if (!paths.length) {
+		r.row.interface_checked = true;
+		if (r.state) r.state.toc = { signature: '[]', interface: null, files: [] };
+	} else if (signature && r.state?.toc?.signature === signature) {
+		r.row.interface = r.state.toc.interface;
+		r.row.interface_checked = true;
+		cacheHit('github_toc');
+	} else {
+		// An unread or incomplete .toc must not clear the previously known version.
+		withToc.push({ ...r, paths, signature, source: r });
+	}
+	if (r.readme) {
+		const file = readme ? `${r.path ? r.path + '/' : ''}${readme.name}` : null;
+		if (!file) savePictures(r.key, r.wiki);
+		else if (gitOid(readme.oid) && r.state?.readme?.file === file && r.state.readme.oid === readme.oid) {
+			savePictures(r.key, [...new Set([...r.wiki, ...r.state.readme.images])].slice(0, 5));
+			cacheHit('github_readme');
+		} else withReadme.push({ ...r, full: repo.nameWithOwner, file, fileOid: readme.oid, source: r });
+	}
+}
+
+const finishedMetadata = metrics.start('GitHub metadata');
 for (let i = 0; i < repos.length; i += BATCH) {
 	const batch = repos.slice(i, i + BATCH);
 	metrics.count('github_metadata_checks_requested', batch.length);
-	metrics.count('github_history_checks_requested', batch.length);
-	// One aliased field per repository, so a whole batch costs one request.
-	const answer = await github(
-		`{${batch
-			.map((r, n) =>
-				repository(
-					r,
-					n,
-					`nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${githubCodeQuery(r.ref, r.path)} top: object(expression: ${JSON.stringify(`${r.ref}:${r.path}`)}) { ... on Tree { entries { name type } } }`
-				)
-			)
-			.join(' ')}}`, 'GitHub metadata + history'
-	);
-	// No answer about the whole batch: see below.
+	const answer = await github(`{${batch.map((r, n) => repository(r, n,
+		`id nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } head: object(expression: ${JSON.stringify(r.ref)}) { ... on Commit { oid } }`
+	)).join(' ')}}`, 'GitHub metadata');
 	if (!answer) {
 		unanswered += batch.length;
 		metrics.count('github_metadata_checks_failed', batch.length);
 		metrics.count('github_history_checks_without_result', batch.length);
-		metrics.progress('GitHub metadata + history', i + batch.length, repos.length);
+		metrics.progress('GitHub metadata', i + batch.length, repos.length);
 		continue;
 	}
+	const detail = [];
 	const { data, gone, errors } = answer;
 	batch.forEach((r, n) => {
-		const repo = data[`r${n}`];
-		const update = repo && !fieldFailed(errors, [`r${n}`, 'code']) ? githubCodeUpdate(repo, r.ref, r.path) : null;
-		if (update) codeUpdates.push({ url: r.url, date: update.date, history_url: update.url });
-		else metrics.count('github_history_checks_without_result');
-		// No answer about this one: what was stored about it last time stays as it is,
-		// rather than a live repository being marked as gone.
-		if (!repo && !gone.has(`r${n}`)) {
-			metrics.count('github_metadata_checks_failed');
-			return unanswered++;
+		const alias = `r${n}`;
+		const repo = data[alias];
+		if (!repo && !gone.has(alias)) { metrics.count('github_metadata_checks_failed'); return unanswered++; }
+		if (repo) {
+			r.state = !fieldFailed(errors, [alias, 'head']) ? advanceGithubCache(r.previous, r.scope, repo.id, repo.nameWithOwner, repo.head?.oid) : undefined;
+			r.readRef = r.state?.head ?? r.ref;
 		}
-		if (repo && ['nameWithOwner', 'stargazerCount', 'pushedAt', 'isArchived', 'parent'].some((field) =>
-			fieldFailed(errors, [`r${n}`, field]) || !(field in repo))) {
-			metrics.count('github_metadata_checks_failed');
-			return unanswered++;
+		const valid = !repo || !['nameWithOwner', 'stargazerCount', 'pushedAt', 'isArchived', 'parent'].some((field) => fieldFailed(errors, [alias, field]) || !(field in repo));
+		if (valid) {
+			const row = {
+				key: r.key, stars: repo?.stargazerCount ?? 0, pushed_at: repo?.pushedAt ?? null,
+				archived: repo?.isArchived ?? false,
+				fork_of: repo?.parent ? `github.com/${repo.parent.nameWithOwner.toLowerCase()}` : null,
+				canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}${r.folder}` : null,
+				interface: null, interface_checked: !repo, missing: !repo
+			};
+			r.row = row;
+			stats.push(row);
+			if (!reviewStats.has(row.key)) { reviewStats.set(row.key, row); pendingStats.push(row); }
+		} else { metrics.count('github_metadata_checks_failed'); unanswered++; }
+		if (!repo) { metrics.count('github_history_checks_without_result'); return; }
+		if (r.state?.history) {
+			const date = r.state.history.date;
+			applyGithubDetails(r, { ...repo, code: { history: { nodes: date ? [{ committedDate: date }] : [] } } }, [], alias, true, false);
+			cacheHit('github_history');
 		}
-		const treeChecked = repo && !fieldFailed(errors, [`r${n}`, 'top']) &&
-			(repo.top === null || Array.isArray(repo.top?.entries));
-		if (repo && !treeChecked) metrics.count('github_directory_checks_failed');
-		const row = {
-			key: r.key,
-			stars: repo?.stargazerCount ?? 0,
-			pushed_at: repo?.pushedAt ?? null,
-			archived: repo?.isArchived ?? false,
-			fork_of: repo?.parent ? `github.com/${repo.parent.nameWithOwner.toLowerCase()}` : null,
-			// GitHub answers for an old address with the repository's current one.
-			canonical: repo ? `github.com/${repo.nameWithOwner.toLowerCase()}${r.folder}` : null,
-			interface: null,
-			interface_checked: !repo || Boolean(treeChecked),
-			missing: !repo
-		};
-		stats.push(row);
-		if (!reviewStats.has(row.key)) {
-			reviewStats.set(row.key, row);
-			pendingStats.push(row);
+		if (r.state?.tree && r.row) {
+			applyGithubDetails(r, { ...repo, top: r.state.tree }, [], alias, false, true);
+			cacheHit('github_directory');
 		}
-
-		// An addon's .toc is at the top of what the link points to (the repository, a branch
-		// of it, or a folder in it), or one folder down in a folder of the same name. For a
-		// folder of a collection the facts above are still the whole repository's.
-		const within = r.path ? `${r.path}/` : '';
-		const entries = treeChecked ? repo?.top?.entries ?? [] : [];
-		const atTop = entries.filter((e) => e.type === 'blob' && /\.toc$/i.test(e.name)).map((e) => `${within}${e.name}`);
-		const nested = entries
-			.filter((e) => e.type === 'tree' && !e.name.startsWith('.'))
-			.map((e) => `${within}${e.name}/${e.name}.toc`);
-		const paths = (atTop.length ? atTop : nested).slice(0, TOC_PATHS);
-		if (paths.length) {
-			// Metadata is saved now; an unread .toc must not clear the known version.
-			row.interface_checked = false;
-			withToc.push({ ...r, row, paths });
-		}
-
-		// The README sits in the same place, under one of a few spellings.
-		if (r.readme && treeChecked) {
-			const file = entries.find((e) => e.type === 'blob' && /^readme(\.(md|markdown|mdown|txt|rst))?$/i.test(e.name))?.name;
-			// Without one there is nothing to add to the wiki's, and it is not looked for again.
-			if (file) withReadme.push({ ...r, full: repo.nameWithOwner, file: `${within}${file}` });
-			else savePictures(r.key, r.wiki);
-		}
+		r.wantHistory = !r.state?.history;
+		r.wantTree = Boolean(r.row) && !r.state?.tree;
+		if (r.wantHistory || r.wantTree) detail.push(r);
 	});
+	// Follow-ups are pinned to the checked commit, never to a branch that may have moved.
+	// Save this batch before moving to the next metadata batch, including on cold starts.
+	if (detail.length) {
+		const finished = metrics.start('GitHub history + files', false);
+		metrics.count('github_history_checks_requested', detail.filter((r) => r.wantHistory).length);
+		const details = await github(`{${detail.map((r, n) => repository(r, n,
+			`nameWithOwner ${r.wantHistory ? githubCodeQuery(r.readRef, r.path) : ''} ${r.wantTree ? `top: object(expression: ${JSON.stringify(`${r.readRef}:${r.path}`)}) { ... on Tree { oid entries { name type oid } } }` : ''}`
+		)).join(' ')}}`, 'GitHub history + files');
+		if (details) detail.forEach((r, n) => { applyGithubDetails(r, details.data[`r${n}`], details.errors, `r${n}`, r.wantHistory, r.wantTree); queueCache(r); });
+		else {
+			metrics.count('github_history_checks_without_result', detail.filter((r) => r.wantHistory).length);
+			metrics.count('github_directory_checks_failed', detail.filter((r) => r.wantTree).length);
+		}
+		finished();
+	}
 	await saveProgress();
-	metrics.progress('GitHub metadata + history', i + batch.length, repos.length);
+	metrics.progress('GitHub metadata', i + batch.length, repos.length);
 }
 finishedMetadata();
 
@@ -365,7 +397,7 @@ for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 					r,
 					n,
 					r.paths
-						.map((p, f) => `f${f}: object(expression: ${JSON.stringify(`${r.ref}:${p}`)}) { ... on Blob { text } }`)
+						.map((p, f) => `f${f}: object(expression: ${JSON.stringify(`${r.readRef}:${p}`)}) { ... on Blob { oid text } }`)
 						.join(' ')
 				)
 			)
@@ -393,6 +425,11 @@ for (let i = 0; i < withToc.length; i += TOC_BATCH) {
 			.map(Number);
 		// A repository can ship .toc files for several clients; the 1.12 one is what matters.
 		if (found.length) r.row.interface = found.includes(11200) ? 11200 : found[0];
+		if (r.state && r.signature) {
+			r.state.toc = { signature: r.signature, interface: r.row.interface,
+				files: r.paths.map((path, f) => ({ path, oid: data[`r${n}`]?.[`f${f}`]?.oid ?? null })) };
+			queueCache(r.source);
+		}
 	});
 	for (const { row } of batch) {
 		if (reviewStats.get(row.key) === row && row.interface_checked) pendingStats.push(row);
@@ -411,7 +448,7 @@ for (let i = 0; i < withReadme.length; i += README_BATCH) {
 	metrics.count('github_readme_checks_requested', batch.length);
 	const answer = await github(
 		`{${batch
-			.map((r, n) => repository(r, n, `readme: object(expression: ${JSON.stringify(`${r.ref}:${r.file}`)}) { ... on Blob { text } }`))
+			.map((r, n) => repository(r, n, `readme: object(expression: ${JSON.stringify(`${r.readRef}:${r.file}`)}) { ... on Blob { oid text } }`))
 			.join(' ')}}`, 'GitHub README'
 	);
 	if (!answer) {
@@ -429,6 +466,10 @@ for (let i = 0; i < withReadme.length; i += README_BATCH) {
 		// Where the README is served from, so that a picture kept next to it resolves.
 		const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
 		const found = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
+		if (r.state && gitOid(r.fileOid)) {
+			r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, 5) };
+			queueCache(r.source);
+		}
 		// The wiki's first, since someone chose those; then the README's, each picture once.
 		savePictures(r.key, [...new Set([...r.wiki, ...found])].slice(0, 5));
 	});
@@ -468,8 +509,12 @@ let silent = 0;
 const finishedOtherHosts = metrics.start('Other hosts');
 for (let i = 0; i < elsewhere.length; i += 4) {
 	await Promise.all(
-		elsewhere.slice(i, i + 4).map(async ({ key, url, place, readme, wiki }) => {
-			const facts = await askForge(place, ask, readme);
+		elsewhere.slice(i, i + 4).map(async ({ key, url, place, readme, wiki, cache }) => {
+			const facts = await askForge(place, ask, readme, {
+				previous: cache,
+				save: (state) => { if (JSON.stringify(state) !== JSON.stringify(cache)) pendingCache.push({ url, state }); },
+				hit: cacheHit
+			});
 			// No answer: what was stored last time stays, and its pictures wait for the next run.
 			if (!facts) {
 				metrics.count('other_host_metadata_checks_failed');
