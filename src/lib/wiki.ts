@@ -53,7 +53,7 @@ const CATEGORY_RULES: [(typeof CATEGORIES)[number], RegExp][] = [
 	['Chat & Social', /\b(chat|chan(nel)?s?|whispers?|messenger|guild|friends?|social|emotes?|invites?|ignore|anti-?spam|spammers|goldspam|lfm|lfg|bulletin|translat(e|ion|or)|rp|role-?play(ing)?)\b/i],
 	['Tooltip', /\b(game ?)?tool-?tips?\b/i],
 	['Professions', /\b(professions?|trade ?skills?|craft(s|ing)?|recipes?|fishing|herbs?|herbalism|minerals?|mining|enchanting|disenchant(s|ing)?|alchemy|cooking)\b/i],
-	['PvP', /\b(pvp|battlegrounds?|battlefield|bg|arena|honor|flags?|enemy players?)\b/i],
+	['PvP', /\b(pvp|battlegrounds?|battlefield|bgs?|av|ab|wsg|alterac valley|arathi basin|warsong gulch|arena|honor|flags?|enemy players?)\b/i],
 	['Class', /\b(warriors?|paladins?|pally|hunters?|rogues?|priests?|shamans?|mages?|warlocks?|druids?|feral|totems?|pets?|stance|shapeshift(ed|ing)?|shift|talents?|brainwash(er|ing)?|poisons?|shards?|soulstones?|curses?|librams?|combo points?|feign)\b/i],
 	['Raid & Party', /\b(raids?|raider|party|loot(ing)?|rolls?|dkp|epgp|groups?|assignments?|ready check|heal(s|er|ers|ing)?|tanks?)\b/i],
 	['Combat', /\b(combat|damage|dps|threat|aggro|cast(s|ing)? ?bars?|cast(s|ing)?|spells?|swing ?timers?|cooldowns?|meter|crit|attack|interrupts?|procs?|rage|energy|mana|kills?|taunts?)\b/i],

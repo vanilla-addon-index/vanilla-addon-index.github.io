@@ -40,12 +40,12 @@ const CATEGORY_TOTALS = {
 	Libraries: 7,
 	'Map & Minimap': 32,
 	Professions: 24,
-	PvP: 22,
+	PvP: 23, // Avbars mentions AV and AB in its description.
 	'Quests & Leveling': 73,
 	'Raid & Party': 89,
 	Tooltip: 21,
 	'Unit Frames': 55,
-	Miscellaneous: 204
+	Miscellaneous: 203
 };
 
 // The page is found by its headings; everything between them is the test's own.
@@ -252,6 +252,14 @@ describe('the category is guessed from the name and the description', () => {
 		assert.equal(guess('AuctionAltBuy', 'Alt-Click auctions to buy and cancel instantly'), 'Auction & Economy');
 	});
 
+	test('battleground names and abbreviations identify PvP addons', () => {
+		assert.equal(guess('Avbars', 'Graphical Timers for Events in AV and AB'), 'PvP');
+		for (const battleground of ['AV', 'AB', 'WSG', 'Alterac Valley', 'Arathi Basin', 'Warsong Gulch', 'BGs']) {
+			assert.equal(guess('EventTimers', `Timers for ${battleground}`), 'PvP', battleground);
+			assert.equal(guess('EventTimers', `Timers for ${battleground.toLowerCase()}`), 'PvP', battleground);
+		}
+	});
+
 	test('an addon for one class is filed under that class, whatever else it is about', () => {
 		assert.equal(guess('SP_SwingTimer', 'Warrior Swing Timer'), 'Class');
 		assert.equal(guess('AutoLock', 'Priority-based spell rotation addon for Warlocks.'), 'Class');
@@ -259,6 +267,7 @@ describe('the category is guessed from the name and the description', () => {
 	});
 
 	test('a word that only looks like a rule does not decide', () => {
+		assert.equal(guess('AvailableTabs', 'Available tabs for the interface'), 'Miscellaneous');
 		assert.equal(guess('MouseLookLock', 'sets up a simple perma-mouselook.'), 'Miscellaneous');
 		assert.equal(guess('BetterBabelFish', 'Better babel talk between factions'), 'Miscellaneous');
 		assert.equal(guess('HideErrorFrame', 'Removes the error messages that spam your screen'), 'Miscellaneous');
@@ -305,6 +314,7 @@ describe('the whole page, as it was at revision 23801', () => {
 	});
 
 	test('guesses a category for most of them', () => {
+		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, 'PvP');
 		const per = Object.fromEntries(CATEGORIES.map((category) => [category, count((c) => c.category === category)]));
 		assert.deepEqual(per, CATEGORY_TOTALS);
 	});
