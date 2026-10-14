@@ -43,9 +43,9 @@ globalThis.fetch = async (url, init = {}) => {
  if (url === 'https://i.imgur.com/wiki.png') return new Response('refused', {status:403});
  if (url === 'https://api.github.com/graphql') {
   const query = JSON.parse(init.body).query;
-  calls.push({name:'github', phase:query.includes('stargazerCount') ? 'metadata' : query.includes('f0:') ? 'toc' : 'readme'});
-  if (query.includes('stargazerCount')) {
-   if (++metadataBatches === 3 && scenario === 'late-stop') {console.log('__RESULT__' + JSON.stringify(calls)); process.exit(2);}
+  calls.push({name:'github', phase:query.includes('stargazerCount') ? 'metadata' : query.includes('code:') || query.includes('top:') ? 'details' : query.includes('f0:') ? 'toc' : 'readme'});
+  if (query.includes('stargazerCount') || query.includes('code:') || query.includes('top:')) {
+   if (query.includes('stargazerCount') && ++metadataBatches === 3 && scenario === 'late-stop') {console.log('__RESULT__' + JSON.stringify(calls)); process.exit(2);}
    const repo = {nameWithOwner:'a/addon',stargazerCount:3,pushedAt:'2026-01-01T00:00:00Z',isArchived:false,parent:null,
     code:{history:{nodes:[{committedDate:'2024-01-01T00:00:00Z'}]}},
     top:{entries: scenario === 'confirmed-absence' ? [] : [{name:'Addon.toc',type:'blob'},{name:'README.md',type:'blob'}]}};
@@ -187,17 +187,17 @@ test('a subsequent run skips screenshot work already marked complete by the data
 
 test('diagnostics distinguish network requests, field failures, unchanged dates and host work', () => {
 	const {metrics, stdout} = run('success', true, true);
-	assert.equal(metrics.phases['GitHub metadata + history'].attempts, 1);
+	assert.equal(metrics.phases['GitHub metadata'].attempts, 1);
 	assert.equal(metrics.phases['GitHub .toc'].attempts, 1);
 	assert.equal(metrics.phases['GitHub README'].attempts, 1);
 	assert.equal(metrics.phases['Database reads'].attempts, 2);
 	assert.equal(metrics.phases['Database writes'].attempts, 6);
 	assert.equal(metrics.counters.commit_dates_left_unchanged, 0);
 	assert.equal(metrics.counters.cache_hits, 0);
-	assert.match(stdout, /\[Nightly\] GitHub metadata \+ history 1\/1/);
+	assert.match(stdout, /\[Nightly\] GitHub metadata 1\/1/);
 	assert.ok(!stdout.includes('dummy-nightly-token') && !stdout.includes('dummy-github-token'));
 	const partial = run('history-failure', true, true).metrics;
-	assert.equal(partial.phases['GitHub metadata + history'].failedRequests, 0);
+	assert.equal(partial.phases['GitHub history + files'].failedRequests, 0);
 	assert.equal(partial.counters.github_history_checks_without_result, 1);
 	assert.equal(partial.counters.commit_dates_left_unchanged, 1);
 	const refused = run('store_code_updates-failure', true, true).metrics;
