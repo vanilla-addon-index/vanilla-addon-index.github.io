@@ -14,8 +14,8 @@
 		duplicate: 'Possible duplicates',
 		problem: 'Obsolete or dead'
 	} as const;
-	type Verdict = Exclude<keyof typeof FILTERS, 'all'>;
-	// "incomplete" cuts across the verdicts: entries that would be published with a gap.
+	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete';
+	// "incomplete" also includes duplicates and problems that would be published with a gap.
 	// "rejected" is not a filter on the queue but a second list: what was turned down.
 	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
 
@@ -150,6 +150,7 @@
 		if (match) return { verdict: 'duplicate', advice: `Probably a version of "${match.name}".`, notes, match };
 		if (similar) return { verdict: 'duplicate', advice: 'Check against the similar addon first.', notes };
 		if (stale) return { verdict: 'problem', advice: `Not updated since ${year}.`, notes };
+		if (missing.length) return { verdict: 'incomplete', advice: 'Fill in the missing details before publishing.', notes };
 		return { verdict: 'fine', advice: 'Looks fine.', notes };
 	}
 
