@@ -77,3 +77,30 @@ test('permanent database errors keep their useful diagnostic without being retri
 	await assert.rejects(request(url, { read: json, errorMessage: async (r) => (await r.json()).message }), /Nothing was queued/);
 	assert.equal(calls, 1);
 });
+
+test('request diagnostics count actual attempts, retries and waits once per logical request', async () => {
+	let clock = 0;
+	let attempts = 0;
+	const observed = [];
+	const request = createRequester({ now: () => clock, random: () => 0,
+		sleep: async (ms) => { clock += ms; },
+		fetcher: async () => {
+			clock += 10;
+			return new Response('{}', {status: ++attempts < 3 ? 503 : 200});
+		}
+	});
+	await request(url, {read: json, observe: (metrics) => observed.push(metrics)});
+	assert.deepEqual(observed, [{attempts: 3, retries: 2, failedAttempts: 2, failed: false, rateLimited: false, durationMs: 3030, retryDelayMs: 3000}]);
+});
+
+test('rate-limit cooldown failures count no HTTP attempts when the host was not contacted', async () => {
+	const observed = [];
+	const request = createRequester({ now: () => 0, fetcher: async () => new Response('', {status:429, headers:{'retry-after':'3600'}}) });
+	for (let i = 0; i < 2; i++) await assert.rejects(request(url, {read: json, observe: (metrics) => observed.push(metrics)}));
+	assert.equal(observed.length, 2);
+	assert.equal(observed[0].attempts, 1);
+	assert.equal(observed[0].failedAttempts, 1);
+	assert.equal(observed[1].attempts, 0);
+	assert.equal(observed[1].failedAttempts, 0);
+	assert.ok(observed.every((m) => m.failed && m.rateLimited && m.retries === 0));
+});

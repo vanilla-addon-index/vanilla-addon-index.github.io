@@ -1,151 +1,23 @@
 name: Deploy
 
-# Puts the site out: on every change to main, after the nightly import (see nightly.yml),
-# and by hand. It checks the code itself first, so nothing broken goes out whichever way
-# the change got to main.
-#
-# Five jobs, one after the other, so that the database password is never in a job that
-# installs the site's dependencies or runs its build, and that job can write nowhere:
-# whatever those packages do, they cannot read a secret, publish, or push.
+# Every main change, or by hand. Nightly and Refresh call Publish directly and hold
+# the same lock on their calling job, so it covers the entire reusable workflow.
 on:
   push:
     branches: [main]
-  workflow_call:
-    inputs:
-      prepared:
-        description: The calling workflow has successfully validated this commit and applied its migrations.
-        type: boolean
-        default: false
   workflow_dispatch:
 
 jobs:
-  prepare:
-    if: ${{ !inputs.prepared }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/prepare.yml
-    secrets: inherit
-
-  build:
-    # Builds the site. This is the one job that installs the site's dependencies and runs
-    # their code, so it is given nothing: no secret, and no right to write anywhere. The
-    # snapshot is read with the public key. What it made is handed on as two files.
-    name: Build
-    needs: prepare
-    # Nightly already ran this exact preparation before importing. A failed preparation
-    # cannot be bypassed by the default build path.
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (needs.prepare.result == 'success' || (inputs.prepared && needs.prepare.result == 'skipped')) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-
-      - name: Fetch the last snapshot
-        # The snapshot lives on a branch of its own, so this workflow never pushes to main.
-        # The last one is what the site is built from if the database cannot be reached,
-        # and what the new one is measured against.
-        run: |
-          if git fetch --depth 1 origin snapshot; then
-            git show FETCH_HEAD:addons.json > static/addons.json
-          fi
-
-      - name: Export snapshot
-        # A database outage must not block the deploy; the previous snapshot is kept. So
-        # is it when the new list is far shorter than the last: see scripts/export.mjs.
-        continue-on-error: true
-        run: node scripts/export.mjs
-
-      - run: npm run build
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: build
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: snapshot
-          path: static/addons.json
-          if-no-files-found: ignore
-          retention-days: 1
-
-  deploy:
-    # Publishes what the build made. Nothing is installed or run here.
-    name: Deploy
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      pages: write
-      id-token: write
-    # One deploy at a time; the next one waits.
+  publish:
     concurrency:
-      group: pages
+      group: publication
       cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
-
-  snapshot:
-    # Keeps the snapshot the site went out with, on the "snapshot" branch. After the site
-    # is out, so a failure here is seen but holds nothing up. Nothing is installed or run
-    # here either.
-    #
-    # The branch only ever holds the latest list, as a single commit that replaces the one
-    # before. A history of every past list would keep deleted addons readable for good,
-    # which is not what the site's privacy page promises.
-    name: Save snapshot
-    needs: deploy
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+      # Retain waiting code deployments even if a later timer uses an older commit.
+      queue: max
     permissions:
       contents: write
       actions: read
-    # One at a time; the next one waits.
-    concurrency:
-      group: snapshot
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Save snapshot
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-        run: |
-          if ! gh run download "$GITHUB_RUN_ID" --name snapshot --dir "$RUNNER_TEMP/snapshot"; then
-            echo "This build had no snapshot, nothing to save."
-            exit 0
-          fi
-          file="$RUNNER_TEMP/snapshot/addons.json"
-          # What the branch is, for whoever lands on it.
-          readme="$RUNNER_TEMP/snapshot/README.md"
-          printf '%s\n' \
-            "The list of addons the site was last built with, as one file: addons.json." \
-            "" \
-            "Written by the Deploy workflow on the main branch. Visitors read the list from this" \
-            "file, and it stands in when the database cannot be reached. It holds what any" \
-            "visitor may see and nothing else." \
-            "" \
-            "The branch is always a single commit that replaces the one before, so it has no" \
-            "history: an addon deleted from the site is gone from here with the next snapshot." \
-            > "$readme"
-          if git fetch --depth 1 origin snapshot \
-            && git show FETCH_HEAD:addons.json | cmp -s - "$file" \
-            && git show FETCH_HEAD:README.md 2>/dev/null | cmp -s - "$readme"; then
-            echo "The snapshot has not changed."
-            exit 0
-          fi
-          tree=$(printf '100644 blob %s\taddons.json\n100644 blob %s\tREADME.md\n' \
-            "$(git hash-object -w "$file")" "$(git hash-object -w "$readme")" | git mktree)
-          commit=$(git commit-tree "$tree" -m "Addon snapshot")
-          git push --force origin "$commit:refs/heads/snapshot"
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/publish.yml
+    secrets: inherit

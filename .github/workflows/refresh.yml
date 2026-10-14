@@ -11,9 +11,8 @@ name: Refresh
 #
 # The three timed workflows start at different minutes of the hour (Nightly at 17, Backup
 # at 43, this one at 53). That only spreads them on paper, since GitHub starts them when
-# it gets to them. What keeps two runs from getting in each other's way is that each
-# workflow, and each step of a deploy, waits for the one before it: see the
-# "concurrency" entries here and in deploy.yml.
+# it gets to them. Each publication holds one shared lock from preparation through
+# saving the published snapshot; see the calling jobs here, in Nightly and in Deploy.
 on:
   schedule:
     - cron: '53 * * * *'
@@ -69,5 +68,10 @@ jobs:
       actions: read
       pages: write
       id-token: write
-    uses: ./.github/workflows/deploy.yml
+    # The calling job holds this lock until publication AND snapshot saving finish.
+    concurrency:
+      group: publication
+      cancel-in-progress: false
+      queue: max
+    uses: ./.github/workflows/publish.yml
     secrets: inherit
