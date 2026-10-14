@@ -1,8 +1,9 @@
 name: Refresh
 
-# Every hour: looks whether the addon list has changed
-# since the last snapshot, and deploys only if it has. A visitor's browser asks the
-# database for whatever is newer than the snapshot, so a fresher snapshot keeps those
+# Every hour: compares the full public snapshot and application commit with the
+# confirmed Pages publication, and calls Publish only when it may need to change.
+# A visitor's browser asks the database for whatever is newer than the snapshot,
+# so a fresher snapshot keeps those
 # answers small; it is also what takes a deleted addon out of the list visitors see, and
 # what gives a new one a page of its own for search engines and link previews.
 #
@@ -29,10 +30,13 @@ jobs:
   changed:
     # Reads the list with the public key, the way any visitor could, and compares it with
     # the snapshot the site went out with. Given no secret, and installs nothing.
-    name: Has the list changed?
+    name: Does publication need to change?
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      deployments: read
     outputs:
       changed: ${{ steps.compare.outputs.changed }}
     steps:
@@ -40,32 +44,31 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Compare the list with the last snapshot
+      - name: Compare with the confirmed publication
         id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_PREVIOUS: ${{ runner.temp }}/last-publication.json
         # A list far shorter than the last snapshot fails here, as it does in the deploy:
         # see scripts/export.mjs. So does a database that cannot be reached; the next run
         # tries again.
         run: |
           if git fetch --depth 1 origin snapshot; then
-            git show FETCH_HEAD:addons.json > static/addons.json
-            cp static/addons.json "$RUNNER_TEMP/last.json"
-          else
-            : > "$RUNNER_TEMP/last.json"
+            if git show FETCH_HEAD:addons.json > "$RUNNER_TEMP/last-addons.json"; then
+              cp "$RUNNER_TEMP/last-addons.json" static/addons.json
+            fi
+            git show FETCH_HEAD:publication.json > "$RUNNER_TEMP/last-publication.json" 2>/dev/null || true
           fi
           node scripts/export.mjs
-          if cmp -s static/addons.json "$RUNNER_TEMP/last.json"; then
-            echo "The list has not changed since the last snapshot."
-          else
-            echo "The list has changed: deploying."
-            echo "changed=yes" >> "$GITHUB_OUTPUT"
-          fi
+          node scripts/publication-state.mjs
 
   deploy:
     needs: changed
-    if: needs.changed.outputs.changed
+    if: needs.changed.outputs.changed == 'true'
     permissions:
       contents: write
       actions: read
+      deployments: read
       pages: write
       id-token: write
     # The calling job holds this lock until publication AND snapshot saving finish.

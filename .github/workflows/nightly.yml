@@ -140,6 +140,7 @@ jobs:
     permissions:
       contents: write
       actions: read
+      deployments: read
       pages: write
       id-token: write
     # The calling job holds this lock until publication AND snapshot saving finish.
