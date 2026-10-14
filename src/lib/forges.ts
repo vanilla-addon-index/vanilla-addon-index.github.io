@@ -161,6 +161,8 @@ const SITES = {
 	}
 };
 
+export const forgeRepositoryEndpoint = (place: ForgePlace): string => SITES[place.kind].repo(place);
+
 /**
  * Asks a site about one repository. Nothing when the site gave no usable answer about the
  * repository itself, so that what is known from last time can stay as it is; a repository
