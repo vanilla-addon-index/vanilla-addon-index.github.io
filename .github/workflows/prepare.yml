@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   check:
-    # The database rules, on a throwaway copy, and the types. A failure stops the deploy.
+    # The database rules, on a throwaway copy, and the types. Main can reuse only an
+    # exact successful receipt for this commit AND actual runtime. A miss runs checks.
     name: Tests and types
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -22,9 +23,48 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run check
+      - name: Identify validation inputs
+        id: identity
+        run: VALIDATION_NPM="$(npm --version)" node scripts/deploy-validation.mjs key
+      - name: Find successful main validation
+        id: validation
+        if: github.ref == 'refs/heads/main' && steps.identity.outputs.key != ''
+        # Cache outages must fall back to fresh checks, not stop preparation.
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/deploy-validation/success.json
+          key: ${{ steps.identity.outputs.key }}
+      - name: Verify successful validation receipt
+        id: reuse
+        if: github.ref == 'refs/heads/main' && steps.validation.outcome == 'success' && steps.validation.outputs.cache-hit == 'true'
+        env:
+          VALIDATION_KEY: ${{ steps.identity.outputs.key }}
+          VALIDATION_RECEIPT: ${{ runner.temp }}/deploy-validation/success.json
+        run: node scripts/deploy-validation.mjs reuse
+      - if: steps.reuse.outputs.reuse != 'true'
+        run: npm ci
+      - id: tests
+        if: steps.reuse.outputs.reuse != 'true'
+        run: npm test
+      - id: types
+        if: steps.reuse.outputs.reuse != 'true'
+        run: npm run check
+      - name: Record successful main validation
+        id: receipt
+        # Never certify a PR, a failed check, or a reused receipt as a fresh success.
+        if: github.ref == 'refs/heads/main' && steps.identity.outputs.key != '' && steps.tests.outcome == 'success' && steps.types.outcome == 'success'
+        env:
+          VALIDATION_KEY: ${{ steps.identity.outputs.key }}
+          VALIDATION_RECEIPT: ${{ runner.temp }}/deploy-validation/success.json
+        run: node scripts/deploy-validation.mjs record
+      - name: Remember successful main validation
+        if: steps.receipt.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/deploy-validation/success.json
+          key: ${{ steps.identity.outputs.key }}
 
   migrate:
     # Brings the hosted database up to supabase/migrations before the site that needs it
