@@ -108,21 +108,29 @@ Backups contain private account and site data. Nightly copies are encrypted with
 them into a throwaway database. The latest seven verified copies also live on
 the `backups` branch as one replacement commit. Repository mirrors can copy that
 branch; its files remain encrypted. Keep the passphrase somewhere outside GitHub.
+Each new encrypted archive also includes the matching migrations, backend
+configuration, recovery script, package lockfile, and a manifest recording its
+source commit and actual tool versions. The restore check uses these bundled
+files after decrypting the archive.
 
 ```sh
 npm run db:backup                    # unencrypted local copy, outside the repository
 npm run db:backup:fetch              # download the latest encrypted nightly copy
-gpg --decrypt backup.sql.gpg > backup.sql
-npm run db:backup:check -- <file>     # reset local backend and verify restoration
+gpg --decrypt backup.tar.gz.gpg > backup.tar.gz
+mkdir recovery
+tar -xzf backup.tar.gz -C recovery
+# Follow recovery/README.md for verification and hosted recovery.
 ```
 
 Keep decrypted files outside the repository. The default local backup directory
 is `vanilla-addon-index-backups/` in your home folder. A restore check replaces
 local test data with real backup data; run `npm run local` afterwards to reseed.
 
-For a lost hosted database, create and link a replacement Supabase project, apply
-all migrations with `npm run db:push`, then load the decrypted data using `psql`.
-The dumps contain data; the migrations supply the schema. Update the public
+For a lost hosted database, follow the [bundled recovery instructions](backup-restore.md).
+Use the archive's migrations and recorded CLI version to prepare an empty
+replacement project, then load its SQL data before applying newer migrations.
+Older `.sql.gpg` copies contain only data: obtain the matching migrations from
+the original workflow commit before restoring them. Update the public
 configuration and deployment secrets for the replacement project before resuming
 imports and deployments. Encrypted backups cannot be recovered without their
 passphrase.

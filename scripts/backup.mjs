@@ -16,8 +16,9 @@
 // be synced or shared as a whole. The nightly one that GitHub keeps is encrypted first;
 // see .github/workflows/backup.yml.
 //
-// To restore after losing the hosted database: create a project, link it, build its tables
-// with `npm run db:push`, then load the backup file with psql against the new database.
+// Nightly archives bundle matching migrations and recovery instructions. Restore those
+// migrations before loading their data; see docs/backup-restore.md. Local SQL-only copies
+// also require the migrations from the commit that produced them.
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
