@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { preferences, loadPreferences, savePreferences } from '#lib/preferences.svelte.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -8,6 +10,7 @@
 	import { PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { supabase } from '#lib/supabase.ts';
+	onMount(loadPreferences);
 
 	// An admin who approves imports becomes their keeper, but did not post them: they are
 	// listed apart, so "Your addons" stays what the account itself submitted.
@@ -100,6 +103,23 @@
 		</aside>
 
 		<section>
+			<h2 class="label">Options</h2>
+			<div class="panel mb-5 p-3">
+				<label class="flex cursor-pointer items-start gap-2">
+					<input
+						type="checkbox"
+						class="mt-1.5 accent-accent"
+						bind:checked={preferences.hideOlder}
+						onchange={savePreferences}
+						aria-describedby="hide-older-help"
+					/>
+					<span>Hide addons last updated 8+ years ago</span>
+				</label>
+				<p id="hide-older-help" class="mt-1 ml-5 text-sm text-muted">
+					Applies to the addon list. Addons with unknown update dates stay visible.
+				</p>
+				<p class="mt-2 ml-5 text-sm text-muted">Options are saved automatically in this browser.</p>
+			</div>
 			<h2 class="label">Your addons</h2>
 			<div class="panel addon-list">
 				{#each mine as addon (addon.id)}
