@@ -8,6 +8,7 @@
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
+	import { countEditReviews, editReviews } from '#lib/edit-reviews.svelte.ts';
 	import { countReports, reports } from '#lib/reports.svelte.ts';
 	import { loginHref, takeReturn } from '#lib/return.ts';
 	import { configured } from '#lib/supabase.ts';
@@ -49,7 +50,7 @@
 
 	// Admins see how many reports wait, next to "Admin", on every page.
 	$effect(() => {
-		if (auth.isAdmin) countReports();
+		if (auth.isAdmin) { countReports(); countEditReviews(); } else editReviews.pending = 0;
 	});
 
 	// The header stays at the top of the window and the footer at the bottom; what sticks
@@ -99,10 +100,10 @@
 						<a href={resolve('/submit')} class="btn btn-primary">Submit addon</a>
 					{/if}
 					{#if auth.isAdmin}
-						<a href={resolve(reports.open ? '/admin/reports' : '/admin/import')} class="btn">
+						<a href={resolve(reports.open ? '/admin/reports' : editReviews.pending ? '/admin/edits' : '/admin/import')} class="btn">
 							Admin
-							{#if reports.open}
-								<span class="text-accent" aria-label="{reports.open} reports waiting">{reports.open}</span>
+							{#if reports.open + editReviews.pending}
+								<span class="text-accent" aria-label="{reports.open + editReviews.pending} items waiting">{reports.open + editReviews.pending}</span>
 							{/if}
 						</a>
 					{/if}

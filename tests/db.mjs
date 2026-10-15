@@ -61,10 +61,11 @@ export const NIGHTLY_TOKEN = 'the-nightly-token';
 let template;
 
 // Building the schema takes a second or two, so it is done once and copied for each test.
-async function build() {
+async function build(beforeSharedMigration) {
 	const db = new PGlite();
 	await db.exec(SUPABASE_STAND_IN);
 	for (const file of SQL_FILES) {
+		if (file === '20261015000002_shared_addon_links.sql' && beforeSharedMigration) await beforeSharedMigration(db);
 		const sql = readFileSync(new URL(file, MIGRATIONS), 'utf8')
 			// Stood in for above; PGlite cannot install it.
 			.replace(/^create extension if not exists http[^;]*;/m, '');
@@ -79,9 +80,9 @@ async function build() {
 	return copy;
 }
 
-export async function createDb() {
-	template ??= build();
-	const db = new PGlite({ loadDataDir: await template });
+export async function createDb({beforeSharedMigration} = {}) {
+	if (!beforeSharedMigration) template ??= build();
+	const db = new PGlite({ loadDataDir: await (beforeSharedMigration ? build(beforeSharedMigration) : template) });
 	await db.query(`insert into public.nightly_token (hash) values (encode(sha256(convert_to($1, 'UTF8')), 'hex'))`, [NIGHTLY_TOKEN]);
 
 	// One call is one API request: its own transaction, as one caller.

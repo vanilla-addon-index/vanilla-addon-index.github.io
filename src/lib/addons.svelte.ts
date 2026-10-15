@@ -22,15 +22,19 @@ type Row = Omit<Addon, 'owner_name' | 'owner' | 'approved_by'> &
 
 // Everything for someone logged in; what a visitor may read otherwise. The database
 // refuses a visitor who asks for more.
-const columns = () => (auth.session ? '*, profiles(username)' : PUBLIC_ADDON_COLUMNS);
+const columns = () => (auth.session ? '*, profiles:profiles!addons_owner_fkey(username)' : PUBLIC_ADDON_COLUMNS);
 
 // Rows saved before versions existed carry only the single link.
 const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	...row,
-	versions: row.versions?.length ? row.versions : [{ url: row.repo_url ?? '', note: '' }],
+	versions: row.versions ?? (row.repo_url ? [{ url: row.repo_url, note: '' }] : []),
+	repo_url: row.repo_url ?? '',
 	aliases: row.aliases ?? [],
 	source: row.source ?? '',
 	code_update: row.code_update ?? null,
+	shared: row.shared ?? false,
+	pinned_link: row.pinned_link ?? null,
+	separate_name: row.separate_name ?? false,
 	owner: row.owner ?? null,
 	approved_by: row.approved_by ?? null,
 	group_id: row.group_id ?? null,
@@ -185,7 +189,7 @@ async function fetchLive() {
 	if (LOCAL) return fetchAll();
 	const [snapshot, outline] = await Promise.all([
 		fetchSnapshot().catch(() => [] as Addon[]),
-		fetchPaged<Outline>('id, updated_at, group_id, is_main, owner, approved_by, profiles(username)')
+		fetchPaged<Outline>('id, updated_at, group_id, is_main, owner, approved_by, profiles:profiles!addons_owner_fkey(username)')
 	]);
 	// What this browser already holds counts too: rows loaded earlier in the visit or saved
 	// by the last one. An admin approving imports by the hundred fetches each row once.
@@ -196,7 +200,7 @@ async function fetchLive() {
 	for (let from = 0; from < changed.length; from += CHUNK) {
 		const { data, error } = await supabase
 			.from('addons')
-			.select('*, profiles(username)')
+			.select('*, profiles:profiles!addons_owner_fkey(username)')
 			.in('id', changed.slice(from, from + CHUNK));
 		if (error) throw error;
 		for (const row of data as Row[]) rows.set(row.id, toAddon(row));
@@ -273,13 +277,15 @@ function explain(error: { code?: string; message: string }) {
 	return error.message;
 }
 
-export async function createAddon(input: AddonInput) {
+export async function createAddon(input: AddonInput, split?: { target: number; link: string }) {
 	if (!supabase) throw new Error('Database is not configured.');
 	// The database makes the address from the name; see the slugs migration.
-	const { data, error } = await supabase.from('addons').insert(input).select('*, profiles(username)').single();
+	const { data: id, error } = await supabase.rpc(split ? 'split_addon_link' : 'submit_addon', split ? { ...split, input } : { input });
 	if (error) throw new Error(explain(error));
+	const { data, error: readError } = await supabase.from('addons').select('*, profiles:profiles!addons_owner_fkey(username)').eq('id', id).single();
+	if (readError) throw new Error(explain(readError));
 	const addon = toAddon(data as Row);
-	store.addons = [...store.addons, addon].sort(byName);
+	store.addons = [...store.addons.filter((a) => a.id !== addon.id), addon].sort(byName);
 	writeCache();
 	return addon;
 }
@@ -299,7 +305,7 @@ export async function updateAddon(id: number, input: AddonInput, since: string) 
 		.update(input)
 		.eq('id', id)
 		.eq('updated_at', since)
-		.select('*, profiles(username)')
+		.select('*, profiles:profiles!addons_owner_fkey(username)')
 		.maybeSingle();
 	if (error || !data) {
 		store.addons = previous;
@@ -344,6 +350,8 @@ async function groupCall(name: string, args: Record<string, unknown>) {
 export const groupAddons = (ids: number[]) => groupCall('group_addons', { ids });
 export const ungroupAddon = (id: number) => groupCall('ungroup_addon', { target: id });
 export const setMain = (id: number) => groupCall('set_main', { target: id });
+export const pinLink = (id: number, link: string | null) => groupCall('pin_addon_link', { target: id, link });
+export const mergeAddons = (source: number, target: number) => groupCall('merge_addons', { source_id: source, target_id: target });
 
 /** The poster's request that an addon be grouped as a version of another, for an admin to decide. */
 export async function suggestGroup(addonId: number, targetId: number) {

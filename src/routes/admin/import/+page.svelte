@@ -77,7 +77,7 @@
 	}
 
 	function review(item: QueueItem): Review {
-		return { ...judge(item), missing: gaps(item) };
+		return { ...judge(item), missing: liveByName.has(plain(item.name)) ? [] : gaps(item) };
 	}
 
 	function judge(item: QueueItem): Omit<Review, 'missing'> {
@@ -147,7 +147,8 @@
 		if (item.obsolete) return { verdict: 'problem', advice: 'Marked obsolete on the wiki.', notes, match };
 		if (stats?.archived) return { verdict: 'problem', advice: 'Archived by its author.', notes, match };
 		if (wrongClient) return { verdict: 'problem', advice: 'Probably not a 1.12 addon.', notes, match };
-		if (match) return { verdict: 'duplicate', advice: `Probably a version of "${match.name}".`, notes, match };
+		if (sameName) return { verdict: 'fine', advice: `Adds a link to "${sameName.name}"; its details stay unchanged.`, notes, match: sameName };
+		if (match) return { verdict: 'duplicate', advice: `May belong on "${match.name}".`, notes, match };
 		if (similar) return { verdict: 'duplicate', advice: 'Check against the similar addon first.', notes };
 		if (stale) return { verdict: 'problem', advice: `Not updated since ${year}.`, notes };
 		if (missing.length) return { verdict: 'incomplete', advice: 'Fill in the missing details before publishing.', notes };

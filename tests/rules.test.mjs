@@ -69,7 +69,7 @@ describe('public code update dates', () => {
 		const fork = await post(db, bob, addon('Atlas fork', 'https://github.com/b/Atlas'));
 		const date = (link, year) => ({ url: link, date: `${year}-01-01T00:00:00Z`, history_url: link.split('/tree/')[0] + '/commits/HEAD' });
 		await storeDates([date(url, 2020), date(mirror, 2026), date(fork.repo_url, 2023)]);
-		assert.equal(new Date((await metadata(row.id)).code_update.date).getUTCFullYear(), 2020);
+		assert.equal(new Date((await metadata(row.id)).code_update.date).getUTCFullYear(), 2026);
 		assert.equal(new Date((await metadata(fork.id)).code_update.date).getUTCFullYear(), 2023);
 		await call(admin, 'update public.addons set versions = $1::jsonb where id = $2', [JSON.stringify([{ url: other, note: '' }]), row.id]);
 		assert.equal((await metadata(row.id)).code_update, null);
@@ -249,25 +249,19 @@ describe('posting and editing', () => {
 		const slugOf = async (fields) => (await post(db, alice, fields)).slug;
 		assert.equal(await slugOf(addon('Junk Entry', 'https://github.com/alice/junk', { slug: 'pfui' })), 'junk-entry');
 		assert.equal(await slugOf(addon('Big Wigs!', 'https://github.com/alice/bigwigs')), 'big-wigs');
-		// The same name again: told apart by who hosts it, then by a number.
-		assert.equal(await slugOf(addon('Big Wigs', 'https://github.com/Bob/BigWigs')), 'big-wigs-bob');
-		assert.equal(await slugOf(addon('Big Wigs', 'https://github.com/bob/other')), 'big-wigs-bob-2');
-		assert.equal(await slugOf(addon('Big Wigs', 'https://gitlab.com/carol/bigwigs')), 'big-wigs-gitlab-com');
+		await refused(() => slugOf(addon('Big Wigs', 'https://github.com/Bob/BigWigs')), /already exists/);
 		// An address that still leads to an addon merged into another cannot be taken.
 		await db.sql(`update public.addons set aliases = '{old-name}' where slug = 'big-wigs'`);
 		assert.equal(await slugOf(addon('Old Name', 'https://github.com/dave/old')), 'old-name-dave');
 		await refused(() => call(alice, `update public.addons set slug = 'pfui' where slug = 'junk-entry'`));
 	});
 
-	test('any number of addons can share a name, each at an address of its own', async () => {
-		const slugs = [];
-		for (const repo of ['atlas', 'atlas-fork', 'atlas-3', 'atlas-4']) {
-			slugs.push((await post(db, alice, addon('Atlas', `https://github.com/someone/${repo}`))).slug);
-		}
-		slugs.push((await post(db, bob, addon('Atlas', 'https://gitlab.com/else/atlas'))).slug);
-		// The name, then who hosts it, then a number for as long as that is still taken.
-		assert.deepEqual(slugs, ['atlas', 'atlas-someone', 'atlas-someone-2', 'atlas-someone-3', 'atlas-gitlab-com']);
-	});
+	test('same-name submissions share one page and address', async () => {
+ const first = await post(db,alice,addon('Atlas'));
+ const [{id}] = await call(bob,'select public.submit_addon($1::jsonb) as id',[JSON.stringify({name:'Atlas',versions:[{url:'https://github.com/bob/Atlas'}]})]);
+ assert.equal(id,first.id);
+ assert.deepEqual(await live(),['Atlas']);
+ });
 
 	test('a member needs a description of 15 characters; an admin does not', async () => {
 		await refused(() => post(db, alice, addon('Atlas', undefined, { description: 'Too short' })), /15 characters/);
@@ -516,31 +510,18 @@ describe('links and versions', () => {
 		assert.deepEqual(row.link_keys.sort(), ['github.com/brues-code/pfui', 'github.com/shagu/pfui']);
 	});
 
-	test('only an admin can add a second link; a member cannot hold other repositories as mirrors', async () => {
-		const links = (...urls) => JSON.stringify(urls.map((url) => ({ url, note: '' })));
-		const set = (user, row, versions) => call(user, 'update public.addons set versions = $1 where id = $2 returning versions', [versions, row.id]);
-		const [mine, theirs, moved, mirror] = ['mine', 'theirs', 'moved', 'mirror'].map((name) => `https://github.com/someone/${name}`);
-
-		await refused(() => post(db, alice, { ...addon('Squat'), versions: links(mine, theirs) }), /posted with one link/);
-		const row = await post(db, alice, addon('Mine', mine));
-		await refused(() => set(alice, row, links(mine, theirs)), /Only an admin can add another link/);
-		// The repository moved: the one link it has can change.
-		await set(alice, row, links(moved));
-
-		// An admin adds a mirror. Its poster can reorder the two, drop one and change the
-		// main link, but still not bring in another.
-		await set(admin, row, links(moved, mirror));
-		await set(alice, row, links(mirror, moved));
-		await refused(() => set(alice, row, links(mirror, moved, theirs)), /Only an admin can add another link/);
-		await refused(() => set(alice, row, links(mirror, theirs)), /Only an admin can add another link/);
-		await set(alice, row, links(mine, mirror));
-		await set(alice, row, links(mine));
-		// The repository nobody was allowed to hold is still free to be posted.
-		await post(db, bob, addon('Theirs', theirs));
-	});
+	test('a second link makes a page admin-managed, while members can submit links by name', async () => {
+ const row = await post(db,alice,addon('Mine'));
+ const links = [{url:row.repo_url,note:''},{url:'https://github.com/another/Mine',note:''}];
+ await refused(()=>call(alice,'update public.addons set versions = $1 where id = $2',[JSON.stringify(links),row.id]),/Only an admin/);
+ await call(admin,'update public.addons set versions = $1 where id = $2',[JSON.stringify(links),row.id]);
+ assert.deepEqual(await call(alice,'update public.addons set author = $1 where id = $2 returning id',['wrong',row.id]),[]);
+ await call(bob,'select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Mine',versions:[{url:'https://github.com/bob/Mine'}]})]);
+ assert.equal((await db.sql('select jsonb_array_length(versions) as n from public.addons'))[0].n,3);
+ });
 
 	test('links must be https, and an addon needs at least one', async () => {
-		await refused(() => post(db, alice, { ...addon('A1'), versions: '[]' }), /between 1 and 10 links/);
+		await refused(() => post(db, alice, { ...addon('A1'), versions: '[]' }), /between 1 and 100 links/);
 		await refused(() => post(db, alice, addon('A2', 'http://example.com/a')), /https/);
 	});
 
@@ -1558,45 +1539,29 @@ describe('import queue', () => {
 		]);
 	});
 
-	test('the wiki\'s other versions are queued as entries of their own and grouped once published', async () => {
-		await queue([
-			candidate('pfUI', 'https://github.com/brues-code/pfUI'),
-			candidate('pfUI', 'https://github.com/shagu/pfUI', { group_key: 'github.com/brues-code/pfui' })
-		]);
-		const [main, alt] = (await db.sql('select id from public.import_queue order by id')).map((r) => r.id);
+	test('same-name wiki versions publish as links on one canonical page', async () => {
+ await queue([candidate('pfUI','https://github.com/brues-code/pfUI'),candidate('pfUI','https://github.com/shagu/pfUI')]);
+ const ids=(await db.sql('select id from public.import_queue')).map(r=>r.id);
+ assert.equal((await call(admin,'select public.approve_imports($1) as n',[ids]))[0].n,2);
+ const rows=await db.sql('select * from public.addons');
+ assert.equal(rows.length,1);assert.equal(rows[0].versions.length,2);assert.equal(rows[0].owner,null);
+ });
 
-		// Either order works: here the alternative goes live first.
-		await call(admin, 'select public.approve_imports($1)', [[alt]]);
-		assert.equal((await db.sql('select count(*)::int as n from public.addons where group_id is not null'))[0].n, 0);
-		await call(admin, 'select public.approve_imports($1)', [[main]]);
+	test('a queued entry can add its link directly to a live page', async () => {
+ const a=await post(db,alice,addon('Atlas','https://github.com/a/Atlas'));
+ await queue([candidate('Atlas fork','https://github.com/b/Atlas')]);
+ const [{id}]=await db.sql('select id from public.import_queue');
+ await refused(()=>call(alice,'select public.approve_into($1,$2)',[id,a.id]),/Only admins/);
+ await call(admin,'select public.approve_into($1,$2)',[id,a.id]);
+ const rows=await db.sql('select * from public.addons');assert.equal(rows.length,1);assert.equal(rows[0].versions.length,2);
+ });
 
-		const rows = await db.sql('select repo_url, is_main from public.addons where group_id is not null order by is_main desc');
-		assert.deepEqual(rows, [
-			{ repo_url: 'https://github.com/brues-code/pfUI', is_main: true },
-			{ repo_url: 'https://github.com/shagu/pfUI', is_main: false }
-		]);
-	});
-
-	test('a queued entry can be published straight into the group of a live addon', async () => {
-		const liveOne = await post(db, alice, addon('Atlas', 'https://github.com/a/Atlas'));
-		await queue([candidate('Atlas', 'https://github.com/b/Atlas')]);
-		const [{ id }] = await db.sql('select id from public.import_queue');
-
-		await refused(() => call(alice, 'select public.approve_into($1, $2)', [id, liveOne.id]), /Only admins/);
-		await call(admin, 'select public.approve_into($1, $2)', [id, liveOne.id]);
-		const rows = await db.sql('select repo_url, is_main from public.addons order by is_main desc');
-		assert.deepEqual(rows, [
-			{ repo_url: 'https://github.com/a/Atlas', is_main: true },
-			{ repo_url: 'https://github.com/b/Atlas', is_main: false }
-		]);
-	});
-
-	test('two entries with the same name both publish, at different addresses', async () => {
-		await queue([candidate('aDF', 'https://github.com/one/aDF'), candidate('aDF', 'https://github.com/two/aDF')]);
-		const ids = (await db.sql('select id from public.import_queue order by id')).map((r) => r.id);
-		assert.equal((await call(admin, 'select public.approve_imports($1) as n', [ids]))[0].n, 2);
-		assert.deepEqual((await db.sql('select slug from public.addons order by slug')).map((r) => r.slug), ['adf', 'adf-two']);
-	});
+	test('two imports with the same name publish at one address', async () => {
+ await queue([candidate('aDF','https://github.com/one/aDF'),candidate('aDF','https://github.com/two/aDF')]);
+ const ids=(await db.sql('select id from public.import_queue order by id')).map(r=>r.id);
+ assert.equal((await call(admin,'select public.approve_imports($1) as n',[ids]))[0].n,2);
+ assert.deepEqual(await db.sql('select slug, jsonb_array_length(versions) as n from public.addons'),[{slug:'adf',n:2}]);
+ });
 
 	test('an entry that cannot be published stays in the queue with the reason', async () => {
 		await queue([candidate('X')]);

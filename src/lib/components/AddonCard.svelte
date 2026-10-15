@@ -20,7 +20,7 @@
 	const blurb = $derived(addon.description.trim().split('\n')[0]);
 	// The link is a small button naming the site it opens. Every button is as wide as the
 	// longest name among the allowed sites, so they are all one size.
-	const host = $derived(linkKey(addon.repo_url).split('/')[0]);
+	const host = $derived(linkKey(addon.repo_url ?? '').split('/')[0]);
 	const WIDEST = LINK_HOSTS.map((h) => h.split('/')[0]).reduce((a, b) => (b.length > a.length ? b : a));
 </script>
 
@@ -69,6 +69,6 @@
 					<span aria-hidden="true">↗</span>
 				</span>
 			</svelte:element>
-		{/if}
+		{:else}<span class="text-sm text-muted">No download links</span>{/if}
 	</span>
 </div>

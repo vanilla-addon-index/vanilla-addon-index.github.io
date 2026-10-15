@@ -70,6 +70,15 @@ Reports and member suggestions trigger a public “Waiting for an admin” issue
 counts only. `TELL` and `ADMIN_PAGE` in Nightly configure recipients and the admin
 link. Ordinary wiki candidates do not trigger that issue.
 
+Contributor edit proposals count as suggestions in that notification. The admin
+header and **Edit reviews** tab show the number waiting. Review current and proposed
+values, select the fields to accept, or reject the proposal. A field changed since
+submission cannot be overwritten; leave it unselected or ask for a revision.
+Contributors can replace or withdraw their own pending proposal from the edit form.
+Accepted changes and immediate removals of a contributor's own link use History's
+existing Revert action. Removing links never restores individual ownership, and
+an empty shared page remains published with an unknown code date.
+
 ## Recovery checks
 
 When browser CI fails, download `browser-test-results-<attempt>` from the run's

@@ -6,14 +6,9 @@
 		deleteAddon,
 		fetchAddon,
 		findAddon,
-		groupAddons,
-		groupOf,
-		setMain,
-		store,
-		suggestionsFor,
-		ungroupAddon,
-		type OwnSuggestion
+		store, pinLink, mergeAddons,
 	} from '#lib/addons.svelte.ts';
+	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import ReportDialog from '#lib/components/ReportDialog.svelte';
@@ -45,22 +40,30 @@
 		fetchAddon(slug).finally(() => (lookedUp = slug));
 	});
 
-	// The other versions of this addon, when it is in a group. Main version first.
-	const group = $derived(addon ? groupOf(addon) : []);
-
-	// What the poster suggested this addon is a version of, still waiting or turned down.
-	// An accepted suggestion needs no note: the two are grouped, which the Versions list shows.
-	let suggestions = $state<OwnSuggestion[]>([]);
-	const addonId = $derived(addon?.id);
-	$effect(() => {
-		suggestions = [];
-		const id = addonId;
-		// Only someone logged in can have made one.
-		if (id === undefined || !auth.session) return;
-		suggestionsFor(id).then((list) => {
-			if (id === addonId) suggestions = list.filter((s) => s.status !== 'accepted');
-		});
+	let access=$state<ContributionAccess>({can_propose:false,links:[]}), pending=$state<EditRequest|null>(null);
+	let accessKey='';
+	async function refreshAccess() {
+		if (!addon?.shared || !auth.session || auth.banned) return;
+		const id=addon.id, user=auth.session.user.id;
+		const [result,request]=await Promise.all([contributionAccess(id),ownPendingEdit(id)]);
+		if(addon?.id===id && auth.session?.user.id===user && !auth.banned){access=result;pending=request;}
+	}
+	$effect(()=>{
+		const key=(addon?.id??'')+':'+(auth.session?.user.id??'')+':'+!!auth.banned;
+		if(accessKey===key)return;
+		accessKey=key;access={can_propose:false,links:[]};pending=null;
+		refreshAccess().catch(e=>error=e.message);
 	});
+	async function removeLink(link:string) {
+		if(!addon)return;
+		const confirmed=await ask({title:'Remove your link?',body:'The shared page stays available, even if this is its last link. An admin can undo the removal in History.',action:'Remove my link',danger:true});
+		if(!confirmed)return;
+		await change(async()=>{await removeOwnLink(addon.id,link);await refreshAccess();});
+	}
+	async function withdraw() {
+		if(!pending)return;
+		await change(async()=>{await withdrawEdit(pending!.id);pending=null;});
+	}
 
 	// Group changes are small and reversible, so they happen at once, with no prompt.
 	async function change(work: () => Promise<void>) {
@@ -218,6 +221,7 @@
 			<div class="panel">
 				<h2 class="label mb-0 px-3 pt-2">{addon.versions.length > 1 ? 'Links' : 'Link'}</h2>
 				<!-- The main link first, then mirrors of the same code on other hosts. -->
+				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
 				<ol>
 					{#each addon.versions as version (version.url)}
 						<li class="border-b border-border px-3 py-1.5 last:border-b-0">
@@ -230,52 +234,18 @@
 								{version.url}
 							</a>
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
+                            {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
+                            {#if auth.isAdmin}
+                                <div class="mt-1 flex flex-wrap gap-2">
+                                    <button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
+                                    {#if addon.versions.length > 1}<a class="btn px-2 py-0.5 text-sm" href={resolve('/submit') + '?split=' + addon.id + '&link=' + encodeURIComponent(version.url)}>Separate addon</a>{/if}
+                                </div>
+                            {/if}
+                            {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
 					{/each}
 				</ol>
 			</div>
-
-			{#if group.length > 1}
-				<div class="panel">
-					<h2 class="label mb-0 px-3 pt-2">Versions</h2>
-					<!-- Every version of this addon. The first is the one most people should use. -->
-					<ol>
-						{#each group as member (member.id)}
-							{@const here = member.id === addon.id}
-							<li class={['border-b border-border px-3 py-1.5 last:border-b-0', !member.is_main && !here && 'opacity-80']}>
-								<div class="flex items-baseline gap-2">
-									{#if here}
-										<span class="min-w-0 flex-1 truncate font-bold">{member.name}</span>
-									{:else}
-										<a
-											href={resolve('/addon/[slug]', { slug: member.slug })}
-											class="min-w-0 flex-1 truncate hover:text-accent"
-										>
-											{member.name}
-										</a>
-									{/if}
-									{#if member.is_main}<span class="shrink-0 text-sm text-accent">Main</span>{/if}
-								</div>
-								<p class="truncate text-sm text-muted">
-									{linkOwner(member.repo_url)}{here ? ' · you are here' : ''}
-								</p>
-								{#if auth.isAdmin}
-									<div class="mt-1 flex flex-wrap gap-2">
-										{#if !member.is_main}
-											<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => setMain(member.id))}>
-												Make main
-											</button>
-										{/if}
-										<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => ungroupAddon(member.id))}>
-											Remove from group
-										</button>
-									</div>
-								{/if}
-							</li>
-						{/each}
-					</ol>
-				</div>
-			{/if}
 
 			<dl class="panel">
 				{#if addon.author}{@render fact('Author', addon.author)}{/if}
@@ -300,23 +270,10 @@
 				</div>
 			</dl>
 
-			{#each suggestions as suggestion (suggestion.target_id)}
-				{@const target = store.addons.find((a) => a.id === suggestion.target_id)}
-				{#if target}
-					<p class="panel px-3 py-2 text-sm">
-						Suggested as a version of
-						<a href={resolve('/addon/[slug]', { slug: target.slug })} class="text-accent hover:underline"
-							>{target.name}</a
-						>.
-						<span class="text-muted">
-							{suggestion.status === 'pending'
-								? 'Waiting for an admin to review it.'
-								: 'An admin decided to keep them separate.'}
-						</span>
-					</p>
-				{/if}
-			{/each}
-
+            {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
+            {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>{addon.versions.length ? 'Add another link' : 'Add a link'}</a>{/if}
+            {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
+            {#if auth.session && pending && !auth.isAdmin}<div class="panel px-3 py-2 text-sm"><p>Your edit is waiting for admin review.</p><button class="btn mt-2" onclick={withdraw}>Withdraw proposal</button></div>{/if}
 			{#if canEdit(addon.owner)}
 				<div class="grid grid-cols-2 gap-2">
 					<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn">Edit</a>
@@ -328,9 +285,9 @@
 				<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn w-full">History</a>
 				<!-- The addon found here joins this one's group; this one's main version stays main. -->
 				<AddonPicker
-					placeholder="Group with another addon…"
-					exclude={(other) => group.some((member) => member.id === other.id)}
-					onpick={(other) => change(() => groupAddons([addon.id, other.id]))}
+					placeholder="Merge another addon’s links here…"
+					exclude={(other) => other.id === addon.id}
+					onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
 				/>
 			{/if}
 			{#if error}<p class="text-danger">{error}</p>{/if}

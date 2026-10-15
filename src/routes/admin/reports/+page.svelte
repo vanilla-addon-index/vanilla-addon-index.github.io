@@ -65,7 +65,7 @@
 				</div>
 				<p class={report.reason === 'harmful' ? 'text-danger' : 'text-accent'}>{REASONS[report.reason]}</p>
 				{#if report.note}<p class="break-words whitespace-pre-line">{report.note}</p>{/if}
-				{#if addon}
+				{#if addon?.repo_url}
 					<a
 						href={addon.repo_url}
 						target="_blank"
