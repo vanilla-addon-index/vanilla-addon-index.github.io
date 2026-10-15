@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   check:
-    # The database rules, on a throwaway copy, and the types. Main can reuse only an
+    # The database rules, types and a production build. Main can reuse only an
     # exact successful receipt for this commit AND actual runtime. A miss runs checks.
-    name: Tests and types
+    name: Tests, types and preflight build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -50,10 +50,22 @@ jobs:
       - id: types
         if: steps.reuse.outputs.reuse != 'true'
         run: npm run check
+      - name: Fetch published data for the preflight build
+        if: steps.reuse.outputs.reuse != 'true'
+        # Validate against the published snapshot before changing the database.
+        # A first deployment can build without a snapshot, just as PR CI does.
+        run: |
+          if git fetch --depth 1 origin snapshot; then
+            git show FETCH_HEAD:addons.json > static/addons.json
+          fi
+      - name: Build before database changes
+        id: build
+        if: steps.reuse.outputs.reuse != 'true'
+        run: npm run build
       - name: Record successful main validation
         id: receipt
         # Never certify a PR, a failed check, or a reused receipt as a fresh success.
-        if: github.ref == 'refs/heads/main' && steps.identity.outputs.key != '' && steps.tests.outcome == 'success' && steps.types.outcome == 'success'
+        if: github.ref == 'refs/heads/main' && steps.identity.outputs.key != '' && steps.tests.outcome == 'success' && steps.types.outcome == 'success' && steps.build.outcome == 'success'
         env:
           VALIDATION_KEY: ${{ steps.identity.outputs.key }}
           VALIDATION_RECEIPT: ${{ runner.temp }}/deploy-validation/success.json

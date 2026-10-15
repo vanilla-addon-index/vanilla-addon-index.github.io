@@ -12,7 +12,7 @@ const key = validationKey(identity);
 const script = fileURLToPath(new URL('../scripts/deploy-validation.mjs', import.meta.url));
 
 test('validation reuse requires the exact commit and all runtime inputs', () => {
-	assert.match(key, /^deploy-validation-v1-a{40}-[a-f0-9]{64}$/);
+	assert.match(key, /^deploy-validation-v2-a{40}-[a-f0-9]{64}$/);
 	assert.equal(validationKey({...identity}), key);
 	for (const [field, value] of Object.entries({sha:'b'.repeat(40), node:'v24.15.0', npm:'11.10.0', platform:'darwin', arch:'arm64', imageOS:'ubuntu26', imageVersion:'20261019.1.0'})) {
 		assert.notEqual(validationKey({...identity, [field]:value}), key, field);
@@ -26,10 +26,10 @@ test('validation reuse requires the exact commit and all runtime inputs', () => 
 });
 
 test('only a complete successful receipt for the exact key can skip checks', () => {
-	const receipt = {version:1, key, tests:'success', types:'success'};
+	const receipt = {version:2, key, tests:'success', types:'success', build:'success'};
 	assert.equal(receiptMatches(JSON.stringify(receipt), key), true);
-	for (const altered of [{...receipt, version:0}, {...receipt, key:validationKey({...identity, sha:'b'.repeat(40)})},
-		{...receipt, tests:'failure'}, {...receipt, types:'skipped'}, {...receipt, types:undefined}, {key}]) {
+	for (const altered of [{...receipt, version:1}, {...receipt, key:validationKey({...identity, sha:'b'.repeat(40)})},
+		{...receipt, tests:'failure'}, {...receipt, types:'skipped'}, {...receipt, types:undefined}, {...receipt, build:'failure'}, {...receipt, build:undefined}, {key}]) {
 		assert.equal(receiptMatches(JSON.stringify(altered), key), false);
 	}
 	for (const text of [undefined, '', '{broken', 'null', '[]', 'x'.repeat(1025)]) assert.equal(receiptMatches(text, key), false);
@@ -61,7 +61,7 @@ test('receipt commands recover from missing or corrupt cache files and persist a
 	} finally { rmSync(dir, {recursive:true, force:true}); }
 });
 
-test('workflow reuse is main-only, exact, optional, and gated on successful tests and types', () => {
+test('migrations require tests, types and a preflight build, including when validation is reused', () => {
 	const workflow = (name) => readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 	const prepare = workflow('prepare');
 	const check = prepare.split('\n  check:\n')[1].split('\n  migrate:\n')[0];
@@ -74,10 +74,13 @@ test('workflow reuse is main-only, exact, optional, and gated on successful test
 	assert.match(step('Find successful main validation'), /continue-on-error: true/);
 	assert.match(step('Verify successful validation receipt'), /steps\.validation\.outcome == 'success' && steps\.validation\.outputs\.cache-hit == 'true'/);
 	assert.ok(!check.includes('restore-keys:'));
-	for (const command of ['npm ci', 'npm test', 'npm run check']) assert.match(step(`run: ${command}`), /if: steps\.reuse\.outputs\.reuse != 'true'/);
-	assert.match(step('Record successful main validation'), /steps\.tests\.outcome == 'success' && steps\.types\.outcome == 'success'/);
+	for (const command of ['npm ci', 'npm test', 'npm run check', 'npm run build']) assert.match(step(`run: ${command}`), /if: steps\.reuse\.outputs\.reuse != 'true'/);
+	assert.match(step('Record successful main validation'), /steps\.tests\.outcome == 'success' && steps\.types\.outcome == 'success' && steps\.build\.outcome == 'success'/);
 	assert.match(step('Remember successful main validation'), /if: steps\.receipt\.outcome == 'success'/);
 	assert.match(step('Remember successful main validation'), /continue-on-error: true/);
+	assert.ok(steps.indexOf(step('run: npm run build')) > steps.indexOf(step('run: npm run check')));
+	assert.ok(steps.indexOf(step('Record successful main validation')) > steps.indexOf(step('run: npm run build')));
+	assert.ok(!step('run: npm run build').includes('continue-on-error:'));
 	// Migrations still run on every preparation, behind successful code validation.
 	assert.match(prepare.split('\n  migrate:\n')[1], /needs: check/);
 	assert.ok(!check.includes('SUPABASE_DB_PASSWORD'));
