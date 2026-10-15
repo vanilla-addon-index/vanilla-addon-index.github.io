@@ -22,10 +22,12 @@ jobs:
   build:
     # Builds the site. This is the one job that installs the site's dependencies and runs
     # their code, so it is given nothing: no secret, and no right to write anywhere. The
-    # snapshot is read with the public key. What it made is handed on as two files.
+    # snapshot is read with the public key. Its artifacts contain only the site and
+    # public snapshot metadata.
     name: Build
     outputs:
       attempt: ${{ steps.built.outputs.attempt }}
+      changed: ${{ steps.compare.outputs.changed }}
     needs: prepare
     # Nightly already ran this exact preparation before importing. A failed preparation
     # cannot be bypassed by the default build path.
@@ -34,21 +36,23 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      deployments: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-
       - name: Fetch the last snapshot
         # The snapshot lives on a branch of its own, so this workflow never pushes to main.
         # The last one is what the site is built from if the database cannot be reached,
         # and what the new one is measured against.
         run: |
           if git fetch --depth 1 origin snapshot; then
-            git show FETCH_HEAD:addons.json > static/addons.json
+            if git show FETCH_HEAD:addons.json > "$RUNNER_TEMP/last-addons.json"; then
+              cp "$RUNNER_TEMP/last-addons.json" static/addons.json
+            fi
+            git show FETCH_HEAD:publication.json > "$RUNNER_TEMP/last-publication.json" 2>/dev/null || true
           fi
 
       - name: Export snapshot
@@ -57,17 +61,31 @@ jobs:
         continue-on-error: true
         run: node scripts/export.mjs
 
-      - run: npm run build
+      # Repeat Refresh's advisory comparison inside the shared publication lock.
+      - name: Compare with the confirmed publication
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_PREVIOUS: ${{ runner.temp }}/last-publication.json
+          PUBLICATION_STAGE: ${{ runner.temp }}/publication
+        run: node scripts/publication-state.mjs
+      - if: steps.compare.outputs.changed == 'true'
+        run: npm ci
+      - if: steps.compare.outputs.changed == 'true'
+        run: npm run build
       - id: built
+        if: steps.compare.outputs.changed == 'true'
         run: echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - if: steps.compare.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           name: github-pages-${{ github.run_attempt }}
           path: build
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: steps.compare.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: snapshot-${{ github.run_attempt }}
-          path: static/addons.json
+          path: ${{ runner.temp }}/publication
           if-no-files-found: ignore
           retention-days: 1
 
@@ -75,6 +93,7 @@ jobs:
     # Publishes what the build made. Nothing is installed or run here.
     name: Deploy
     needs: build
+    if: needs.build.outputs.changed == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -131,6 +150,7 @@ jobs:
     permissions:
       contents: write
       actions: read
+      deployments: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Save snapshot
@@ -146,10 +166,27 @@ jobs:
             exit 0
           fi
           file="$RUNNER_TEMP/snapshot/addons.json"
+          receipt="$RUNNER_TEMP/snapshot/publication.json"
+          # Bind the snapshot to this run's successful environment deployment. A
+          # failed snapshot push must never let an older record skip a later deploy.
+          deployment=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=1")
+          id=$(jq -er '.[0].id | select(type == "number" and . > 0)' <<< "$deployment")
+          jq -e --arg sha "$GITHUB_SHA" '.[0] | .sha == $sha and .environment == "github-pages"' <<< "$deployment"
+          status=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses?per_page=1")
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/"
+          jq -e --arg run "$run_url" '.[0] | .state == "success" and (.log_url | startswith($run))' <<< "$status"
+          hash=$(sha256sum "$file" | cut -d ' ' -f 1)
+          jq -e --arg sha "$GITHUB_SHA" --arg hash "$hash" \
+            '.version == 1 and .commit == $sha and .snapshot == $hash' "$receipt"
+          jq --argjson id "$id" '. + {deployment: $id}' "$receipt" > "$receipt.tmp"
+          mv "$receipt.tmp" "$receipt"
           # What the branch is, for whoever lands on it.
           readme="$RUNNER_TEMP/snapshot/README.md"
           printf '%s\n' \
             "The list of addons the site was last built with, as one file: addons.json." \
+            "" \
+            "publication.json records its application commit, full snapshot fingerprint" \
+            "and confirmed Pages deployment. It contains no private queue data." \
             "" \
             "Written by the Deploy workflow on the main branch. Visitors read the list from this" \
             "file, and it stands in when the database cannot be reached. It holds what any" \
@@ -160,11 +197,12 @@ jobs:
             > "$readme"
           if git fetch --depth 1 origin snapshot \
             && git show FETCH_HEAD:addons.json | cmp -s - "$file" \
+            && git show FETCH_HEAD:publication.json 2>/dev/null | cmp -s - "$receipt" \
             && git show FETCH_HEAD:README.md 2>/dev/null | cmp -s - "$readme"; then
             echo "The snapshot has not changed."
             exit 0
           fi
-          tree=$(printf '100644 blob %s\taddons.json\n100644 blob %s\tREADME.md\n' \
-            "$(git hash-object -w "$file")" "$(git hash-object -w "$readme")" | git mktree)
+          tree=$(printf '100644 blob %s\taddons.json\n100644 blob %s\tpublication.json\n100644 blob %s\tREADME.md\n' \
+            "$(git hash-object -w "$file")" "$(git hash-object -w "$receipt")" "$(git hash-object -w "$readme")" | git mktree)
           commit=$(git commit-tree "$tree" -m "Addon snapshot")
           git push --force origin "$commit:refs/heads/snapshot"
