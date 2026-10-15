@@ -36,6 +36,7 @@ export interface Addon {
 	created_at: string;
 	updated_at: string;
 	code_update: CodeUpdate | null;
+	link_code_updates: Record<string, CodeUpdate>;
 	shared: boolean;
 	pinned_link: string | null;
 	separate_name: boolean;

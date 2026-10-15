@@ -15,7 +15,7 @@
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
-	import { linkOwner } from '#lib/links.ts';
+	import { linkAuthor } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
@@ -154,17 +154,10 @@
 	<title>{addon ? addonTitle(addon) : SITE_NAME}</title>
 </svelte:head>
 
-{#snippet fact(label: string, value: string)}
-	<div class="flex justify-between gap-4 border-b border-border px-3 py-1.5 last:border-b-0">
-		<dt class="text-muted">{label}</dt>
-		<dd class="truncate">{value}</dd>
-	</div>
-{/snippet}
-
 {#if addon}
 	<a href={resolve('/')} class="text-muted hover:text-accent">← All addons</a>
 
-	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
+	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
 		<div class="panel p-4">
 			<h1 class="text-3xl font-bold">{addon.name}</h1>
 
@@ -220,11 +213,12 @@
 		<aside class="space-y-2">
 			<div class="panel">
 				<h2 class="label mb-0 px-3 pt-2">{addon.versions.length > 1 ? 'Links' : 'Link'}</h2>
-				<!-- The main link first, then mirrors of the same code on other hosts. -->
+				<!-- Pinned link first, otherwise newest known code update. -->
 				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
 				<ol>
 					{#each addon.versions as version (version.url)}
-						<li class="border-b border-border px-3 py-1.5 last:border-b-0">
+						{@const update = addon.link_code_updates?.[version.url] ?? (version.url === addon.repo_url ? addon.code_update : null)}
+						<li class="border-b border-border px-3 py-3 last:border-b-0">
 							<a
 								href={version.url}
 								target="_blank"
@@ -234,6 +228,13 @@
 								{version.url}
 							</a>
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
+                            <dl class="mt-2 space-y-1 text-sm">
+                                <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Author</dt><dd class="min-w-0 break-words text-right">{(!addon.shared ? addon.author : '') || linkAuthor(version.url) || 'Unknown'}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Last code update</dt><dd>
+                                    {#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history"><time datetime={update.date}>{date(update.date)}</time></a>
+                                    {:else}<span class="text-muted">Unknown</span>{/if}
+                                </dd></div>
+                            </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
                             {#if auth.isAdmin}
                                 <div class="mt-1 flex flex-wrap gap-2">
@@ -247,28 +248,9 @@
 				</ol>
 			</div>
 
-			<dl class="panel">
-				{#if addon.author}{@render fact('Author', addon.author)}{/if}
-				<!-- Who added the entry is for admins: to visitors the author is the name that matters. -->
-				{#if auth.isAdmin && addon.owner_name}
-					<div class="flex justify-between gap-4 border-b border-border px-3 py-1.5 last:border-b-0">
-						<dt class="text-muted">Posted by</dt>
-						<dd class="truncate"><UserLink name={addon.owner_name} /></dd>
-					</div>
-				{/if}
-				<div class="flex justify-between gap-4 border-b border-border px-3 py-1.5 last:border-b-0">
-					<dt class="text-muted">Last code update</dt>
-					<dd>
-						{#if addon.code_update}
-							<a href={addon.code_update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history">
-								<time datetime={addon.code_update.date}>{date(addon.code_update.date)}</time>
-							</a>
-						{:else}
-							<span class="text-muted">Unknown</span>
-						{/if}
-					</dd>
-				</div>
-			</dl>
+            {#if auth.isAdmin && addon.owner_name}
+                <dl class="panel flex justify-between gap-4 px-3 py-1.5"><dt class="text-muted">Posted by</dt><dd class="truncate"><UserLink name={addon.owner_name} /></dd></dl>
+            {/if}
 
             {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
             {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>{addon.versions.length ? 'Add another link' : 'Add a link'}</a>{/if}
