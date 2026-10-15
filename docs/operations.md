@@ -93,6 +93,29 @@ If GitHub disables a schedule, open Actions → the workflow → **Enable workfl
 Nightly tries to keep the schedules enabled, but notification emails remain the
 backstop. A paused Supabase project must be restored from its dashboard.
 
+### Independent schedule monitoring
+
+Run `node scripts/workflow-health.mjs` outside GitHub Actions, for example every
+six hours on an independent scheduler. It requires Node and the GitHub CLI,
+authenticated with read access to this repository's Actions. No database secrets
+or application dependencies are needed. The command only reads GitHub metadata.
+
+It prints JSON and exits with status 0 when Backup and Nightly are enabled and
+each has a verified successful run on `main` within 36 hours. Manual runs count.
+A backup must have completed both its encryption and restore-check steps;
+green runs whose backup steps skipped do not count. Nightly must have completed
+its import step. Run creation time bounds freshness, so rerunning an old run does
+not make old data appear new.
+
+Exit status 1 means an overdue or disabled workflow, or inability to verify health
+(including API outages and expired credentials). Configure the external scheduler
+to notify on unhealthy results and recovery, and to detect its own missed checks.
+The script checks up to 100 successful runs per workflow and reports unhealthy
+if none qualifies. This repository does not install or activate that scheduler.
+Keep the monitor independent of these Actions schedules; a monitor running only
+in another workflow can stop alongside them. A monitor on a personal computer
+also needs that computer available to run checks.
+
 ## Database administration
 
 Migrations are append-only once applied. For manual hosted administration, first
