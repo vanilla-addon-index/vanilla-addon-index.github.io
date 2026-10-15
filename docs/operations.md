@@ -72,6 +72,11 @@ link. Ordinary wiki candidates do not trigger that issue.
 
 ## Recovery checks
 
+When browser CI fails, download `browser-test-results-<attempt>` from the run's
+Artifacts section. Playwright retains traces for failed tests; open a downloaded
+`trace.zip` with `npx playwright show-trace <path-to-trace.zip>`. Failure artifacts
+are kept for seven days. Failures before tests start may produce no trace.
+
 | Symptom | What to check |
 |---|---|
 | Preparation fails | Required environment secrets and migration logs; fix forward with a new migration |
