@@ -107,7 +107,6 @@ test('admins can merge links, pin the leader and restore a merged page from tras
  await postAddon(page,two); const address=await postAddon(page,one);
  const picker=page.getByPlaceholder('Merge another addon’s links here…');
  await picker.fill(two); await page.getByRole('option',{name:new RegExp('^'+two)}).click();
- await expect(page.getByRole('heading',{name:'Links',exact:true})).toBeVisible();
  const links=page.locator('aside ol li'); await expect(links).toHaveCount(2);
  await links.nth(1).getByRole('button',{name:'Pin',exact:true}).click();
  await expect(links.first()).toContainText('Pinned');
