@@ -32,6 +32,7 @@ const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	aliases: row.aliases ?? [],
 	source: row.source ?? '',
 	code_update: row.code_update ?? null,
+	link_code_updates: row.link_code_updates ?? {},
 	shared: row.shared ?? false,
 	pinned_link: row.pinned_link ?? null,
 	separate_name: row.separate_name ?? false,

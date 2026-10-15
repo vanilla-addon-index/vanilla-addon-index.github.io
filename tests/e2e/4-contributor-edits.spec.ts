@@ -41,14 +41,16 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await request.getByRole('button',{name:'Accept selected fields'}).click();
  await expect(request).toHaveCount(0);
  await page.goto(address);
- await expect(page.getByText('Reviewed author',{exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Edit',exact:true}).click();
+ await expect(page.getByLabel('Addon author',{exact:true})).toHaveValue('Reviewed author');
+ await page.goto(address);
  await expect(page.getByText(description,{exact:true})).toBeVisible();
  // Admins can remove the final link without deleting the shared page.
  await page.getByRole('link',{name:'Edit',exact:true}).click();
  await page.getByLabel('Link to the addon').fill('');
  await page.getByRole('button',{name:'Save changes'}).click();
  await expect(page.getByText('No download links currently listed.')).toBeVisible();
- await expect(page.locator('dl').getByText('Unknown',{exact:true})).toBeVisible();
+ await expect(page.getByText('Last code update',{exact:true})).toHaveCount(0);
  await switchUser(page,'member2');
  await page.goto(address);
  await expect(page.getByText('No download links currently listed.')).toBeVisible();
@@ -61,5 +63,6 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await page.getByRole('button',{name:'Submit for review',exact:true}).click();
  await page.getByRole('button',{name:'Withdraw proposal',exact:true}).click();
  await expect(page.getByText('Your edit is waiting for admin review.')).toHaveCount(0);
- await expect(page.getByText('Reviewed author',{exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Propose edits',exact:true}).click();
+ await expect(page.getByLabel('Addon author',{exact:true})).toHaveValue('Reviewed author');
 });

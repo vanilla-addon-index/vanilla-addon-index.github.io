@@ -62,6 +62,12 @@ test('newest code link leads automatically; a pin controls both the link and hea
   await db.asVisitor(q => q('select public.store_code_updates($1,$2::jsonb)', [NIGHTLY_TOKEN,JSON.stringify(dates)]));
   let [row] = await db.sql('select * from public.addons');
   assert.equal(row.repo_url,b); assert.equal(row.code_update.url,b+'/commits/HEAD');
+  assert.equal(new Date(row.link_code_updates[a.repo_url].date).getUTCFullYear(),2020);
+  assert.equal(new Date(row.link_code_updates[b].date).getUTCFullYear(),2026);
+  const [publicRow] = await db.asVisitor(q=>q('select link_code_updates from public.addons where id = $1',[a.id]));
+  assert.deepEqual(publicRow.link_code_updates,row.link_code_updates);
+  await assert.rejects(()=>db.as(admin,q=>q("update public.addons set link_code_updates = '{\"forged\":{}}' where id = $1",[a.id])),/permission denied/);
+  assert.deepEqual((await db.sql('select link_code_updates from public.addons where id = $1',[a.id]))[0].link_code_updates,row.link_code_updates);
   assert.deepEqual(await db.sql('select count(*) as n from public.activity_log'),history);
   await db.as(admin,q=>q('select public.pin_addon_link($1,$2)',[a.id,a.repo_url]));
   [row] = await db.sql('select * from public.addons');

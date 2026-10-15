@@ -53,7 +53,12 @@ test('an addon page shows its shared links and no admin controls', async ({ page
 	// Who posted an entry is for admins.
 	await expect(page.getByText('Posted by')).toHaveCount(0);
 	const facts = page.locator('dl').filter({ hasText: 'Author' });
-	await expect(facts.getByText('Last code update')).toBeVisible();
+	await expect(facts).toHaveCount(3);
+	await expect(facts.getByText('Last code update')).toHaveCount(3);
+	await expect(facts.getByText('Unknown', { exact: true })).toHaveCount(2);
+	for (const link of await page.locator('aside ol > li').all()) {
+		await expect(link.getByText('Author', { exact: true })).toBeVisible();
+	}
 	await expect(facts.getByRole('link', { name: /2024/ })).toHaveAttribute('href', /\/commits\/HEAD$/);
 	await expect(facts.locator('time')).toHaveAttribute('datetime', '2024-06-14T14:00:48+00:00');
 	await expect(facts.getByText('Added', { exact: true })).toHaveCount(0);
