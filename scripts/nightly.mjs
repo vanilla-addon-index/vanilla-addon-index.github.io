@@ -3,7 +3,7 @@
 //   2. Trims the log and the trash of what is older than 90 days.
 //   3. Counts the reports and suggestions waiting for an admin, for the workflow to tell
 //      them about.
-//   4. Asks GitHub, GitLab, Codeberg and gitea.com about every queued and live repository
+//   4. Asks GitHub, GitLab, Codeberg, gitea.com and OctoWoW about every queued and live repository
 //      kept there (stars, last update, archived, fork parent, current address, and the
 //      game version its .toc file declares) and stores the answers for the review page.
 //      GitHub is asked with the workflow's own token; the others need none.
@@ -17,7 +17,7 @@
 import { appendFileSync } from 'node:fs';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { githubCodeQuery, githubCodeUpdate } from '../src/lib/code-updates.ts';
-import { askForge, forgePlace, forgeRepositoryEndpoint } from '../src/lib/forges.ts';
+import { forgeHostPath, askForge, forgePlace, forgeRepositoryEndpoint } from '../src/lib/forges.ts';
 import { imagesIn, uncamo } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
@@ -519,8 +519,8 @@ async function checkOtherHosts() {
 	let silent = 0;
 	const finishedOtherHosts = metrics.start('Other hosts');
 	let completed = 0;
-	const queues = ['gitlab.com', 'codeberg.org', 'gitea.com'].map((host) =>
-		runWorkers(elsewhere.filter((r) => r.place.host === host), FORGE_WORKERS, async ({ key, url, place, readme, wiki, cache }) => {
+	const queues = ['gitlab.com', 'codeberg.org', 'gitea.com', 'octowow.st'].map((host) =>
+		runWorkers(elsewhere.filter((r) => r.place.host === host), host === 'octowow.st' ? 1 : FORGE_WORKERS, async ({ key, url, place, readme, wiki, cache }) => {
 			try {
 				let branchState;
 				const facts = await askForge(place, forgeRequests.ask, readme, {
@@ -540,14 +540,14 @@ async function checkOtherHosts() {
 				if (!facts.interface_checked) metrics.count('other_host_toc_checks_failed');
 				if (readme && !facts.readme_checked) metrics.count('other_host_readme_checks_failed');
 				if (facts.code_update) codeUpdates.push({ url, date: facts.code_update.date, history_url: facts.code_update.url });
-				const asked = `${place.host}/${place.project}`.toLowerCase();
-				const now = `${place.host}/${facts.project}`.toLowerCase();
+				const asked = `${forgeHostPath(place.host)}/${place.project}`.toLowerCase();
+				const now = `${forgeHostPath(place.host)}/${facts.project}`.toLowerCase();
 				const row = {
 					key,
 					stars: facts.stars,
 					pushed_at: facts.pushed_at,
 					archived: facts.archived,
-					fork_of: facts.fork_of ? `${place.host}/${facts.fork_of}`.toLowerCase() : null,
+					fork_of: facts.fork_of ? `${forgeHostPath(place.host)}/${facts.fork_of}`.toLowerCase() : null,
 					// A renamed or moved repository answers with its current address. What the key
 					// has after the repository stays on it.
 					canonical: facts.missing ? null : now !== asked && key.startsWith(asked) ? now + key.slice(asked.length) : key,
@@ -573,7 +573,7 @@ async function checkOtherHosts() {
 	finishedOtherHosts();
 	if (elsewhere.length) {
 		console.log(
-			`Asked GitLab, Codeberg and gitea.com about ${elsewhere.length} repositories` +
+			`Asked GitLab, Codeberg, gitea.com and OctoWoW about ${elsewhere.length} repositories` +
 				(silent ? `; ${silent} got no answer, and what was known about those is kept.` : '.')
 		);
 	}

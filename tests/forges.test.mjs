@@ -31,6 +31,8 @@ describe('where a link to GitLab, Codeberg or gitea.com points', () => {
 		assert.equal(place('https://www.GitLab.com/aead/aBindings.git?ref=x#top'), 'gitlab | gitlab.com | aead/aBindings |  | ');
 		assert.equal(place('https://gitlab.com/group/sub/addon/'), 'gitlab | gitlab.com | group/sub/addon |  | ');
 		assert.equal(place('https://codeberg.org/Someone/Addon'), 'gitea | codeberg.org | Someone/Addon |  | ');
+		assert.equal(place('https://octowow.st/git/Ade/AdeAlts.git'), 'gitea | octowow.st | Ade/AdeAlts |  | ');
+		assert.equal(place('https://octowow.st/git/Ade/AdeAlts/src/branch/main/Folder'), 'gitea | octowow.st | Ade/AdeAlts | main | Folder');
 		assert.equal(place('https://gitea.com/someone/addon.git'), 'gitea | gitea.com | someone/addon |  | ');
 	});
 
@@ -50,7 +52,8 @@ describe('where a link to GitLab, Codeberg or gitea.com points', () => {
 			'https://gitlab.com/someone',
 			'https://codeberg.org/',
 			'https://github.com/shagu/pfQuest',
-			'https://octowow.st/git/ShempError/BulwarkFrame',
+			'https://octowow.st/ShempError/BulwarkFrame',
+			'https://octowow.st/git/Ade',
 			'https://bitbucket.org/team/addon',
 			'not a link'
 		]) {
@@ -205,4 +208,23 @@ describe('what a Gitea site says about a repository', () => {
 	test('a web page where data was asked for is no answer', async () => {
 		assert.equal(await askForge(forgePlace('https://codeberg.org/someone/addon'), site({ [`${api}/someone/addon`]: '<html>Just a moment</html>' }).ask), null);
 	});
+});
+
+
+test('OctoWoW retains /git for renamed repositories, history and README image bases', async () => {
+	const api = 'https://octowow.st/git/api/v1/repos';
+	const { ask, asked } = site({
+		[`${api}/Old/Addon`]: {id:154, full_name:'Ade/AdeAlts', stars_count:2, default_branch:'main'},
+		[`${api}/Ade/AdeAlts/commits?limit=1&stat=false&verification=false&files=false&sha=main`]: [{commit:{committer:{date:'2026-10-14T12:30:33Z'}}}],
+		[`${api}/Ade/AdeAlts/contents/?ref=main`]: [{name:'AdeAlts.toc',type:'file'}, {name:'README.md',type:'file'}],
+		[`${api}/Ade/AdeAlts/raw/AdeAlts.toc?ref=main`]: '## Interface: 11200',
+		[`${api}/Ade/AdeAlts/raw/README.md?ref=main`]: '![preview](preview.png)'
+	});
+	const facts = await askForge(forgePlace('https://octowow.st/git/Old/Addon'), ask, true);
+	assert.equal(facts.interface,11200);
+	assert.equal(facts.stars,2);
+	assert.equal(facts.code_update.url,'https://octowow.st/git/Ade/AdeAlts/commits/branch/main');
+	assert.equal(facts.readme.base,'https://octowow.st/git/Ade/AdeAlts/raw/branch/main/README.md');
+	assert.equal(asked.length,5);
+	assert.ok(asked.every((url) => url.startsWith(`${api}/`)));
 });

@@ -1,4 +1,4 @@
-// What GitLab and the Gitea sites (Codeberg, gitea.com) say about a repository: the same
+// What GitLab and the Gitea sites (Codeberg, gitea.com, OctoWoW) say about a repository: the same
 // facts the nightly job gets from GitHub, asked for the way anyone may, without a login.
 // Nothing here fetches by itself: whoever calls hands in the function that does, so the
 // job decides about timeouts and manners, and a test can answer in a site's place.
@@ -6,7 +6,9 @@
 import type { CodeUpdate } from './types.ts';
 import { CHECK_CACHE_VERSION, forgeCache, gitOid, githubFiles, type ForgeCacheControl, type ForgeCheckCache } from './nightly-cache.ts';
 
-const GITEA_HOSTS = ['codeberg.org', 'gitea.com'];
+const GITEA_HOSTS = ['codeberg.org', 'gitea.com', 'octowow.st'];
+/** Public repository root, including the subpath used by OctoWoW. */
+export const forgeHostPath = (host: string): string => host === 'octowow.st' ? `${host}/git` : host;
 // The interface number a 1.12 addon declares in its .toc file.
 const VANILLA_INTERFACE = 11200;
 // A repository can ship a .toc per client; this many are read at most.
@@ -56,7 +58,7 @@ const decode = (text: string) => {
 const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/');
 
 /**
- * Where on GitLab, Codeberg or gitea.com a link points: the repository and, when the link
+ * Where on GitLab, Codeberg, gitea.com or OctoWoW a link points: the repository and, when the link
  * names them, the branch and the folder in it. Nothing for a link to any other site.
  */
 export function forgePlace(url: string): ForgePlace | null {
@@ -64,6 +66,7 @@ export function forgePlace(url: string): ForgePlace | null {
 	if (!parts) return null;
 	const host = parts[1].toLowerCase();
 	const segments = parts[2].split('/').filter(Boolean).map(decode);
+	if (host === 'octowow.st' && segments.shift()?.toLowerCase() !== 'git') return null;
 	const bare = (name: string) => name.replace(/\.git$/i, '');
 
 	if (host === 'gitlab.com') {
@@ -138,7 +141,7 @@ const SITES = {
 			`https://${p.host}/${encodePath(project)}/-/raw/${encodePath(ref)}/${encodePath(path)}`
 	},
 	gitea: {
-		repo: (p: ForgePlace) => `https://${p.host}/api/v1/repos/${encodePath(p.project)}`,
+		repo: (p: ForgePlace) => `https://${forgeHostPath(p.host)}/api/v1/repos/${encodePath(p.project)}`,
 		read: (r: Record<string, any>) => ({
 			id: String(r.id ?? ''),
 			project: String(r.full_name ?? ''),
@@ -151,13 +154,13 @@ const SITES = {
 		commits: (api: string, ref: string, path: string) =>
 			`${api}/commits?limit=1&stat=false&verification=false&files=false&sha=${encodeURIComponent(ref)}${path ? `&path=${encodeURIComponent(path)}` : ''}`,
 		history: (p: ForgePlace, project: string, ref: string) =>
-			`https://${p.host}/${encodePath(project)}/commits/${p.refKind}/${encodeURIComponent(ref)}${p.path ? `/${encodePath(p.path)}` : ''}`,
+			`https://${forgeHostPath(p.host)}/${encodePath(project)}/commits/${p.refKind}/${encodeURIComponent(ref)}${p.path ? `/${encodePath(p.path)}` : ''}`,
 		commitDate: (c: Record<string, any>) => (c?.commit?.committer?.date ?? c?.created) as string | undefined,
 		list: (api: string, ref: string, path: string) => `${api}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
 		entry: (e: Record<string, any>): Entry => ({ name: String(e.name), folder: e.type === 'dir', oid: e.sha }),
 		file: (api: string, ref: string, path: string) => `${api}/raw/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
 		raw: (p: ForgePlace, project: string, ref: string, path: string) =>
-			`https://${p.host}/${encodePath(project)}/raw/${p.refKind}/${encodePath(ref)}/${encodePath(path)}`
+			`https://${forgeHostPath(p.host)}/${encodePath(project)}/raw/${p.refKind}/${encodePath(ref)}/${encodePath(path)}`
 	}
 };
 
@@ -181,7 +184,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 	const repo = site.read(answer.body as Record<string, any>);
 	if (!repo.project) return null;
 	// GitLab's other addresses go by the project's number, Gitea's by its current name.
-	const api = place.kind === 'gitlab' ? `https://${place.host}/api/v4/projects/${repo.id}` : `https://${place.host}/api/v1/repos/${encodePath(repo.project)}`;
+	const api = place.kind === 'gitlab' ? `https://${place.host}/api/v4/projects/${repo.id}` : `https://${forgeHostPath(place.host)}/api/v1/repos/${encodePath(repo.project)}`;
 	const facts: ForgeFacts = {
 		project: repo.project,
 		stars: repo.stars,

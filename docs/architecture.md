@@ -66,7 +66,7 @@ guaranteed deletion or publication deadline.
 
 [Nightly](../.github/workflows/nightly.yml) reads the Turtle WoW wiki into a pending
 queue for admin review. It then checks every supported published and pending
-repository link on GitHub, GitLab, Codeberg and gitea.com. Old, inactive and
+repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old, inactive and
 previously missing repositories keep the same daily coverage.
 
 Repository facts include availability, current address, stars, archive status,
@@ -95,3 +95,8 @@ Unused private cache URLs are pruned only after they have no pending or publishe
 reference. Rename-matching facts and commit-date records are retained.
 
 See [operations](operations.md) for deployment guards, diagnostics and recovery.
+
+OctoWoW checks use its public Gitea API under `/git/api/v1`, one repository at a
+time. Its DDoS protection can return an HTML challenge instead of API data; these
+responses count as unavailable checks and previously known data is kept. Access
+from a local machine does not establish access from GitHub Actions.

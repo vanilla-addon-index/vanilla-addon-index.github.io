@@ -131,3 +131,31 @@ test('GitLab metadata validators retain the fields used for subgroup and fork id
 	const warm = createForgeRequests({previous:[cold.metadata(endpoint)]});
 	assert.deepEqual((await warm.ask(endpoint,'json')).body,project);
 });
+
+
+test('OctoWoW repository validators survive between runs under /git', async () => {
+	const url = 'https://octowow.st/git/api/v1/repos/Ade/AdeAlts';
+	globalThis.fetch = async () => json(body,{etag:'"octo"'});
+	const cold = createForgeRequests();
+	await cold.ask(url,'json');
+	const cached = cold.metadata(url);
+	assert.ok(cached);
+	globalThis.fetch = async (target,init) => {
+		assert.equal(target,url);
+		assert.equal(init.headers['If-None-Match'],'"octo"');
+		return new Response(null,{status:304});
+	};
+	const warm = createForgeRequests({previous:[cached]});
+	assert.equal((await warm.ask(url,'json')).body.stars_count,3);
+});
+
+
+test('OctoWoW challenge HTML is an unavailable response, preserving cached metadata', async () => {
+	const endpoint = 'https://octowow.st/git/api/v1/repos/Ade/AdeAlts';
+	const previous = {version:1,endpoint,checkedAt:1,etag:'"old"',body};
+	globalThis.fetch = async () => new Response('<html>Just a moment please...</html>',{headers:{'content-type':'text/html'}});
+	const session = createForgeRequests({previous:[previous]});
+	assert.equal(await session.ask(endpoint,'json'),null);
+	assert.equal(session.metadata(endpoint).body.stars_count,3);
+	assert.equal(session.metadata(endpoint).etag,'"old"');
+});

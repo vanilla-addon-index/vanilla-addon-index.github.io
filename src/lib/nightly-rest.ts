@@ -17,6 +17,7 @@ function repositoryHost(endpoint: string): string | null {
 		const url = new URL(endpoint);
 		if (url.protocol !== 'https:' || url.search || url.hash || url.username || url.password) return null;
 		if (url.hostname === 'gitlab.com' && /^\/api\/v4\/projects\/[^/]+$/.test(url.pathname)) return url.hostname;
+		if (url.hostname === 'octowow.st' && /^\/git\/api\/v1\/repos\/[^/]+\/[^/]+$/.test(url.pathname)) return url.hostname;
 		if (['codeberg.org', 'gitea.com'].includes(url.hostname) && /^\/api\/v1\/repos\/[^/]+\/[^/]+$/.test(url.pathname)) return url.hostname;
 	} catch { /* An invalid cached endpoint is a miss, never a fetch target. */ }
 	return null;

@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { askForge, forgePlace } from '../src/lib/forges.ts';
 
 const hash = (char) => char.repeat(40);
-for (const host of ['gitlab.com', 'codeberg.org', 'gitea.com']) {
+for (const host of ['gitlab.com', 'codeberg.org', 'gitea.com', 'octowow.st']) {
 	const gitlab = host === 'gitlab.com';
-	const place = forgePlace(`https://${host}/a/Addon/${gitlab ? '-/tree' : 'src/branch'}/vanilla/Folder`);
+	const place = forgePlace(`https://${host}${host === 'octowow.st' ? '/git' : ''}/a/Addon/${gitlab ? '-/tree' : 'src/branch'}/vanilla/Folder`);
 	async function run(options = {}) {
 		const calls = [], hits = [];
 		let state;
