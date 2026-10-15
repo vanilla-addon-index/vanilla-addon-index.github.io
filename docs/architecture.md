@@ -69,6 +69,11 @@ queue for admin review. It then checks every supported published and pending
 repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old, inactive and
 previously missing repositories keep the same daily coverage.
 
+When a submitted link matches a pending import's normalized key, the database
+resolves that candidate as `submitted` and records its live addon and submitting
+account. It preserves the member's details and ownership. This is separate from
+admin approval, so undoing an import approval cannot remove that submission.
+
 Repository facts include availability, current address, stars, archive status,
 fork parent and the `.toc` game version. **Last code update** comes from the
 selected branch's latest commit, restricted to the addon folder when the link

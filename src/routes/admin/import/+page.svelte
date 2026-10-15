@@ -285,7 +285,7 @@
 					<p class="text-muted">From the {WIKI_NAME}</p>
 				</div>
 				<dl>
-					{#each [['Waiting', imports.counts.pending], ['Published', imports.counts.approved], ['Rejected', imports.counts.rejected]] as [label, value] (label)}
+					{#each [['Waiting', imports.counts.pending], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected]] as [label, value] (label)}
 						<div class="flex justify-between border-b border-border px-3 py-1.5 last:border-b-0">
 							<dt class="text-muted">{label}</dt>
 							<dd>{value}</dd>
