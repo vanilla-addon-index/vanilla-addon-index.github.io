@@ -10,7 +10,7 @@
 	--font-sans: 'PT Sans Narrow', 'Arial Narrow', system-ui, sans-serif;
 	/* Regular-width face for what is read as sentences: list rows and descriptions. */
 	--font-read: 'Inter Variable', system-ui, sans-serif;
-	--color-bg: #0c0a07;
+	--color-bg: #100c08;
 	/* Translucent, so the backdrop shows through the way the game world does in pfUI. */
 	--color-surface: rgb(8 6 3 / 0.42);
 	--color-raised: rgb(255 255 255 / 0.07);
@@ -39,11 +39,11 @@
 	   background-attachment: fixed. */
 	:root {
 		--backdrop:
-			radial-gradient(60rem 40rem at 8% 0%, rgb(56 134 62 / 0.3), transparent 70%),
-			radial-gradient(50rem 40rem at 96% 12%, rgb(150 116 44 / 0.18), transparent 70%),
-			radial-gradient(60rem 36rem at 72% 110%, rgb(38 132 84 / 0.24), transparent 70%),
-			radial-gradient(40rem 30rem at 0% 105%, rgb(124 82 34 / 0.12), transparent 70%),
-			radial-gradient(44rem 34rem at 104% 62%, rgb(40 104 156 / 0.15), transparent 70%);
+			radial-gradient(60rem 40rem at 8% 0%, rgb(112 88 48 / 0.26), transparent 70%),
+			radial-gradient(50rem 40rem at 96% 12%, rgb(132 98 48 / 0.20), transparent 70%),
+			radial-gradient(60rem 36rem at 72% 110%, rgb(92 96 48 / 0.12), transparent 70%),
+			radial-gradient(40rem 30rem at 0% 105%, rgb(124 82 34 / 0.18), transparent 70%),
+			radial-gradient(44rem 34rem at 104% 62%, rgb(88 92 48 / 0.08), transparent 70%);
 	}
 	body::before {
 		content: '';
