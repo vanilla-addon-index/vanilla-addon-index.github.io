@@ -25,6 +25,21 @@ test('the list loads, and search and categories narrow it', async ({ page }) => 
 	await expect(page).toHaveURL(/cat=Tooltip/);
 });
 
+test('date sorting follows last code update and accepts old sort links', async ({ page }) => {
+	await page.goto('/');
+	const sort = page.getByRole('combobox', { name: 'Sort by' });
+	await expect(sort.locator('option')).toHaveText(['Name', 'Last code update']);
+	await sort.selectOption('code');
+	await expect(page).toHaveURL(/sort=code/);
+	// RaidHelper has a known code date; recently added entries without one go below it.
+	await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
+	for (const old of ['new', 'updated']) {
+		await page.goto(`/?sort=${old}`);
+		await expect(sort).toHaveValue('code');
+		await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
+	}
+});
+
 test('an addon page shows the addon, its group and no admin controls', async ({ page }) => {
 	await page.goto('/addon/raidhelper');
 	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper' })).toBeVisible();

@@ -8,18 +8,16 @@
 	import { creditFor } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 
-	const SORTS = { name: 'Name', new: 'Newest', updated: 'Recently updated' } as const;
-	type Sort = keyof typeof SORTS;
+	import { SORTS, readSort, byCodeUpdate, type Sort } from '#lib/addon-sort.ts';
 
 	let query = $state('');
 	let category = $state('');
 	let sort = $state<Sort>('name');
 
 	function readUrl(params: Pick<URLSearchParams, 'get'>) {
-		const wanted = params.get('sort') ?? '';
 		query = params.get('q') ?? '';
 		category = params.get('cat') ?? '';
-		sort = wanted in SORTS ? (wanted as Sort) : 'name';
+		sort = readSort(params.get('sort'));
 	}
 	readUrl(page.url.searchParams);
 	// Links back to this page (logo, tag chips) do not remount it.
@@ -53,12 +51,11 @@
 			const main = members.find((m) => m.is_main) ?? members[0];
 			const others = members
 				.filter((m) => m !== main)
-				.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+				.sort(byCodeUpdate);
 			list.push({ main, others });
 		}
 
-		if (sort === 'new') return list.sort((a, b) => b.main.created_at.localeCompare(a.main.created_at));
-		if (sort === 'updated') return list.sort((a, b) => b.main.updated_at.localeCompare(a.main.updated_at));
+		if (sort === 'code') return list.sort((a, b) => byCodeUpdate(a.main, b.main));
 		return list.sort((a, b) => a.main.name.localeCompare(b.main.name));
 	});
 
