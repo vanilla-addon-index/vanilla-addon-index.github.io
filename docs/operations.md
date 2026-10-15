@@ -20,10 +20,17 @@ Nightly also trims activity-log and trash entries older than 90 days.
 ### Publication safety
 
 [Prepare](../.github/workflows/prepare.yml) validates code before applying
-migrations. Successful tests and type checks can be reused only for the exact
+migrations, including a preflight production build using the last published
+snapshot when available. A failed build stops preparation before migrations or
+imports can start. Successful tests, type checks and preflight build can be reused only for the exact
 `main` commit, Node/npm versions and runner image identity. Missing or invalid
 validation receipts run fresh checks. PR CI always runs in full; migrations run
 on every preparation regardless of receipt reuse.
+
+Publication builds again with fresh data after migrations and imports. This can
+still fail because of new data or an infrastructure outage. Migrations must remain
+compatible with the deployed application until its replacement is published;
+the preflight build does not provide a database rollback.
 
 Deploy, Nightly and Refresh call [Publish](../.github/workflows/publish.yml) under
 one lock covering preparation, comparison, build, publication and snapshot saving.

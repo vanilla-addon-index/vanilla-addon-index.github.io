@@ -5,8 +5,8 @@ import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const VERSION = 1;
-const keyPattern = /^deploy-validation-v1-[a-f0-9]{40}-[a-f0-9]{64}$/;
+const VERSION = 2;
+const keyPattern = /^deploy-validation-v2-[a-f0-9]{40}-[a-f0-9]{64}$/;
 
 export function validationKey({sha, node, npm, platform, arch, imageOS, imageVersion}) {
 	const inputs = [sha, node, npm, platform, arch, imageOS, imageVersion];
@@ -22,7 +22,7 @@ export function receiptMatches(text, key) {
 	if (!keyPattern.test(key) || typeof text !== 'string' || text.length > 1024) return false;
 	try {
 		const receipt = JSON.parse(text);
-		return receipt?.version === VERSION && receipt.key === key && receipt.tests === 'success' && receipt.types === 'success';
+		return receipt?.version === VERSION && receipt.key === key && receipt.tests === 'success' && receipt.types === 'success' && receipt.build === 'success';
 	} catch { return false; }
 }
 
@@ -39,11 +39,11 @@ function main() {
 		try { text = readFileSync(file, 'utf8'); } catch { /* Missing receipts run fresh checks. */ }
 		const reuse = receiptMatches(text, key);
 		output('reuse', reuse);
-		console.log(reuse ? 'Reusing successful tests and types for this exact commit and runtime.' : 'No matching validation receipt; running fresh checks.');
+		console.log(reuse ? 'Reusing successful tests, types and preflight build for this exact commit and runtime.' : 'No matching validation receipt; running fresh checks.');
 	} else if (process.argv[2] === 'record') {
 		if (!keyPattern.test(key)) throw new Error('Cannot record validation without a complete key.');
 		mkdirSync(dirname(file), {recursive:true});
-		writeFileSync(file, JSON.stringify({version:VERSION, key, tests:'success', types:'success'}) + '\n');
+		writeFileSync(file, JSON.stringify({version:VERSION, key, tests:'success', types:'success', build:'success'}) + '\n');
 	} else throw new Error('Expected key, reuse or record.');
 }
 
