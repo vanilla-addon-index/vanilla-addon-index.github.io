@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
@@ -19,7 +20,6 @@
 	// "rejected" is not a filter on the queue but a second list: what was turned down.
 	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
 
-	const STALE_YEARS = 8;
 	// The interface number a 1.12 addon declares in its .toc file.
 	const VANILLA_INTERFACE = 11200;
 	const PAGE = 100;
@@ -127,7 +127,7 @@
 		if (!stats && !item.key.startsWith('github.com/')) notes.push(`Hosted on ${item.key.split('/')[0]}, so there is no update date.`);
 
 		const year = stats?.pushed_at ? new Date(stats.pushed_at).getFullYear() : undefined;
-		const stale = year !== undefined && year <= new Date().getFullYear() - STALE_YEARS;
+		const stale = isOlderAddon(stats?.pushed_at);
 		if (stats && !stats.missing) {
 			notes.push(`${stats.stars} star${stats.stars === 1 ? '' : 's'}${year ? `, last updated ${year}` : ''}.`);
 		}

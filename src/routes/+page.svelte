@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { isOlderAddon } from '#lib/addon-age.ts';
+	import { preferences, loadPreferences } from '#lib/preferences.svelte.ts';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { store } from '#lib/addons.svelte.ts';
@@ -13,6 +16,8 @@
 	let query = $state('');
 	let category = $state('');
 	let sort = $state<Sort>('name');
+	onMount(loadPreferences);
+	const visibleAddons = $derived(store.addons.filter((a) => !preferences.hideOlder || !isOlderAddon(a.code_update?.date)));
 
 	function readUrl(params: Pick<URLSearchParams, 'get'>) {
 		query = params.get('q') ?? '';
@@ -37,7 +42,7 @@
 
 		const groups = new Map<number, Addon[]>();
 		const list: { main: Addon; others: Addon[] }[] = [];
-		for (const a of store.addons) {
+		for (const a of visibleAddons) {
 			if (a.group_id === null) {
 				if (matches(a)) list.push({ main: a, others: [] });
 			} else if (groups.has(a.group_id)) {
@@ -102,7 +107,7 @@
 		window.scrollBy(0, heading.getBoundingClientRect().top - resting);
 	}
 
-	const counts = $derived(Object.groupBy(store.addons, (a) => a.category));
+	const counts = $derived(Object.groupBy(visibleAddons, (a) => a.category));
 
 	// Names used by more than one addon; their rows also say who hosts each.
 	const sharedNames = $derived.by(() => {
@@ -152,7 +157,7 @@
 		class="panel hidden max-h-[calc(100vh-var(--header-h)-var(--footer-h)-1.25rem)] overflow-y-auto py-1 md:sticky md:top-[calc(var(--header-h)+1.25rem)] md:block"
 	>
 		<h2 class="label px-3 pt-2">Categories</h2>
-		{@render categoryButton('', 'All addons', store.addons.length)}
+		{@render categoryButton('', 'All addons', visibleAddons.length)}
 		{#each CATEGORIES as c (c)}
 			{@render categoryButton(c, c, counts[c]?.length ?? 0)}
 		{/each}
