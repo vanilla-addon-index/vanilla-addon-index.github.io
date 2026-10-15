@@ -1676,7 +1676,7 @@ describe('import queue', () => {
 		assert.equal(n, 2);
 		const stored = async () => Object.fromEntries((await db.sql('select name, images from public.import_queue')).map((r) => [r.name, r.images]));
 		let images = await stored();
-		assert.deepEqual(images.Bare, seven.slice(0, 5));
+		assert.deepEqual(images.Bare, seven.slice(0, 6));
 		assert.deepEqual(images.Shown, [shot('wiki'), shot('readme')]);
 		assert.deepEqual(images.Empty, []);
 		assert.deepEqual(images.Gone, []);
@@ -1691,7 +1691,7 @@ describe('import queue', () => {
 		await refused(() => call(admin, 'select public.store_queue_images($1, $2::jsonb)', [NIGHTLY_TOKEN, items()]), /permission denied/);
 		// Approved as it is, the entry is published with the pictures found.
 		await call(admin, 'select public.approve_imports($1)', [[ids.Bare]]);
-		assert.deepEqual((await db.sql(`select images from public.addons where name = 'Bare'`))[0].images, seven.slice(0, 5));
+		assert.deepEqual((await db.sql(`select images from public.addons where name = 'Bare'`))[0].images, seven.slice(0, 6));
 	});
 
 	test('the nightly token is needed for each of its calls, and cannot be read back', async () => {

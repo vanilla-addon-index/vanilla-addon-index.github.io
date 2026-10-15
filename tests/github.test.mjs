@@ -38,9 +38,9 @@ describe('pictures in a README', () => {
 		assert.equal(uncamo('https://camo.githubusercontent.com/abc/zz'), 'https://camo.githubusercontent.com/abc/zz');
 	});
 
-	test('at most five, and none from a README without any', () => {
+	test('at most six, and none from a README without any', () => {
 		const readme = Array.from({ length: 8 }, (_, i) => `![s](s${i}.png)`).join('\n');
-		assert.equal(imagesIn(readme, base).length, 5);
+		assert.equal(imagesIn(readme, base).length, 6);
 		assert.deepEqual(imagesIn('Just words.', base), []);
 	});
 });

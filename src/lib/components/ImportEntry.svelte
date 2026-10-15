@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
 	import { approve, approveInto, publishEdited, reject, type QueueItem } from '#lib/imports.svelte.ts';
@@ -13,7 +14,7 @@
 		verdict: 'fine' | 'duplicate' | 'problem' | 'incomplete';
 		// The one-line suggestion, then what it is based on.
 		advice: string;
-		notes: string[];
+		notes: ReviewNote[];
 		// A live addon this entry probably belongs to.
 		match?: Addon;
 		onselect: () => void;
@@ -35,6 +36,8 @@
 	let edits = $state<Partial<Draft>>({});
 	const draft = $derived({ ...original, ...edits });
 	const nameMatch = $derived(store.addons.find((a) => plainName(a.name) === plainName(draft.name)));
+	const addedPictures = $derived(nameMatch ? Math.max(0, new Set([...nameMatch.images, ...draft.images]).size - nameMatch.images.length) : 0);
+	const pictureSlots = $derived(nameMatch ? Math.max(0, MAX_IMAGES - nameMatch.images.length) : 0);
 	const edited = $derived(Object.keys(edits).length > 0);
 	let saving = $state(false);
 
@@ -111,7 +114,6 @@
 	onclick={onselect}
 	onkeydown={keys}
 >
-	{#if nameMatch}<p class="px-1.5 text-sm text-accent">Only this link will be added to {nameMatch.name}. Its existing details stay as they are.</p>{/if}
 	<div class="flex flex-wrap gap-x-1">
 		<input
 			data-act="name"
@@ -160,7 +162,7 @@
 						</a>
 						<button
 							class="absolute top-0 right-0 cursor-pointer bg-bg px-1.5 text-sm leading-5 text-muted hover:text-danger"
-							aria-label="Remove this screenshot" disabled={!!nameMatch}
+							aria-label="Remove this screenshot"
 							onclick={() => (edits.images = draft.images.filter((i) => i !== image))}
 						>
 							×
@@ -174,13 +176,18 @@
 	<!-- Set apart from the fields above: this part is the site's reading of the entry, not
 	     something that gets published. -->
 	<footer class="-mx-1.5 mt-2 -mb-1.5 border-t border-border bg-black/30 px-3 py-1.5">
-		<p class="text-sm text-muted">
-			<span class="label mr-2 mb-0 inline">Review</span>
-			<span class={verdict === 'fine' ? '' : verdict === 'problem' ? 'text-danger' : 'text-accent'}>{advice}</span>
-			{#each notes as note (note)}
-				<span class="mx-1 opacity-50">·</span>{note}
+		<div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+			<span class={['font-bold', verdict === 'fine' ? 'text-fg' : verdict === 'problem' ? 'text-danger' : 'text-accent']}>{advice}</span>
+			{#if nameMatch}<span class="text-muted">{pictureSlots ? `+${Math.min(addedPictures, pictureSlots)} pictures` : 'Gallery full'}</span>{/if}
+		</div>
+		<dl class="mt-1 grid grid-cols-2 gap-x-5 gap-y-0.5 text-sm sm:flex sm:flex-wrap sm:gap-x-5">
+			{#each notes as note (note.label)}
+				<div class="flex min-w-0 gap-1.5">
+					<dt class="shrink-0 text-muted">{note.label}</dt>
+					<dd class={['break-words [overflow-wrap:anywhere]', note.tone === 'danger' ? 'text-danger' : note.tone === 'warning' ? 'text-accent' : 'text-fg']}>{note.value}</dd>
+				</div>
 			{/each}
-		</p>
+		</dl>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
 			<button data-act="approve" class="btn btn-primary py-1" disabled={saving} onclick={() => publish()}>
 				{saving ? 'Publishing…' : nameMatch ? 'Add link to ' + nameMatch.name : 'Approve'}
