@@ -12,7 +12,7 @@ function run(options = {}) {
 		encoding: 'utf8', timeout: 10_000,
 		env: { ...process.env, NIGHTLY_CACHE_FIXTURE: JSON.stringify(options), NIGHTLY_TOKEN: 'fixture', GITHUB_TOKEN: 'fixture', GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: '' }
 	});
-	assert.equal(child.status, options.fail?.startsWith('store_') ? 1 : 0, child.stdout + child.stderr);
+	assert.equal(child.status, options.fail?.startsWith('store_') || options.fail === 'prune_repo_check_cache' ? 1 : 0, child.stdout + child.stderr);
 	const result = JSON.parse(child.stdout.split('__CACHE_RESULT__')[1].split('\n')[0]);
 	result.metrics = JSON.parse(child.stdout.split('Nightly metrics: ')[1].split('\n')[0]);
 	return result;
@@ -192,4 +192,21 @@ test('REST validators can checkpoint independently when an empty repository has 
 	const warm = run({...options,cache:cold.cache,http304:true});
 	assert.equal(warm.calls.filter((c) => c.name === 'rest').length,1);
 	assert.equal(facts(warm)[0].interface_checked,true);
+});
+
+
+test('actual write accounting does not skip full checks and pruning failures cannot block saves', () => {
+	const measured = run({writeReport:true, pruned:3});
+	assert.equal(measured.metrics.counters.stats_records_submitted, 2);
+	assert.equal(measured.metrics.counters.stats_facts_written, 0);
+	assert.equal(measured.metrics.counters.stats_facts_unchanged, 2);
+	assert.equal(measured.metrics.counters.stats_checks_written, 2);
+	assert.equal(measured.metrics.counters.cache_entries_pruned, 3);
+	assert.ok(measured.calls.filter((c) => c.name === 'store_repo_stats').every((c) => c.args.report === true));
+	for (const name of ['metadata', 'details', 'toc', 'readme']) assert.equal(count(measured, name), 1);
+	const failed = run({fail:'prune_repo_check_cache'});
+	assert.equal(count(failed, 'prune_repo_check_cache'), 1);
+	assert.equal(count(failed, 'store_code_updates'), 1);
+	assert.equal(count(failed, 'store_queue_images'), 1);
+	assert.ok(facts(failed).at(-1).interface_checked);
 });

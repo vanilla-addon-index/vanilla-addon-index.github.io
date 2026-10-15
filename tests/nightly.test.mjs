@@ -194,7 +194,7 @@ test('diagnostics distinguish network requests, field failures, unchanged dates 
 	assert.equal(metrics.phases['GitHub .toc'].attempts, 1);
 	assert.equal(metrics.phases['GitHub README'].attempts, 1);
 	assert.equal(metrics.phases['Database reads'].attempts, 2);
-	assert.equal(metrics.phases['Database writes'].attempts, 6);
+	assert.equal(metrics.phases['Database writes'].attempts, 7);
 	assert.equal(metrics.counters.commit_dates_left_unchanged, 0);
 	assert.equal(metrics.counters.cache_hits, 0);
 	assert.match(stdout, /\[Nightly\] GitHub metadata 1\/1/);

@@ -81,7 +81,8 @@ export class NightlyMetrics {
 			'Phase times include checkpoint writes. Request seconds include retries and waits; parallel requests can overlap. Host rows show request cost inside Other hosts. Times are not additive. GitHub metadata resolves the branch commit first; history and directory follow-ups share a separate request when needed.', '',
 			'| Check | Count |', '|---|---:|',
 			...Object.entries(counters).map(([name, count]) => `| ${name} | ${count} |`), '',
-			'Cache hits count reused history, directories, file checks and host results; one link can produce several hits. Dates left unchanged retain a previous date when one exists; otherwise they remain unknown.', ''
+			'Cache hits count reused history, directories, file checks and host results; one link can produce several hits. Dates left unchanged retain a previous date when one exists; otherwise they remain unknown.', '',
+			'Records submitted/saved count checkpoint payloads, not physical row writes. Stats facts_written and facts_unchanged count accepted unique keys; checks_written counts separate timestamp rows. Cache rows_written counts actual changed cache rows; cache_entries_pruned counts unreferenced URLs removed. Inserts or changed facts can write both a facts row and a timestamp row.', ''
 		].join('\n');
 	}
 }

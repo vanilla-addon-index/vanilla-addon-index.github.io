@@ -167,6 +167,13 @@ const savePictures = (key, images) => {
 	if (!incompletePictures.has(key)) pictures.push({ key, images });
 };
 const links = await db('nightly_links');
+// Cache pruning is independent of repository checks and successful result saves.
+try {
+	metrics.count('cache_entries_pruned', await db('prune_repo_check_cache'));
+} catch (error) {
+	console.error(`Could not prune unused repository cache: ${error.message}`);
+	process.exitCode = 1;
+}
 const toLookAt = links.filter((l) => l.readme);
 const wikiPictures = new Map();
 const finishedScreenshots = metrics.start('Screenshots');
@@ -248,7 +255,13 @@ async function flushProgress() {
 		while (pending.length) {
 			const batch = pending.splice(0, BATCH);
 			try {
-				await db(name, { [field]: batch });
+				metrics.count(`${count}_records_submitted`, batch.length);
+				const result = await db(name, { [field]: batch, ...(count === 'stats' ? { report: true } : {}) });
+				if (count === 'stats' && result && typeof result === 'object') {
+					for (const key of ['accepted', 'facts_written', 'facts_unchanged', 'checks_written']) {
+						if (Number.isSafeInteger(result[key]) && result[key] >= 0) metrics.count(`stats_${key}`, result[key]);
+					}
+				} else if (count === 'cache' && Number.isSafeInteger(result) && result >= 0) metrics.count('cache_rows_written', result);
 				saved[count] += batch.length;
 				metrics.count(`${count}_records_saved`, batch.length);
 				if (count === 'dates') {
@@ -577,7 +590,7 @@ for (const outcome of outcomes) if (outcome.status === 'rejected') {
 }
 await saveProgress();
 
-console.log(`Saved ${saved.stats} repository fact records, commit dates for ${saved.dates} addon links, and ${saved.pictures} completed screenshot checks; unanswered checks retain their last known facts.`);
+console.log(`Processed ${saved.stats} repository fact records, commit dates for ${saved.dates} addon links, and ${saved.pictures} completed screenshot checks; unanswered checks retain their last known facts.`);
 
 console.log(
 	`Checked ${stats.length} repositories: ${stats.filter((s) => s.missing).length} no longer exist, ` +

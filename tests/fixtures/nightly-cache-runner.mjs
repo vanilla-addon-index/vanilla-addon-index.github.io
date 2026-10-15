@@ -17,6 +17,9 @@ globalThis.fetch = async (url, init = {}) => {
 		if (options.fail === name) return json({ message: 'Fixture store failure' }, 400);
 		if (name === 'nightly_links') return json((options.links ?? [{ key: 'github.com/a/addon', url: 'https://github.com/a/addon', readme: true }]).map((link) => ({ ...link, images: options.imageFailure ? ['https://i.imgur.com/wiki.png'] : [], cache: cache[link.url] })));
 		if (name === 'nightly_waiting') return json({ reports: 0, suggestions: 0 });
+		if (name === 'prune_repo_check_cache') return json(options.pruned ?? 0);
+		if (name === 'store_repo_stats' && options.writeReport) return json({accepted:args.stats.length,
+			facts_written:0, facts_unchanged:args.stats.length, checks_written:args.stats.length});
 		if (name === 'store_repo_check_cache') for (const item of args.items) cache[item.url] = item.state;
 		return json(0);
 	}
