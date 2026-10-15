@@ -1,7 +1,6 @@
 # Vanilla Addon Index
 
-[Vanilla Addon Index](https://vanilla-addon-index.github.io) is a community directory
-of World of Warcraft addons for the **1.12.1 client**.
+A community directory of World of Warcraft addons for the **1.12.1 client**.
 Browse and search the list, find alternate versions, or sign in to post addons
 and manage your own entries.
 
