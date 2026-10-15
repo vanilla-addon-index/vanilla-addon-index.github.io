@@ -157,7 +157,7 @@
 {#if addon}
 	<a href={resolve('/')} class="text-muted hover:text-accent">← All addons</a>
 
-	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
+	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
 		<div class="panel p-4">
 			<h1 class="text-3xl font-bold">{addon.name}</h1>
 
@@ -212,7 +212,6 @@
 
 		<aside class="space-y-2">
 			<div class="panel">
-				<h2 class="label mb-0 px-3 pt-2">{addon.versions.length > 1 ? 'Links' : 'Link'}</h2>
 				<!-- Pinned link first, otherwise newest known code update. -->
 				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
 				<ol>

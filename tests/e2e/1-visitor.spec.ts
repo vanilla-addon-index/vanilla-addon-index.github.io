@@ -43,7 +43,7 @@ test('date sorting follows last code update and accepts old sort links', async (
 test('an addon page shows its shared links and no admin controls', async ({ page }) => {
 	await page.goto('/addon/raidhelper');
 	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Links', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Links', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('link', { name: /github.com\/.*\/RaidTracker$/ })).toBeVisible();
 
 	await expect(page.getByRole('link', { name: 'Log in to report this addon' })).toBeVisible();
