@@ -95,6 +95,18 @@
 					{@render fact('Joined', date(user.created_at))}
 				</dl>
 			</div>
+			<section class="panel px-3 py-2" aria-labelledby="account-options">
+				<h2 id="account-options" class="label">Options</h2>
+				<label class="flex cursor-pointer items-start gap-2 text-sm">
+					<input
+						type="checkbox"
+						class="mt-1 accent-accent"
+						bind:checked={preferences.hideOlder}
+						onchange={savePreferences}
+					/>
+					<span>Hide addons last updated 8+ years ago</span>
+				</label>
+			</section>
 			<button class="btn w-full" onclick={signOut}>Log out</button>
 			<!-- The owner looks after the admins; the site must not be left without one. -->
 			{#if !auth.isOwner}
@@ -103,23 +115,6 @@
 		</aside>
 
 		<section>
-			<h2 class="label">Options</h2>
-			<div class="panel mb-5 p-3">
-				<label class="flex cursor-pointer items-start gap-2">
-					<input
-						type="checkbox"
-						class="mt-1.5 accent-accent"
-						bind:checked={preferences.hideOlder}
-						onchange={savePreferences}
-						aria-describedby="hide-older-help"
-					/>
-					<span>Hide addons last updated 8+ years ago</span>
-				</label>
-				<p id="hide-older-help" class="mt-1 ml-5 text-sm text-muted">
-					Applies to the addon list. Addons with unknown update dates stay visible.
-				</p>
-				<p class="mt-2 ml-5 text-sm text-muted">Options are saved automatically in this browser.</p>
-			</div>
 			<h2 class="label">Your addons</h2>
 			<div class="panel addon-list">
 				{#each mine as addon (addon.id)}
