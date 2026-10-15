@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
 	import { approve, approveInto, publishEdited, reject, type QueueItem } from '#lib/imports.svelte.ts';
 	import { linkAuthor } from '#lib/links.ts';
@@ -33,6 +34,7 @@
 	// Only what the admin changed. It lasts while the entry is on the page.
 	let edits = $state<Partial<Draft>>({});
 	const draft = $derived({ ...original, ...edits });
+	const nameMatch = $derived(store.addons.find((a) => plainName(a.name) === plainName(draft.name)));
 	const edited = $derived(Object.keys(edits).length > 0);
 	let saving = $state(false);
 
@@ -53,7 +55,7 @@
 	// once. An edited one is posted the way the submit form does, then marked as imported.
 	const publish = (into?: Addon) =>
 		run(async () => {
-			if (edited) {
+			if (edited || nameMatch) {
 				saving = true;
 				try {
 					await publishEdited(
@@ -94,7 +96,7 @@
 		}
 	}
 
-	const quiet = 'input border-transparent bg-transparent px-1.5 py-0.5 hover:border-border';
+	const quiet = 'disabled:opacity-40 input border-transparent bg-transparent px-1.5 py-0.5 hover:border-border';
 </script>
 
 <!-- Every field of the entry is there to be changed in place before approving; a field
@@ -109,6 +111,7 @@
 	onclick={onselect}
 	onkeydown={keys}
 >
+	{#if nameMatch}<p class="px-1.5 text-sm text-accent">Only this link will be added to {nameMatch.name}. Its existing details stay as they are.</p>{/if}
 	<div class="flex flex-wrap gap-x-1">
 		<input
 			data-act="name"
@@ -117,7 +120,7 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" bind:value={category.value}>
+		<select class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch} bind:value={category.value}>
 			{#each CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
 			{/each}
@@ -126,7 +129,7 @@
 			class={[quiet, 'w-40 flex-none text-sm text-muted']}
 			maxlength="60"
 			placeholder="Author"
-			aria-label="Author"
+			aria-label="Author" disabled={!!nameMatch}
 			bind:value={author.value}
 		/>
 	</div>
@@ -135,7 +138,7 @@
 		rows="2"
 		maxlength="5000"
 		placeholder="No description on the wiki."
-		aria-label="Description"
+		aria-label="Description" disabled={!!nameMatch}
 		bind:value={description.value}
 	></textarea>
 
@@ -157,7 +160,7 @@
 						</a>
 						<button
 							class="absolute top-0 right-0 cursor-pointer bg-bg px-1.5 text-sm leading-5 text-muted hover:text-danger"
-							aria-label="Remove this screenshot"
+							aria-label="Remove this screenshot" disabled={!!nameMatch}
 							onclick={() => (edits.images = draft.images.filter((i) => i !== image))}
 						>
 							×
@@ -180,11 +183,11 @@
 		</p>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
 			<button data-act="approve" class="btn btn-primary py-1" disabled={saving} onclick={() => publish()}>
-				{saving ? 'Publishing…' : 'Approve'}
+				{saving ? 'Publishing…' : nameMatch ? 'Add link to ' + nameMatch.name : 'Approve'}
 			</button>
-			{#if match}
+			{#if match && !nameMatch}
 				<button data-act="version" class="btn py-1" disabled={saving} onclick={() => publish(match)}>
-					Approve as a version of {match.name}
+					Add link to {match.name}
 				</button>
 			{/if}
 			<button data-act="reject" class="btn btn-danger py-1" disabled={saving} onclick={turnDown}>Reject</button>

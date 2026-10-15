@@ -116,7 +116,7 @@
 
 		<h3 class="field-label mt-5">Seeing or correcting your data</h3>
 		<p>
-			You can edit and delete your own addons at any time. To get a copy of what is stored about
+			You can edit and delete your own entries until another link makes them shared pages. Shared pages are managed by admins; use the report button to request a correction. To get a copy of what is stored about
 			you, or to have something corrected, {@render out(ISSUES, 'open an issue on GitHub')} and
 			give the username shown on your account page. An issue is public, so put nothing else
 			personal in it.

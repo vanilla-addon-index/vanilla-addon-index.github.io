@@ -1,4 +1,4 @@
-import { createAddon, groupAddons, loadAddons } from './addons.svelte';
+import { loadAddons } from './addons.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 import type { Candidate } from './wiki';
@@ -159,10 +159,7 @@ export async function approveInto(item: QueueItem, addon: Addon) {
  * into the group of a live addon. It is posted like any addon, then marked as imported.
  */
 export async function publishEdited(item: QueueItem, input: AddonInput, into?: Addon) {
-	const addon = await createAddon(input);
-	await call('mark_imported', { queue_id: item.id, target: addon.id, credit: true });
+	await call('publish_import', { queue_id: item.id, input, destination: into?.id ?? null });
 	settle([item.id], 'approved');
-	// Either one reloads the list, which brings in the credit and the wiki's own grouping.
-	if (into) await groupAddons([into.id, addon.id]);
-	else await loadAddons();
+	await loadAddons();
 }

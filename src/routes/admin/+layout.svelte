@@ -10,7 +10,7 @@
 	const TABS = [
 		{ path: '/admin/import', label: 'Import' },
 		{ path: '/admin/reports', label: 'Reports' },
-		{ path: '/admin/groups', label: 'Groups' },
+		{ path: '/admin/groups', label: 'Shared addons' },
 		{ path: '/admin/log', label: 'Log' },
 		{ path: '/admin/trash', label: 'Trash' },
 		{ path: '/admin/users', label: 'Users' }

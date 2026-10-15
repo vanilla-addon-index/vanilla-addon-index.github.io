@@ -60,7 +60,7 @@ test('an import is approved as it is, another with changes, and one is rejected 
 	// As it is.
 	const first = page.locator('[data-entry]').first();
 	const firstName = await first.getByLabel('Name').inputValue();
-	await first.getByRole('button', { name: 'Approve', exact: true }).click();
+	await first.getByRole('button', { name: /^(Approve$|Add link to )/ }).first().click();
 	await expect.poll(() => waiting(page)).toBe(before - 1);
 
 	// With a new name and category, typed into the entry itself.
@@ -101,40 +101,23 @@ test('an import is approved as it is, another with changes, and one is rejected 
 	await expect.poll(() => waiting(page)).toBe(before - 1);
 });
 
-test('a group change is undone from its line in the log', async ({ page }) => {
-	await loginAs(page, 'admin');
-	const one = unique('Grouped');
-	const two = unique('Version');
-	await postAddon(page, two);
-	const address = await postAddon(page, one);
-
-	// By keyboard alone: the arrow keys move through the matches, and Enter takes one.
-	const picker = page.getByPlaceholder('Group with another addon…');
-	await picker.fill('e');
-	const options = page.getByRole('option');
-	await expect(options.first()).toHaveAttribute('aria-selected', 'true');
-	await picker.press('ArrowDown');
-	await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
-	await picker.press('ArrowUp');
-	await picker.press('ArrowUp');
-	await expect(options.last()).toHaveAttribute('aria-selected', 'true');
-	await picker.fill(two);
-	await expect(page.getByRole('option', { name: new RegExp(`^${two}`) })).toHaveAttribute('aria-selected', 'true');
-	await picker.press('Enter');
-	await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
-
-	await page.goto('/admin/log');
-	const line = logLine(page, new RegExp(`grouped versions under\\s+${one}`));
-	await line.getByRole('button', { name: 'Undo' }).click();
-	await confirm(page, 'Undo');
-	await expect(page.getByText('The group change is undone.')).toBeVisible();
-	// Undone once, it is not offered again on that line; the undo itself can be undone.
-	await expect(line.getByRole('button', { name: 'Undo' })).toHaveCount(0);
-	await expect(logLine(page, new RegExp(`undid a group change of\\s+${one}`)).getByRole('button', { name: 'Undo' })).toBeVisible();
-
-	await page.goto(address);
-	await expect(page.getByRole('heading', { level: 1, name: one })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Versions' })).toHaveCount(0);
+test('admins can merge links, pin the leader and restore a merged page from trash', async ({ page }) => {
+ await loginAs(page, 'admin');
+ const one=unique('Shared'), two=unique('Fork');
+ await postAddon(page,two); const address=await postAddon(page,one);
+ const picker=page.getByPlaceholder('Merge another addon’s links here…');
+ await picker.fill(two); await page.getByRole('option',{name:new RegExp('^'+two)}).click();
+ await expect(page.getByRole('heading',{name:'Links',exact:true})).toBeVisible();
+ const links=page.locator('aside ol li'); await expect(links).toHaveCount(2);
+ await links.nth(1).getByRole('button',{name:'Pin',exact:true}).click();
+ await expect(links.first()).toContainText('Pinned');
+ await links.first().getByRole('button',{name:'Unpin',exact:true}).click();
+ await expect(page.getByText('Pinned',{exact:true})).toHaveCount(0);
+ await page.goto('/admin/trash');
+ const trashed=page.locator('.panel > div').filter({hasText:two});
+ await trashed.getByRole('button',{name:'Restore',exact:true}).click();
+ await expect(page.getByText('Restored "'+two+'".',{exact:true})).toBeVisible();
+ await page.goto(address); await expect(page.getByRole('heading',{level:1,name:one})).toBeVisible();
 });
 
 test('an edit is reverted, and a deleted addon restored to the same address, from the log', async ({ page }) => {

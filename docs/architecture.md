@@ -9,10 +9,24 @@ provides PostgreSQL, authentication and the data API. The public URL and key in
 [config.ts](../src/lib/config.ts) ship to the browser; SQL grants, row-level security
 and narrow database functions enforce access.
 
-Visitors can browse. Members can post addons and edit or delete their own entries.
+Visitors can browse. Members can post addons and edit or delete their own entries
+until they become shared pages. A matching name adds a repository link immediately,
+without approval or changes to the existing description, images, author or category.
 Admins review wiki imports, handle reports and manage content. The owner appoints
 or removes admins and has the final account-management permissions. These rules
 are tested against the actual [database migrations](../supabase/migrations).
+
+Names match without case, spaces or punctuation. Matching submissions and imports
+use atomic database functions, with locks and a unique canonical-name index to
+prevent duplicate pages. A second link makes a page admin-managed. Links sort by
+their latest known commit date, unknown dates last; an admin pin overrides the
+leading link and the page's code date. Admins can separate an unrelated link into
+an explicit name-collision exception. Existing merged addresses remain aliases,
+and removed entries are retained in the normal trash for 90 days.
+
+Link provenance is private. Link additions are logged as reversible edits;
+reverting an addition removes only those links, preserving later contributions.
+Account rollback preserves shared pages and other contributors' links.
 
 ## Reading the addon list
 

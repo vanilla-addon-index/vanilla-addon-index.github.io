@@ -36,6 +36,9 @@ export interface Addon {
 	created_at: string;
 	updated_at: string;
 	code_update: CodeUpdate | null;
+	shared: boolean;
+	pinned_link: string | null;
+	separate_name: boolean;
 }
 
 export type AddonInput = Pick<

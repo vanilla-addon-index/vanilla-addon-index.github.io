@@ -150,3 +150,20 @@ test('a member deletes their own account, and what they posted stays in the list
 	await page.getByRole('button', { name: 'Log in as a member who leaves', exact: true }).click();
 	await expect(page.getByText(/invalid login/i)).toBeVisible();
 });
+
+
+test('a matching name accepts only a link and never grants control of the shared page', async ({page}) => {
+ await loginAs(page,'member');
+ await page.goto('/submit');
+ await page.getByLabel('Name',{exact:true}).fill('raidhelper');
+ await expect(page.getByLabel('Description',{exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Category',{exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Addon author',{exact:true})).toBeDisabled();
+ const url='https://gitlab.com/e2e/shared-fork';
+ await page.getByLabel('Link to the addon').fill(url);
+ await page.getByRole('button',{name:'Add link',exact:true}).click();
+ await expect(page.getByRole('heading',{level:1,name:'RaidHelper'})).toBeVisible();
+ await expect(page.getByRole('link',{name:url,exact:true})).toBeVisible();
+ await expect(page.getByRole('link',{name:'Edit',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Delete',exact:true})).toHaveCount(0);
+});

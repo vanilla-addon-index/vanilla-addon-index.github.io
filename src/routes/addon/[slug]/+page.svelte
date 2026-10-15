@@ -6,13 +6,7 @@
 		deleteAddon,
 		fetchAddon,
 		findAddon,
-		groupAddons,
-		groupOf,
-		setMain,
-		store,
-		suggestionsFor,
-		ungroupAddon,
-		type OwnSuggestion
+		store, pinLink, mergeAddons,
 	} from '#lib/addons.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
@@ -43,23 +37,6 @@
 		const slug = page.params.slug;
 		if (!slug || found || leaving || !store.loaded || lookedUp === slug) return;
 		fetchAddon(slug).finally(() => (lookedUp = slug));
-	});
-
-	// The other versions of this addon, when it is in a group. Main version first.
-	const group = $derived(addon ? groupOf(addon) : []);
-
-	// What the poster suggested this addon is a version of, still waiting or turned down.
-	// An accepted suggestion needs no note: the two are grouped, which the Versions list shows.
-	let suggestions = $state<OwnSuggestion[]>([]);
-	const addonId = $derived(addon?.id);
-	$effect(() => {
-		suggestions = [];
-		const id = addonId;
-		// Only someone logged in can have made one.
-		if (id === undefined || !auth.session) return;
-		suggestionsFor(id).then((list) => {
-			if (id === addonId) suggestions = list.filter((s) => s.status !== 'accepted');
-		});
 	});
 
 	// Group changes are small and reversible, so they happen at once, with no prompt.
@@ -230,52 +207,17 @@
 								{version.url}
 							</a>
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
+                            {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
+                            {#if auth.isAdmin}
+                                <div class="mt-1 flex flex-wrap gap-2">
+                                    <button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
+                                    {#if addon.versions.length > 1}<a class="btn px-2 py-0.5 text-sm" href={resolve('/submit') + '?split=' + addon.id + '&link=' + encodeURIComponent(version.url)}>Separate addon</a>{/if}
+                                </div>
+                            {/if}
 						</li>
 					{/each}
 				</ol>
 			</div>
-
-			{#if group.length > 1}
-				<div class="panel">
-					<h2 class="label mb-0 px-3 pt-2">Versions</h2>
-					<!-- Every version of this addon. The first is the one most people should use. -->
-					<ol>
-						{#each group as member (member.id)}
-							{@const here = member.id === addon.id}
-							<li class={['border-b border-border px-3 py-1.5 last:border-b-0', !member.is_main && !here && 'opacity-80']}>
-								<div class="flex items-baseline gap-2">
-									{#if here}
-										<span class="min-w-0 flex-1 truncate font-bold">{member.name}</span>
-									{:else}
-										<a
-											href={resolve('/addon/[slug]', { slug: member.slug })}
-											class="min-w-0 flex-1 truncate hover:text-accent"
-										>
-											{member.name}
-										</a>
-									{/if}
-									{#if member.is_main}<span class="shrink-0 text-sm text-accent">Main</span>{/if}
-								</div>
-								<p class="truncate text-sm text-muted">
-									{linkOwner(member.repo_url)}{here ? ' · you are here' : ''}
-								</p>
-								{#if auth.isAdmin}
-									<div class="mt-1 flex flex-wrap gap-2">
-										{#if !member.is_main}
-											<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => setMain(member.id))}>
-												Make main
-											</button>
-										{/if}
-										<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => ungroupAddon(member.id))}>
-											Remove from group
-										</button>
-									</div>
-								{/if}
-							</li>
-						{/each}
-					</ol>
-				</div>
-			{/if}
 
 			<dl class="panel">
 				{#if addon.author}{@render fact('Author', addon.author)}{/if}
@@ -300,23 +242,8 @@
 				</div>
 			</dl>
 
-			{#each suggestions as suggestion (suggestion.target_id)}
-				{@const target = store.addons.find((a) => a.id === suggestion.target_id)}
-				{#if target}
-					<p class="panel px-3 py-2 text-sm">
-						Suggested as a version of
-						<a href={resolve('/addon/[slug]', { slug: target.slug })} class="text-accent hover:underline"
-							>{target.name}</a
-						>.
-						<span class="text-muted">
-							{suggestion.status === 'pending'
-								? 'Waiting for an admin to review it.'
-								: 'An admin decided to keep them separate.'}
-						</span>
-					</p>
-				{/if}
-			{/each}
-
+            {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This shared page is managed by admins. Report anything that needs changing.</p>{/if}
+            {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>Add another link</a>{/if}
 			{#if canEdit(addon.owner)}
 				<div class="grid grid-cols-2 gap-2">
 					<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn">Edit</a>
@@ -328,9 +255,9 @@
 				<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn w-full">History</a>
 				<!-- The addon found here joins this one's group; this one's main version stays main. -->
 				<AddonPicker
-					placeholder="Group with another addon…"
-					exclude={(other) => group.some((member) => member.id === other.id)}
-					onpick={(other) => change(() => groupAddons([addon.id, other.id]))}
+					placeholder="Merge another addon’s links here…"
+					exclude={(other) => other.id === addon.id}
+					onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
 				/>
 			{/if}
 			{#if error}<p class="text-danger">{error}</p>{/if}

@@ -111,10 +111,9 @@ ${imported};
 insert into public.addons (name, description, category, author, versions, source, owner, created_at) values
 ${posted};
 
--- One group of three, with a main version.
-update public.addons set group_id = nextval('public.addon_group_seq'), is_main = (name = 'RaidHelper')
-where name in ('RaidHelper', 'RaidTracker', 'RaidTimers');
-update public.addons set group_id = currval('public.addon_group_seq') where name in ('RaidHelper', 'RaidTracker', 'RaidTimers');
+-- One shared canonical page with three repository links.
+select public.merge_addon_links((select id from public.addons where name = 'RaidTracker'), (select id from public.addons where name = 'RaidHelper'));
+select public.merge_addon_links((select id from public.addons where name = 'RaidTimers'), (select id from public.addons where name = 'RaidHelper'));
 
 insert into public.import_queue (key, url, name, description, category, obsolete) values
 ${queued.map((q) => q.queue).join(',\n')};
