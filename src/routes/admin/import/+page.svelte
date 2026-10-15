@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { ReviewNote } from '#lib/import-review.ts';
 	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
@@ -58,7 +59,7 @@
 		verdict: Verdict;
 		// The one-line suggestion shown first.
 		advice: string;
-		notes: string[];
+		notes: ReviewNote[];
 		// A live addon this entry probably belongs to.
 		match?: Addon;
 		// What approving it untouched would publish without: any of category, author,
@@ -81,78 +82,50 @@
 	}
 
 	function judge(item: QueueItem): Omit<Review, 'missing'> {
-		const notes: string[] = [];
+		const notes: ReviewNote[] = [];
 		const missing = gaps(item);
-		if (missing.length) notes.push(`Missing: ${missing.join(', ')}.`);
 		const stats = imports.stats[item.key];
 		const name = plain(item.name);
-
 		const sameName = liveByName.get(name);
 		const forkParent = stats?.fork_of ? liveByKey.get(stats.fork_of) : undefined;
-		const similar =
-			sameName || name.length < 4
-				? undefined
-				: store.addons.find((a) => {
-						const other = plain(a.name);
-						return other.length >= 4 && (other.includes(name) || name.includes(other));
-					});
-		// The wiki lists it as another version of an addon that is already live.
+		const similar = sameName || name.length < 4 ? undefined : store.addons.find((a) => {
+			const other = plain(a.name);
+			return other.length >= 4 && (other.includes(name) || name.includes(other));
+		});
 		const wikiMain = item.group_key ? liveByKey.get(item.group_key) : undefined;
 		const match = wikiMain ?? sameName ?? forkParent;
-
-		// GitHub answers for a repository's old address with its current one.
 		const movedTo = stats?.canonical && stats.canonical !== item.key ? stats.canonical : undefined;
 		const renamedLive = movedTo ? liveByKey.get(movedTo) : undefined;
-
-		if (item.group_key) {
-			notes.push(
-				wikiMain
-					? `The wiki lists it as another version of "${wikiMain.name}". It has no name or description of its own there.`
-					: `The wiki lists it as another version of ${item.group_key}, which is not live yet. They are grouped once both are.`
-			);
-		}
-		if (sameName && sameName !== wikiMain) notes.push(`A live addon is already named "${sameName.name}".`);
-		if (forkParent) notes.push(`Fork of ${stats!.fork_of}, which is live as "${forkParent.name}".`);
-		else if (stats?.fork_of) notes.push(`Fork of ${stats.fork_of}.`);
-		if (similar) notes.push(`Similar name to the live addon "${similar.name}".`);
-		if ((queuedNames.get(name) ?? 0) > 1) notes.push('Another entry in this queue has the same name.');
-		if (movedTo) notes.push(`The repository has moved to ${movedTo}.`);
-		if (item.parent) notes.push(`Extension of ${item.parent}.`);
-		if (item.alts.length) {
-			notes.push(
-				`${item.alts.length} other version${item.alts.length === 1 ? '' : 's'} on the wiki, queued separately and grouped with this one when published.`
-			);
-		}
-		// Only some sites are asked about their repositories; see the nightly job.
-		if (!stats && !item.key.startsWith('github.com/')) notes.push(`Hosted on ${item.key.split('/')[0]}, so there is no update date.`);
-
 		const year = stats?.pushed_at ? new Date(stats.pushed_at).getFullYear() : undefined;
 		const stale = isOlderAddon(stats?.pushed_at);
-		if (stats && !stats.missing) {
-			notes.push(`${stats.stars} star${stats.stars === 1 ? '' : 's'}${year ? `, last updated ${year}` : ''}.`);
-		}
 		const wrongClient = stats?.interface != null && stats.interface !== VANILLA_INTERFACE;
-		if (stats?.interface === VANILLA_INTERFACE) notes.push('Its .toc file targets 1.12.');
-		if (wrongClient) notes.push(`Its .toc file says interface ${stats!.interface}; 1.12 addons say ${VANILLA_INTERFACE}.`);
-		if (item.problem) notes.push(`Could not be published: ${item.problem}`);
 
-		if (stats?.missing) return { verdict: 'problem', advice: 'Dead link: the repository is gone.', notes, match };
-		if (renamedLive) {
-			return {
-				verdict: 'duplicate',
-				advice: `Already live as "${renamedLive.name}" under its new address. Reject this one.`,
-				notes
-			};
-		}
-		if (item.obsolete) return { verdict: 'problem', advice: 'Marked obsolete on the wiki.', notes, match };
-		if (stats?.archived) return { verdict: 'problem', advice: 'Archived by its author.', notes, match };
-		if (wrongClient) return { verdict: 'problem', advice: 'Probably not a 1.12 addon.', notes, match };
-		if (sameName) return { verdict: 'fine', advice: `Adds a link to "${sameName.name}"; its details stay unchanged.`, notes, match: sameName };
-		if (match) return { verdict: 'duplicate', advice: `May belong on "${match.name}".`, notes, match };
-		if (similar) return { verdict: 'duplicate', advice: 'Check against the similar addon first.', notes };
-		if (stale) return { verdict: 'problem', advice: `Not updated since ${year}.`, notes };
-		if (missing.length) return { verdict: 'incomplete', advice: 'Fill in the missing details before publishing.', notes };
-		return { verdict: 'fine', advice: 'Looks fine.', notes };
+		// Facts always come first, in the same order. Warnings and relationships follow.
+		notes.push({ label: 'Updated', value: year ? String(year) : 'Unknown', tone: stale ? 'warning' : undefined });
+		if (stats && !stats.missing) notes.push({ label: 'Stars', value: String(stats.stars) });
+		notes.push({ label: 'Client', value: stats?.interface === VANILLA_INTERFACE ? '1.12' : stats?.interface != null ? String(stats.interface) : 'Unknown', tone: wrongClient ? 'danger' : undefined });
+		if (missing.length && !sameName) notes.push({ label: 'Missing', value: missing.join(', '), tone: 'warning' });
+		if (sameName) notes.push({ label: 'Page', value: sameName.name });
+		if (item.group_key && (!wikiMain || wikiMain !== sameName)) notes.push({ label: 'Wiki version', value: wikiMain?.name ?? `${item.group_key} (not live)` });
+		if (forkParent || stats?.fork_of) notes.push({ label: 'Fork of', value: forkParent?.name ?? stats!.fork_of! });
+		if (similar) notes.push({ label: 'Similar name', value: similar.name, tone: 'warning' });
+		if ((queuedNames.get(name) ?? 0) > 1) notes.push({ label: 'Queue', value: 'Same name twice', tone: 'warning' });
+		if (movedTo) notes.push({ label: 'Moved to', value: movedTo });
+		if (item.parent) notes.push({ label: 'Extends', value: item.parent });
+		if (item.alts.length) notes.push({ label: 'Wiki versions', value: String(item.alts.length) });
+		if (item.problem) notes.push({ label: 'Publish failed', value: item.problem, tone: 'danger' });
+
+		if (stats?.missing) return { verdict: 'problem', advice: 'Dead link', notes, match };
+		if (renamedLive) return { verdict: 'duplicate', advice: `Already live · ${renamedLive.name}`, notes };
+		if (item.obsolete) return { verdict: 'problem', advice: 'Obsolete', notes, match };
+		if (stats?.archived) return { verdict: 'problem', advice: 'Archived', notes, match };
+		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
+		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };
+		if (match) return { verdict: 'duplicate', advice: 'Possible version', notes, match };
+		if (similar) return { verdict: 'duplicate', advice: 'Check similar name', notes };
+		if (stale) return { verdict: 'problem', advice: '8+ years old', notes };
+		if (missing.length) return { verdict: 'incomplete', advice: 'Incomplete', notes };
+		return { verdict: 'fine', advice: 'Ready', notes };
 	}
 
 	const reviewed = $derived(imports.items.map((item) => ({ item, ...review(item) })));

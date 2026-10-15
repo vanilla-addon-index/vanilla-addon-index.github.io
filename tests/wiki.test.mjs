@@ -117,11 +117,11 @@ describe('a bullet of the list', () => {
 		assert.equal(entry.description, 'times your dungeon runs');
 	});
 
-	test('links marked img are screenshots, at most five, and https only', () => {
+	test('links marked img are screenshots, at most six, and https only', () => {
 		const shots = Array.from({ length: 7 }, (_, i) => `[https://i.imgur.com/${i}.png (img)]`).join(' ');
 		const entry = only(`* [https://github.com/a/b Name] shows things ${shots} [http://plain.example/x.png (img)]`);
 		assert.equal(entry.description, 'shows things');
-		assert.deepEqual(entry.images, [0, 1, 2, 3, 4].map((i) => `https://i.imgur.com/${i}.png`));
+		assert.deepEqual(entry.images, [0, 1, 2, 3, 4, 5].map((i) => `https://i.imgur.com/${i}.png`));
 	});
 
 	test('"(obsolete)" marks the entry and comes off the name', () => {

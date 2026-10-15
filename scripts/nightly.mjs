@@ -15,7 +15,7 @@
 // The job signs in like any visitor. The token is what lets it do these few things and
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
+import { MAX_IMAGES, SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { githubCodeQuery, githubCodeUpdate } from '../src/lib/code-updates.ts';
 import { forgeHostPath, askForge, forgePlace, forgeRepositoryEndpoint } from '../src/lib/forges.ts';
 import { imagesIn, uncamo } from '../src/lib/github.ts';
@@ -327,7 +327,7 @@ function applyGithubDetails(r, repo, errors, alias, history, tree) {
 		const file = readme ? `${r.path ? r.path + '/' : ''}${readme.name}` : null;
 		if (!file) savePictures(r.key, r.wiki);
 		else if (gitOid(readme.oid) && r.state?.readme?.file === file && r.state.readme.oid === readme.oid) {
-			savePictures(r.key, [...new Set([...r.wiki, ...r.state.readme.images])].slice(0, 5));
+			savePictures(r.key, [...new Set([...r.wiki, ...r.state.readme.images])].slice(0, MAX_IMAGES));
 			cacheHit('github_readme');
 		} else withReadme.push({ ...r, full: repo.nameWithOwner, file, fileOid: readme.oid, source: r });
 	}
@@ -493,11 +493,11 @@ async function checkGithub() {
 			const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
 			const found = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
 			if (r.state && gitOid(r.fileOid)) {
-				r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, 5) };
+				r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, MAX_IMAGES) };
 				queueCache(r.source);
 			}
 			// The wiki's first, since someone chose those; then the README's, each picture once.
-			savePictures(r.key, [...new Set([...r.wiki, ...found])].slice(0, 5));
+			savePictures(r.key, [...new Set([...r.wiki, ...found])].slice(0, MAX_IMAGES));
 		});
 		await saveProgress();
 		metrics.progress('GitHub README', readmeCompleted, withReadme.length);
@@ -562,7 +562,7 @@ async function checkOtherHosts() {
 				}
 				if (!readme || facts.missing || !facts.readme_checked) return;
 				const found = facts.readme ? imagesIn(facts.readme.text, facts.readme.base).filter((image) => hostAllowed(image, 'image')) : [];
-				savePictures(key, [...new Set([...wiki, ...found])].slice(0, 5));
+				savePictures(key, [...new Set([...wiki, ...found])].slice(0, MAX_IMAGES));
 			} finally {
 				await saveProgress();
 				metrics.progress('Other hosts', ++completed, elsewhere.length);

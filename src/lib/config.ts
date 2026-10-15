@@ -66,7 +66,7 @@ export const LINK_HOSTS = [
 export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co'];
 
 // Must match the check on addons.images in the schema migration.
-export const MAX_IMAGES = 5;
+export const MAX_IMAGES = 6;
 
 // Links per addon, the main one included. Must match addons_links() in the versions migration.
 export const MAX_VERSIONS = 100;
