@@ -5,7 +5,7 @@ import type { Candidate } from './wiki';
 
 export interface QueueItem extends Candidate {
 	id: number;
-	status: 'pending' | 'approved' | 'rejected';
+	status: 'pending' | 'approved' | 'rejected' | 'submitted';
 	// Why the last approval attempt failed, if it did.
 	problem: string | null;
 }
@@ -28,7 +28,7 @@ export const imports = $state({
 	items: [] as QueueItem[],
 	// What GitHub says about each repository, by link key. Empty until the nightly job has run.
 	stats: {} as Record<string, RepoStats>,
-	counts: { pending: 0, approved: 0, rejected: 0 },
+	counts: { pending: 0, approved: 0, rejected: 0, submitted: 0 },
 	loaded: false,
 	// Entries an admin turned down. Fetched only when that list is opened.
 	rejected: [] as QueueItem[],
@@ -65,16 +65,17 @@ async function count(status: QueueItem['status']) {
 }
 
 export async function loadQueue() {
-	const [items, stats, pending, approved, rejected] = await Promise.all([
+	const [items, stats, pending, approved, rejected, submitted] = await Promise.all([
 		all<QueueItem>('import_queue', ['status', 'pending']),
 		all<RepoStats>('repo_stats_current'),
 		count('pending'),
 		count('approved'),
-		count('rejected')
+		count('rejected'),
+		count('submitted')
 	]);
 	imports.items = items.sort(byName);
 	imports.stats = Object.fromEntries(stats.map((s) => [s.key, s]));
-	imports.counts = { pending, approved, rejected };
+	imports.counts = { pending, approved, rejected, submitted };
 	imports.loaded = true;
 }
 

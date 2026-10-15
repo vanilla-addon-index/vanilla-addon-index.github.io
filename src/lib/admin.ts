@@ -82,6 +82,7 @@ export const ACTION_TEXT: Record<string, string> = {
 	'report.handle': 'handled a report about',
 	'report.dismiss': 'dismissed a report about',
 	'import.approve': 'approved the import of',
+	'import.submitted': 'submitted a link already waiting for import:',
 	'import.reject': 'rejected the import of',
 	'import.requeue': 'put back in the import queue',
 	'account.delete': 'deleted',

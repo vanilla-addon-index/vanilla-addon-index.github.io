@@ -1,0 +1,36 @@
+import { expect, test } from './test.ts';
+import { loginAs, logLine, unique } from './helpers.ts';
+
+test('a member submission clears its pending import without an admin approval', async ({ page }) => {
+ await loginAs(page, 'admin');
+ await page.goto('/admin/import');
+ const entry = page.locator('[data-entry]').first();
+ await expect(entry).toBeVisible();
+ const queuedName = await entry.getByLabel('Name', {exact:true}).inputValue();
+ const url = await entry.locator('a[href^="https://"]').first().getAttribute('href');
+ expect(url).toBeTruthy();
+ await page.goto('/account');
+ await page.getByRole('button', {name:'Log out',exact:true}).click();
+ await expect(page.getByRole('link', {name:'Log in',exact:true})).toBeVisible();
+ await loginAs(page, 'member2');
+ const name = unique('Independently submitted');
+ await page.goto('/submit');
+ await page.getByLabel('Name', {exact:true}).fill(name);
+ await page.getByLabel('Link to the addon').fill(url!);
+ await page.getByLabel('Category', {exact:true}).selectOption('Combat');
+ await page.getByLabel('Description', {exact:true}).fill('Details written by the member, rather than the wiki.');
+ await page.getByRole('button', {name:'Post addon',exact:true}).click();
+ await expect(page.getByRole('heading', {level:1,name})).toBeVisible();
+ await expect(page.getByRole('link', {name:'Edit',exact:true})).toBeVisible();
+ await page.goto('/account');
+ await page.getByRole('button', {name:'Log out',exact:true}).click();
+ await expect(page.getByRole('link', {name:'Log in',exact:true})).toBeVisible();
+ await loginAs(page, 'admin');
+ await page.goto('/admin/import');
+ await page.getByLabel('Search', {exact:true}).fill(queuedName);
+ await expect(page.locator('[data-entry]')).toHaveCount(0);
+ const submitted = page.locator('dl > div').filter({hasText:'Submitted by users'}).locator('dd');
+ await expect(submitted).not.toHaveText('0');
+ await page.goto('/admin/log?kind=import');
+ await expect(logLine(page, /member2 submitted a link already waiting for import:/)).toBeVisible();
+});
