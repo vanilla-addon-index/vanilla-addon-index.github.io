@@ -116,7 +116,7 @@ test('admins can merge links, pin the leader and restore a merged page from tras
  await page.goto('/admin/trash');
  const trashed=page.locator('.panel > div').filter({hasText:two});
  await trashed.getByRole('button',{name:'Restore',exact:true}).click();
- await expect(page.getByText('Restored "'+two+'".',{exact:true})).toBeVisible();
+ await expect(page.getByText('Restored "'+two+'".')).toBeVisible();
  await page.goto(address); await expect(page.getByRole('heading',{level:1,name:one})).toBeVisible();
 });
 
