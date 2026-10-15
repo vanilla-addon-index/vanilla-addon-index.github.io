@@ -23,7 +23,7 @@
 		<p class="mt-3">
 			{SITE_NAME} is a community list of addons for the 1.12.1 client of World of Warcraft. It
 			links to where each addon lives; it hosts no addon files itself. Anyone can browse it, and
-			anyone with an account can post an addon and edit or remove what they posted.
+			anyone with an account can post an addon. Once an entry becomes shared, its contributors propose edits for admin review.
 		</p>
 		<p class="mt-3">
 			It is a hobby project run by {@render out('https://github.com/akzkak', 'akzkak')}, free and
@@ -70,7 +70,7 @@
 				site's admins can see it; visitors cannot see who posted an addon.
 			</li>
 			<li>
-				<strong>What you do:</strong> the addons you post and edit, reports and suggestions you
+				<strong>What you do:</strong> the addons and links you contribute, edit proposals, reports and suggestions you
 				send, and a log of those actions that admins use to undo mistakes and abuse.
 			</li>
 			<li>
@@ -116,7 +116,7 @@
 
 		<h3 class="field-label mt-5">Seeing or correcting your data</h3>
 		<p>
-			You can edit and delete your own entries until another link makes them shared pages. Shared pages are managed by admins; use the report button to request a correction. To get a copy of what is stored about
+			You can edit and delete your own entries until another link makes them shared pages. On shared pages, original owners and contributors can propose edits for admin review and remove their own submitted links. This access continues even after those links are removed. To get a copy of what is stored about
 			you, or to have something corrected, {@render out(ISSUES, 'open an issue on GitHub')} and
 			give the username shown on your account page. An issue is public, so put nothing else
 			personal in it.

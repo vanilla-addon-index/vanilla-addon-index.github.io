@@ -8,6 +8,7 @@
 		findAddon,
 		store, pinLink, mergeAddons,
 	} from '#lib/addons.svelte.ts';
+	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import ReportDialog from '#lib/components/ReportDialog.svelte';
@@ -38,6 +39,31 @@
 		if (!slug || found || leaving || !store.loaded || lookedUp === slug) return;
 		fetchAddon(slug).finally(() => (lookedUp = slug));
 	});
+
+	let access=$state<ContributionAccess>({can_propose:false,links:[]}), pending=$state<EditRequest|null>(null);
+	let accessKey='';
+	async function refreshAccess() {
+		if (!addon?.shared || !auth.session || auth.banned) return;
+		const id=addon.id, user=auth.session.user.id;
+		const [result,request]=await Promise.all([contributionAccess(id),ownPendingEdit(id)]);
+		if(addon?.id===id && auth.session?.user.id===user && !auth.banned){access=result;pending=request;}
+	}
+	$effect(()=>{
+		const key=(addon?.id??'')+':'+(auth.session?.user.id??'')+':'+!!auth.banned;
+		if(accessKey===key)return;
+		accessKey=key;access={can_propose:false,links:[]};pending=null;
+		refreshAccess().catch(e=>error=e.message);
+	});
+	async function removeLink(link:string) {
+		if(!addon)return;
+		const confirmed=await ask({title:'Remove your link?',body:'The shared page stays available, even if this is its last link. An admin can undo the removal in History.',action:'Remove my link',danger:true});
+		if(!confirmed)return;
+		await change(async()=>{await removeOwnLink(addon.id,link);await refreshAccess();});
+	}
+	async function withdraw() {
+		if(!pending)return;
+		await change(async()=>{await withdrawEdit(pending!.id);pending=null;});
+	}
 
 	// Group changes are small and reversible, so they happen at once, with no prompt.
 	async function change(work: () => Promise<void>) {
@@ -195,6 +221,7 @@
 			<div class="panel">
 				<h2 class="label mb-0 px-3 pt-2">{addon.versions.length > 1 ? 'Links' : 'Link'}</h2>
 				<!-- The main link first, then mirrors of the same code on other hosts. -->
+				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
 				<ol>
 					{#each addon.versions as version (version.url)}
 						<li class="border-b border-border px-3 py-1.5 last:border-b-0">
@@ -214,6 +241,7 @@
                                     {#if addon.versions.length > 1}<a class="btn px-2 py-0.5 text-sm" href={resolve('/submit') + '?split=' + addon.id + '&link=' + encodeURIComponent(version.url)}>Separate addon</a>{/if}
                                 </div>
                             {/if}
+                            {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
 					{/each}
 				</ol>
@@ -242,8 +270,10 @@
 				</div>
 			</dl>
 
-            {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This shared page is managed by admins. Report anything that needs changing.</p>{/if}
-            {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>Add another link</a>{/if}
+            {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
+            {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>{addon.versions.length ? 'Add another link' : 'Add a link'}</a>{/if}
+            {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
+            {#if auth.session && pending && !auth.isAdmin}<div class="panel px-3 py-2 text-sm"><p>Your edit is waiting for admin review.</p><button class="btn mt-2" onclick={withdraw}>Withdraw proposal</button></div>{/if}
 			{#if canEdit(addon.owner)}
 				<div class="grid grid-cols-2 gap-2">
 					<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn">Edit</a>

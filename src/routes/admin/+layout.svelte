@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '#lib/auth.svelte.ts';
+	import { editReviews } from '#lib/edit-reviews.svelte.ts';
 	import { reports } from '#lib/reports.svelte.ts';
 	import type { LayoutProps } from './$types';
 
@@ -10,6 +11,7 @@
 	const TABS = [
 		{ path: '/admin/import', label: 'Import' },
 		{ path: '/admin/reports', label: 'Reports' },
+		{ path: '/admin/edits', label: 'Edit reviews' },
 		{ path: '/admin/groups', label: 'Shared addons' },
 		{ path: '/admin/log', label: 'Log' },
 		{ path: '/admin/trash', label: 'Trash' },
@@ -34,6 +36,7 @@
 			>
 				{tab.label}
 				<!-- How many reports wait, so they are noticed from any tab. -->
+				{#if tab.path === '/admin/edits' && editReviews.pending}<span class="text-accent">{editReviews.pending}</span>{/if}
 				{#if tab.path === '/admin/reports' && reports.open}<span class="text-accent">{reports.open}</span>{/if}
 			</a>
 		{/each}

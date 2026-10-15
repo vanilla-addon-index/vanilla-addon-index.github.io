@@ -10,7 +10,9 @@ provides PostgreSQL, authentication and the data API. The public URL and key in
 and narrow database functions enforce access.
 
 Visitors can browse. Members can post addons and edit or delete their own entries
-until they become shared pages. A matching name adds a repository link immediately,
+directly until they become shared pages. Original owners and contributors can
+propose edits to shared pages for admin review and immediately remove only their
+own submitted links. A matching name adds a repository link immediately,
 without approval or changes to the existing description, images, author or category.
 Admins review wiki imports, handle reports and manage content. The owner appoints
 or removes admins and has the final account-management permissions. These rules
@@ -18,15 +20,24 @@ are tested against the actual [database migrations](../supabase/migrations).
 
 Names match without case, spaces or punctuation. Matching submissions and imports
 use atomic database functions, with locks and a unique canonical-name index to
-prevent duplicate pages. A second link makes a page admin-managed. Links sort by
+prevent duplicate pages. A second link permanently makes a page shared: direct content edits require an admin. Links sort by
 their latest known commit date, unknown dates last; an admin pin overrides the
 leading link and the page's code date. Admins can separate an unrelated link into
-an explicit name-collision exception. Existing merged addresses remain aliases,
+an explicit name-collision exception. Shared status is permanent, including when
+all links are removed: the page keeps its address, description and history, has
+an unknown code date, and invites contributors to add a link. Existing merged addresses remain aliases,
 and removed entries are retained in the normal trash for 90 days.
 
 Link provenance is private. Link additions are logged as reversible edits;
 reverting an addition removes only those links, preserving later contributions.
-Account rollback preserves shared pages and other contributors' links.
+Account rollback preserves shared pages and other contributors' links. Permanent
+participation is stored separately from active links, so removing a link does not
+revoke proposal access. Proposals are private to their author and admins; authors
+can revise or withdraw a pending proposal. Admins see current/proposed values,
+choose fields to accept, and cannot overwrite a field changed since submission.
+Accepted edits use the normal reversible audit path. Restore recovers contributor
+access and link ownership too; deleting an account removes its participation and
+private proposals. Banned accounts cannot propose, withdraw or remove links.
 
 ## Reading the addon list
 

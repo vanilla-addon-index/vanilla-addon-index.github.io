@@ -10,6 +10,7 @@
 	import { linkKey } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
+	import { contributionAccess, contentOf, ownPendingEdit, proposeEdit, withdrawEdit, displayEditValue, FIELD_LABELS, type EditRequest, type EditField } from '#lib/edit-reviews.svelte.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
 	// Must match the checks on addons.description in the schema migration and the import migration.
@@ -33,6 +34,25 @@
 	let error = $state('');
 	let saving = $state(false);
 	let filled = false;
+	let canPropose = $state(false), reviewReady = $state(false), pending = $state<EditRequest | null>(null);
+	let proposalBase = $state<AddonInput>();
+	let accessAsked = '';
+	const proposing = $derived(!!editing?.shared && !auth.isAdmin);
+	$effect(() => {
+		if (!editing?.shared || !auth.session) return;
+		const key = editing.id + ':' + auth.session.user.id;
+		if (accessAsked === key) return;
+		accessAsked = key; canPropose = false; reviewReady = false; pending = null; filled = false;
+		const user = auth.session.user.id;
+		Promise.all([contributionAccess(editing.id), ownPendingEdit(editing.id)]).then(([access, request]) => {
+			if (auth.session?.user.id !== user || accessAsked !== key) return;
+			canPropose = access.can_propose; pending = request; reviewReady = true;
+		}).catch(e => { error = e.message; reviewReady = true; });
+	});
+	async function withdraw() {
+		if (!pending) return;
+		try { await withdrawEdit(pending.id); pending = null; } catch(e) { error = (e as Error).message; }
+	}
 	// The addon's "updated" stamp when the form was filled; saving checks it has not moved.
 	let since = '';
 
@@ -48,16 +68,18 @@
 	});
 
 	$effect(() => {
-		if (!editing || filled || !fresh) return;
+		if (!editing || filled || !fresh || (proposing && !reviewReady)) return;
 		filled = true;
 		since = editing.updated_at;
-		const { name, description, category, author, versions, images } = editing;
+		proposalBase = contentOf(editing);
+		const cleanPending = pending && Object.keys(pending.base).every(field => JSON.stringify(pending!.base[field as EditField]) === JSON.stringify(proposalBase![field as EditField]));
+		const { name, description, category, author, versions, images } = { ...editing, ...(cleanPending ? pending?.changes : {}) };
 		form = {
 			name,
 			description,
 			category,
 			author,
-			versions: versions.map((v) => ({ ...v })),
+			versions: versions.length ? versions.map((v) => ({ ...v })) : [{url:'',note:''}],
 			images: [...images]
 		};
 	});
@@ -71,7 +93,7 @@
 		form = { name: original.name, description: original.description, category: original.category, author: original.author, versions: [{url: splitting.link, note: ''}], images: [...original.images] };
 	});
 
-	const mainLink = $derived(form.versions[0].url);
+	const mainLink = $derived(form.versions[0]?.url ?? '');
 	const matched = $derived(!editing && !splitting && plainName(form.name) ? store.addons.find((a) => plainName(a.name) === plainName(form.name)) : undefined);
 
 	function removeVersion(index: number) {
@@ -172,7 +194,8 @@
 		if (!auth.ready || (editSlug && (!store.loaded || !fresh))) return 'Loading…';
 		if (!auth.session) return 'You need to log in to post or edit addons.';
 		if (editSlug && !editing) return 'That addon does not exist.';
-		if (editing && !canEdit(editing.owner)) return 'Only the person who posted this addon can edit it.';
+		if (proposing && !reviewReady) return 'Loading contributor access…';
+		if (editing && !canEdit(editing.owner) && !(proposing && canPropose)) return editing.shared ? 'Only the original owner and contributors can propose edits to this shared page.' : 'Only the person who posted this addon can edit it.';
 		return '';
 	});
 
@@ -190,9 +213,9 @@
 			// Empty rows in the "other versions" list are dropped.
 			versions: form.versions
 				.map((v) => ({ ...v, url: v.url.trim(), note: v.note.trim() }))
-				.filter((v, index) => index === 0 || v.url)
+				.filter((v, index) => v.url || (index === 0 && !editing?.shared))
 		};
-		if (!matched && descriptionLength < DESCRIPTION_MIN && !auth.isAdmin) {
+		if (!matched && descriptionLength < DESCRIPTION_MIN && !auth.isAdmin && (!editing?.shared || form.description !== editing.description)) {
 			return (error = `The description needs at least ${DESCRIPTION_MIN} characters.`);
 		}
 		if (input.versions.some((v) => v.url && !mayUse(v.url, 'link'))) {
@@ -203,6 +226,11 @@
 		if (!editing && !slugify(input.name)) return (error = 'The name needs at least one letter or digit.');
 		saving = true;
 		try {
+			if (proposing && editing && proposalBase) {
+				await proposeEdit(editing.id, input, proposalBase);
+				await goto(resolve('/addon/[slug]', {slug:editing.slug}) + '?proposed=1');
+				return;
+			}
 			const addon = editing ? await updateAddon(editing.id, input, since) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input, splitting);
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
@@ -237,7 +265,7 @@
 			<ul class="space-y-2 px-3 py-3 text-sm text-muted">
 				<li>Name, link, category and description are <span class="text-accent">required</span>.</li>
 				<li>Everything else is optional and helps players find the addon.</li>
-				<li>You can edit your own entry until it becomes a shared page. Adding a link does not give ownership of that page.</li>
+				<li>You can edit your own entry directly until it becomes shared. Original owners and contributors can then propose edits for admin review and remove their own links.</li>
 				{#if !auth.isAdmin}
 					<li>The link must be on one of: {hostNames('link')}.</li>
 				{/if}
@@ -249,7 +277,18 @@
 		</aside>
 
 		<form onsubmit={save}>
-			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. Only your link will be added; the shared page is managed by admins.</p>{/if}
+            {#if proposing}<p class="panel mb-4 p-3 text-accent">Your edits go to an admin for review. The live page stays unchanged until accepted.</p>{/if}
+            {#if proposing && pending}
+                <div class="panel mb-4 p-3">
+                    <p>You have an edit waiting for review. Saving replaces that proposal.</p>
+                    {#if editing && Object.keys(pending.base).some(field => JSON.stringify(pending!.base[field as EditField]) !== JSON.stringify(editing![field as EditField]))}<p class="mt-2 text-accent">The page changed since your proposal. The form shows current values; review your pending changes below before submitting a revision.</p>{/if}
+                    <details><summary class="cursor-pointer text-accent">See your pending changes</summary>
+                        {#each Object.keys(pending.changes) as field}<p class="mt-2 break-words whitespace-pre-wrap"><strong>{FIELD_LABELS[field as EditField]}</strong>: {displayEditValue(pending.changes[field as EditField])}</p>{/each}
+                    </details>
+                    <button type="button" class="btn mt-2" onclick={withdraw}>Withdraw proposal</button>
+                </div>
+            {/if}
+			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. Only your link will be added; edits to the shared page are reviewed by admins.</p>{/if}
 			<h2 class="section-title text-accent">Required</h2>
 			<p class="mb-2 text-muted">{matched ? 'Add a repository link to the existing page.' : 'The four things every entry needs.'}</p>
 			<div class="panel space-y-4 border-accent/30 p-4">
@@ -273,7 +312,7 @@
 							readonly={!!splitting}
 							class="input"
 							type="url"
-							required
+							required={!editing?.shared}
 							pattern="https://.*"
 							placeholder="https://github.com/author/addon"
 							bind:value={form.versions[0].url}
@@ -313,7 +352,7 @@
 						id="description"
 						disabled={!!matched}
 						class="input min-h-40 disabled:opacity-40"
-						required={!auth.isAdmin}
+						required={!auth.isAdmin && (!proposing || form.description !== editing?.description)}
 						maxlength={DESCRIPTION_MAX}
 						placeholder="What it does, main features, slash commands, installation notes…"
 						bind:value={form.description}
@@ -467,7 +506,7 @@
 
 			<div class="mt-4 flex gap-2">
 				<button class="btn btn-primary" disabled={saving}>
-					{saving ? 'Saving…' : editing ? 'Save changes' : matched ? 'Add link' : splitting ? 'Separate addon' : 'Post addon'}
+					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? 'Add link' : splitting ? 'Separate addon' : 'Post addon'}
 				</button>
 				<a href={editing ? resolve('/addon/[slug]', { slug: editing.slug }) : resolve('/')} class="btn">
 					Cancel

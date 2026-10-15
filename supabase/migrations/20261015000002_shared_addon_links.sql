@@ -22,6 +22,17 @@ revoke all on public.addon_link_contributions from public, anon, authenticated, 
 insert into public.addon_link_contributions
  select v ->> 'url', a.id, a.owner from public.addons a, jsonb_array_elements(a.versions) v;
 
+-- Permanent participation is distinct from the removable active-link ledger.
+create table public.addon_contributors (
+ addon_id bigint not null references public.addons on delete cascade,
+ -- Reference the account directly so the private join does not make the API owner/profile relationship ambiguous.
+ user_id uuid not null references auth.users on delete cascade,
+ primary key(addon_id, user_id)
+);
+alter table public.addon_contributors enable row level security;
+revoke all on public.addon_contributors from public, anon, authenticated, service_role;
+insert into public.addon_contributors select distinct addon_id, submitted_by from public.addon_link_contributions where submitted_by is not null;
+
 create or replace function public.addons_code_update() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -43,7 +54,7 @@ create or replace function public.addons_import_owner() returns trigger
 language plpgsql set search_path = '' as $$
 begin
  if jsonb_array_length(new.versions) > 1 then new.shared := true; end if;
- if tg_op = 'UPDATE' and old.shared and not public.doing('revert') then new.shared := true; end if;
+ if tg_op = 'UPDATE' and old.shared then new.shared := true; end if;
  if new.source <> '' then
   new.approved_by := case when tg_op = 'INSERT' then coalesce(new.approved_by, new.owner)
    when public.doing('leave') then new.approved_by else coalesce(old.approved_by, old.owner) end;
@@ -183,7 +194,8 @@ begin
  select * into a from public.addons where id = target for update;
  if a.id is null or not exists(select 1 from jsonb_array_elements(a.versions) v where v ->> 'url' = link) then raise exception 'That link no longer exists.'; end if;
  select jsonb_agg(v) into kept from jsonb_array_elements(a.versions) v where v ->> 'url' <> link;
- if kept is null then raise exception 'The only link cannot be separated.'; end if;
+ if kept is null and not a.shared then raise exception 'The only link cannot be separated.'; end if;
+ kept := coalesce(kept, '[]');
  update public.addons set versions = kept where id = target;
  insert into public.addons(name, description, category, author, versions, images, separate_name, shared)
  values(input ->> 'name', coalesce(input ->> 'description', ''), input ->> 'category', coalesce(input ->> 'author', ''),
@@ -279,11 +291,12 @@ begin
 				new.name,
 				new.id,
 				(jsonb_build_object(
-					'added_links', case when public.doing('add_link') then (select jsonb_agg(v ->> 'url') from jsonb_array_elements(new.versions) v where not exists(select 1 from jsonb_array_elements(old.versions) o where o ->> 'url' = v ->> 'url')) else null end,
+					'removed_links', case when public.doing('remove_link') then (select jsonb_agg(v) from jsonb_array_elements(old.versions) v where not exists(select 1 from jsonb_array_elements(new.versions) n where n ->> 'url' = v ->> 'url')) else null end,
+                    'added_links', case when public.doing('add_link') then (select jsonb_agg(v ->> 'url') from jsonb_array_elements(new.versions) v where not exists(select 1 from jsonb_array_elements(old.versions) o where o ->> 'url' = v ->> 'url')) else null end,
                     'changed', to_jsonb(changed),
 					'before', to_jsonb(old) - 'link_keys',
 					'after', (select jsonb_object_agg(field, to_jsonb(new) -> field) from unnest(changed) field)
-				) - case when public.doing('add_link') then '__none__' else 'added_links' end)
+				) - case when public.doing('add_link') then '__none__' else 'added_links' end - case when public.doing('remove_link') then '__none__' else 'removed_links' end)
 			);
 		end if;
 	else
@@ -292,8 +305,10 @@ begin
 			-- With the others in its group, so a restore can put it back among them. This
 			-- runs before addons_group_cleanup, while a group of two is still a group.
 			to_jsonb(old) - 'link_keys' || jsonb_build_object(
-				'group_members',
-				(select coalesce(jsonb_agg(g.id), '[]') from public.addons g where g.group_id = old.group_id)
+				'contributors', (select coalesce(jsonb_agg(c.user_id), '[]') from public.addon_contributors c where c.addon_id = old.id),
+                'link_contributors', (select coalesce(jsonb_object_agg(c.url,c.submitted_by),'{}') from public.addon_link_contributions c where exists(select 1 from jsonb_array_elements(old.versions) v where v ->> 'url' = c.url)),
+                'group_members',
+				(select coalesce(jsonb_agg(g.id), '[]') from public.addons g where g.group_id = old.group_id and g.id <> old.id)
 			),
 			old.name,
 			'delete',
@@ -304,9 +319,16 @@ begin
 		perform public.log_action('addon.delete', old.name, old.id, jsonb_build_object('trash_id', trashed));
 		delete from public.addon_trash where deleted_at < now() - interval '90 days';
 	end if;
+	if tg_op = 'DELETE' then return old; end if;
 	return null;
 end;
 $$;
+-- Capture child provenance before ON DELETE CASCADE removes it. The deletion brake
+-- runs first; normal create/edit audit remains an AFTER trigger.
+drop trigger addons_audit on public.addons;
+create trigger addons_audit after insert or update on public.addons for each row execute function public.addons_audit();
+create trigger addons_zz_audit_delete before delete on public.addons for each row execute function public.addons_audit();
+
 create or replace function public.revert_addon(log_id bigint) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -327,7 +349,7 @@ begin
 
  if jsonb_typeof(entry.details -> 'added_links') = 'array' then
   perform set_config('app.doing', 'revert', true);
-  update public.addons a set versions = (select jsonb_agg(v) from jsonb_array_elements(a.versions) v where not (entry.details -> 'added_links') ? (v ->> 'url')),
+  update public.addons a set versions = (select coalesce(jsonb_agg(v), '[]') from jsonb_array_elements(a.versions) v where not (entry.details -> 'added_links') ? (v ->> 'url')),
    shared = case when a.versions = entry.details -> 'after' -> 'versions' then coalesce((b ->> 'shared')::boolean, false) else a.shared end,
    owner = case when a.versions = entry.details -> 'after' -> 'versions' then (select id from public.profiles where id = (b ->> 'owner')::uuid) else a.owner end
   where a.id = entry.addon_id;
@@ -427,13 +449,14 @@ begin
 	select array_agg(public.link_key(v ->> 'url')) into keys from jsonb_array_elements(a -> 'versions') v;
 
 	-- A merge moved these links under another addon; they move back.
-	for holder in select id, versions from public.addons where link_keys && keys loop
+	for holder in select id, versions, shared from public.addons where link_keys && keys loop
 		select jsonb_agg(v) into kept
 		from jsonb_array_elements(holder.versions) v
 		where not public.link_key(v ->> 'url') = any (keys);
-		if kept is null then
+		if kept is null and not holder.shared then
 			raise exception 'Another addon now lists only these links. Edit or delete it first.';
 		end if;
+        kept := coalesce(kept,'[]');
 		update public.addons
 		set versions = kept, aliases = array_remove(aliases, a ->> 'slug')
 		where id = holder.id;
@@ -477,6 +500,17 @@ begin
 		(a ->> 'created_at')::timestamptz,
 		coalesce((a ->> 'updated_at')::timestamptz, now()), coalesce((a ->> 'shared')::boolean, false), a ->> 'pinned_link', true
 	);
+ if a ? 'contributors' then
+  delete from public.addon_contributors where addon_id = made;
+  insert into public.addon_contributors select made,p.id from public.profiles p
+   where p.id::text in(select jsonb_array_elements_text(a -> 'contributors'));
+ elsif poster is not null then
+  insert into public.addon_contributors values(made,poster) on conflict do nothing;
+ end if;
+ if a ? 'link_contributors' then
+  update public.addon_link_contributions c set submitted_by = (select p.id from public.profiles p where p.id::text = a -> 'link_contributors' ->> c.url) where c.addon_id = made;
+ end if;
+
 	perform set_config('app.doing', '', true);
 
 	-- Back in its group: the one it left if that still exists, or the group of two that
@@ -550,7 +584,7 @@ begin
 						steps := steps || jsonb_build_object('kind', 'restore', 'subject', line.subject);
 					end if;
 
-				elsif line.action = 'addon.update' and jsonb_typeof(line.details -> 'added_links') = 'array' then
+				elsif line.action = 'addon.update' and (jsonb_typeof(line.details -> 'added_links') = 'array' or jsonb_typeof(line.details -> 'removed_links') = 'array') then
      if exists(select 1 from public.addons where id = line.addon_id) then
       perform public.revert_addon(line.id);
       steps := steps || jsonb_build_object('kind', 'revert', 'subject', line.subject);
@@ -687,6 +721,7 @@ begin
  insert into public.addon_link_contributions
  select v ->> 'url', new.id, auth.uid() from jsonb_array_elements(new.versions) v
  on conflict(url) do nothing;
+ insert into public.addon_contributors select new.id, auth.uid() where auth.uid() is not null on conflict do nothing;
  return null;
 end;
 $$;
@@ -702,6 +737,7 @@ begin
  select * into s from public.addons where id = source_id;
  select * into t from public.addons where id = target_id;
  if s.id is null or t.id is null then raise exception 'An addon no longer exists.'; end if;
+ insert into public.addon_contributors select target_id, user_id from public.addon_contributors where addon_id = source_id on conflict do nothing;
  update public.addon_link_contributions set addon_id = target_id where addon_id = source_id;
  update public.import_queue set addon_id = target_id where addon_id = source_id;
  delete from public.addons where id = source_id;
@@ -790,7 +826,7 @@ begin
 		raise exception 'Only the nightly job can tidy up.';
 	end if;
 	update public.activity_log
-	set details = details - 'before' - 'after' - 'added_links'
+	set details = details - 'before' - 'after' - 'added_links' - 'removed_links'
 	where at < now() - interval '90 days'
 		and action in ('addon.update', 'addon.revert')
 		and details ? 'before';
