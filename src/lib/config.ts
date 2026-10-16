@@ -33,6 +33,7 @@ export const CATEGORIES = [
 	'Class',
 	'Combat',
 	'Libraries',
+	'Macros',
 	'Map & Minimap',
 	'Professions',
 	'PvP',
