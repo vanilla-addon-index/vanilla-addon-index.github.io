@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { PUBLIC_ADDON_COLUMNS } from '../../src/lib/config.ts';
 import { NIGHTLY_TOKEN, addon, post } from '../helpers/db.mjs';
 import { createRulesContext } from '../helpers/rules-context.mjs';
+import { askForge, forgePlace } from '../../src/lib/forges.ts';
 
 let db, admin, alice, bob, refused, call, logged;
 beforeEach(async () => {
@@ -17,6 +18,28 @@ describe('public code update dates', () => {
 	const metadata = async (id) => (await db.asVisitor((q) => q(
 		`select code_update, updated_at::text as stamp from public.addons where id = $1`, [id]
 	)))[0];
+
+	test('OctoWoW fetched dates save alongside GitHub dates and reach public link facts', async () => {
+		const url = 'https://octowow.st/git/Ade/AdeAlts';
+		const octo = await post(db, alice, addon('AdeAlts', url));
+		const github = await post(db, bob, addon('Atlas'));
+		const date = '2026-10-14T12:30:33Z';
+		const facts = await askForge(forgePlace(url), async (endpoint) => {
+			if (endpoint.endsWith('/Ade/AdeAlts')) return {status:200, body:{id:154, full_name:'Ade/AdeAlts', default_branch:'main'}};
+			if (endpoint.includes('/commits?')) return {status:200, body:[{commit:{committer:{date}}}]};
+			return null;
+		});
+		assert.ok(facts.code_update);
+		const update = {url, date:facts.code_update.date, history_url:facts.code_update.url};
+		assert.equal((await storeDates([update, {url:github.repo_url, date, history_url:github.repo_url + '/commits/HEAD'}]))[0].n, 2);
+		const snapshot = (await metadata(octo.id)).code_update;
+		assert.equal(Date.parse(snapshot.date), Date.parse(date));
+		assert.equal(snapshot.url, url + '/commits/branch/main');
+		assert.ok((await metadata(github.id)).code_update);
+		for (const history_url of ['https://octowow.st/forum/commits', 'https://octowow.st/git.evil/commits', 'https://octowow.st.evil/git/commits', 'http://octowow.st/git/Ade/AdeAlts']) {
+			await assert.rejects(storeDates([{...update, history_url}]), /repo_code_updates_history_url_check/);
+		}
+	});
 
 	test('successful checks reach the public snapshot without adding listing edits to History', async () => {
 		const row = await post(db, alice, addon('Atlas'));
