@@ -1,5 +1,5 @@
 import { expect, test } from './test.ts';
-import { loginAs, logLine, postAddon, unique } from './helpers.ts';
+import { loginAs, logLine, postAddon, unique, chooseImportCategory } from './helpers.ts';
 
 // submitted imports
 test('a member submission clears its pending import without an admin approval', async ({ page }) => {
@@ -68,6 +68,7 @@ test('importing a same-name link adds reviewed screenshots to the existing page'
  await expect(entry).toBeVisible();
  await expect(entry.getByText(/\+2 pictures/)).toBeVisible();
  await entry.getByRole('button',{name:'Remove this screenshot'}).last().click();
+ await chooseImportCategory(entry);
  await entry.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
  await expect(entry).toHaveCount(0);
  await page.goto(address);
@@ -110,6 +111,7 @@ test('renamed forks suggest their published parent and keep separate approval ex
  await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeVisible();
  await expect(entry.getByRole('button',{name:'Approve separately',exact:true})).toBeVisible();
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toHaveCount(0);
+ await chooseImportCategory(entry);
  await entry.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
  await expect(entry).toHaveCount(0);
  await page.goto(address);
@@ -145,6 +147,7 @@ for (const group of [false,true]) {
   await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeVisible();
   // Persist the preview's reviewed title through the edited-import path.
   await entry.getByLabel('Name',{exact:true}).fill(`${version} `);
+  await chooseImportCategory(entry);
   await entry.getByRole('button',{name:group?`Add link to ${name}`:'Approve',exact:true}).click();
   await expect(entry).toHaveCount(0);
   if(group){

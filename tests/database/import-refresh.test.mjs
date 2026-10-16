@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createDb, NIGHTLY_TOKEN } from '../helpers/db.mjs';
 import { refreshImports } from '../../scripts/refresh-imports.mjs';
+import { parseWiki } from '../../src/lib/wiki.ts';
 
 test('lightweight refresh corrects pending categories without replacing reviewed details, facts or screenshots', async () => {
 	const db = await createDb(), fetcher = globalThis.fetch;
@@ -26,4 +27,21 @@ test('lightweight refresh corrects pending categories without replacing reviewed
 		assert.deepEqual(after, {...before, category:'Macros'});
 		assert.deepEqual(await db.sql('select * from public.repo_stats'), facts);
 	} finally { globalThis.fetch = fetcher; await db.close(); }
+});
+
+test('uncertain imports stay uncategorized and cannot publish a new page without a reviewed category', async () => {
+	const db = await createDb();
+	try {
+		const admin = await db.addUser('admin', 'admin');
+		const {candidates} = parseWiki('===Full Addons List===\n* [https://github.com/a/UnknownWidget UnknownWidget] Includes a button.\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections==');
+		assert.equal(candidates[0].category, '');
+		await db.queueImports(candidates);
+		const [{id}] = await db.sql('select id from public.import_queue');
+		const result = await db.as(admin, q => q('select public.approve_imports($1) as n', [[id]]));
+		assert.equal(result[0].n, 0);
+		assert.equal((await db.sql('select status from public.import_queue'))[0].status, 'pending');
+		assert.deepEqual(await db.sql('select * from public.addons'), []);
+		await db.as(admin, q => q('select public.publish_import($1, $2::jsonb)', [id, JSON.stringify({name:'UnknownWidget', description:'Includes a button.', category:'Chat & Social', images:[]})]));
+		assert.equal((await db.sql('select category from public.addons'))[0].category, 'Chat & Social');
+	} finally { await db.close(); }
 });

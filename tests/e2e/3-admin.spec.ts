@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './test.ts';
-import { confirm, loginAs, logLine, postAddon, unique } from './helpers.ts';
+import { confirm, loginAs, logLine, postAddon, unique, chooseImportCategory } from './helpers.ts';
 
 // An admin: reviews imports and reports, and can undo anything from the log.
 
@@ -60,6 +60,7 @@ test('an import is approved as it is, another with changes, and one is rejected 
 	// As it is.
 	const first = page.locator('[data-entry]').first();
 	const firstName = await first.getByLabel('Name').inputValue();
+	await chooseImportCategory(first);
 	await first.getByRole('button', { name: /^(Approve$|Add link to )/ }).first().click();
 	await expect.poll(() => waiting(page)).toBe(before - 1);
 
