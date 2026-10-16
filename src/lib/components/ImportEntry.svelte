@@ -17,11 +17,12 @@
 		notes: ReviewNote[];
 		// A live addon this entry probably belongs to.
 		match?: Addon;
+		forkMatch?: Addon;
 		onselect: () => void;
 		// Runs an action for the page, which shows what it returns, or why it failed.
 		run: (action: () => Promise<string>) => Promise<void>;
 	};
-	let { item, index, selected, verdict, advice, notes, match, onselect, run }: Props = $props();
+	let { item, index, selected, verdict, advice, notes, match, forkMatch, onselect, run }: Props = $props();
 
 	// What approving publishes when nothing is touched, the same as the database would.
 	const original = $derived({
@@ -36,8 +37,9 @@
 	let edits = $state<Partial<Draft>>({});
 	const draft = $derived({ ...original, ...edits });
 	const nameMatch = $derived(store.addons.find((a) => plainName(a.name) === plainName(draft.name)));
-	const addedPictures = $derived(nameMatch ? Math.max(0, new Set([...nameMatch.images, ...draft.images]).size - nameMatch.images.length) : 0);
-	const pictureSlots = $derived(nameMatch ? Math.max(0, MAX_IMAGES - nameMatch.images.length) : 0);
+	const destination = $derived(nameMatch ?? forkMatch);
+	const addedPictures = $derived(destination ? Math.max(0, new Set([...destination.images, ...draft.images]).size - destination.images.length) : 0);
+	const pictureSlots = $derived(destination ? Math.max(0, MAX_IMAGES - destination.images.length) : 0);
 	const edited = $derived(Object.keys(edits).length > 0);
 	let saving = $state(false);
 
@@ -56,9 +58,10 @@
 
 	// An untouched entry is published by the database in one step and leaves the list at
 	// once. An edited one is posted the way the submit form does, then marked as imported.
-	const publish = (into?: Addon) =>
+	const publish = (into?: Addon | null) =>
 		run(async () => {
-			if (edited || nameMatch) {
+			into = into === undefined ? destination : into;
+			if (edited || destination) {
 				saving = true;
 				try {
 					await publishEdited(
@@ -71,7 +74,7 @@
 							versions: [{ url: item.url, note: '' }],
 							images: draft.images
 						},
-						into
+						into ?? undefined
 					);
 				} finally {
 					saving = false;
@@ -178,7 +181,7 @@
 	<footer class="-mx-1.5 mt-2 -mb-1.5 border-t border-border bg-black/30 px-3 py-1.5">
 		<div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
 			<span class={['font-bold', verdict === 'fine' ? 'text-fg' : verdict === 'problem' ? 'text-danger' : 'text-accent']}>{advice}</span>
-			{#if nameMatch}<span class="text-muted">{pictureSlots ? `+${Math.min(addedPictures, pictureSlots)} pictures` : 'Gallery full'}</span>{/if}
+			{#if destination}<span class="text-muted">{pictureSlots ? `+${Math.min(addedPictures, pictureSlots)} pictures` : 'Gallery full'}</span>{/if}
 		</div>
 		<dl class="mt-1 grid grid-cols-2 gap-x-5 gap-y-0.5 text-sm sm:flex sm:flex-wrap sm:gap-x-5">
 			{#each notes as note (note.label)}
@@ -190,12 +193,15 @@
 		</dl>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
 			<button data-act="approve" class="btn btn-primary py-1" disabled={saving} onclick={() => publish()}>
-				{saving ? 'Publishing…' : nameMatch ? 'Add link to ' + nameMatch.name : 'Approve'}
+				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>
-			{#if match && !nameMatch}
+			{#if match && !destination}
 				<button data-act="version" class="btn py-1" disabled={saving} onclick={() => publish(match)}>
 					Add link to {match.name}
 				</button>
+			{/if}
+			{#if forkMatch && !nameMatch}
+				<button class="btn py-1" disabled={saving} onclick={() => publish(null)}>Approve separately</button>
 			{/if}
 			<button data-act="reject" class="btn btn-danger py-1" disabled={saving} onclick={turnDown}>Reject</button>
 			{#if edited}
