@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {publishedForkParent,similarAddon} from '../../src/lib/import-review.ts';
+import {publishedForkParent,similarAddon,isWikiPage} from '../../src/lib/import-review.ts';
 const addon = (id,name,url) => ({id,name,versions:[{url}]});
+
+test('wiki review uses the actual wiki host and page path', () => {
+	for (const url of ['https://turtle-wow.fandom.com/wiki/Addon_BigWigs', 'https://www.turtle-wow.fandom.com/wiki/SuperMacro?x=1#download']) assert.equal(isWikiPage(url), true, url);
+	for (const url of ['https://github.com/a/addon/wiki/Install', 'https://turtle-wow.fandom.com.evil.test/wiki/Addon', 'https://evil.test/wiki/Addon?site=turtle-wow.fandom.com', 'https://turtle-wow.fandom.com/api.php', 'invalid']) assert.equal(isWikiPage(url), false, url);
+});
 test('fork grouping follows the published parent link regardless of name',()=>{
  const parent=addon(1,'Original UI','https://github.com/Owner/Original.git');
  assert.equal(publishedForkParent('github.com/owner/original',[parent]),parent);
