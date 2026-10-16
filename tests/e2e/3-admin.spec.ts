@@ -65,7 +65,7 @@ test('an import is approved as it is, another with changes, and one is rejected 
 
 	// With a new name and category, typed into the entry itself.
 	const second = page.locator('[data-entry]').first();
-	const renamed = unique('Renamed');
+	const renamed = unique('Renamed').replace(/\s+/g, '');
 	await second.getByLabel('Name').fill(renamed);
 	await second.getByLabel('Category').selectOption('PvP');
 	await expect(second.getByRole('button', { name: 'Undo my changes' })).toBeVisible();

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { NIGHTLY_TOKEN, addon, post } from '../helpers/db.mjs';
 import { createRulesContext } from '../helpers/rules-context.mjs';
@@ -10,6 +11,34 @@ beforeEach(async () => {
 afterEach(() => db.close());
 
 describe('import queue', () => {
+	test('the migration normalizes existing pending imports without renaming published addons', async () => {
+		await db.raw('drop trigger normalize_import_name on public.import_queue; drop function public.normalize_import_name();');
+		await db.queueImports([{name:'Better Character Panel', url:'https://github.com/a/BetterCharacterPanel', parent:'Parent Addon'}]);
+		const liveAddon = await post(db, alice, addon('Existing Title', 'https://github.com/a/ExistingTitle'));
+		await db.raw(readFileSync(new URL('../../supabase/migrations/20261016000004_import_names.sql', import.meta.url), 'utf8'));
+		assert.deepEqual(await db.sql('select name, parent from public.import_queue'), [{name:'BetterCharacterPanel', parent:'ParentAddon'}]);
+		assert.equal((await db.sql('select name from public.addons where id = $1', [liveAddon.id]))[0].name, 'Existing Title');
+	});
+
+	test('spaced wiki names and parent references are normalized before approval', async () => {
+		await db.queueImports([{
+			name: 'Better Character\u00a0Panel', url: 'https://github.com/a/BetterCharacterPanel',
+			description: 'Improves the character and inspect panel', category: 'UI & Appearance',
+			images: [], alts: [], parent: 'Parent Addon'
+		}]);
+		const [entry] = await db.sql('select id, name, parent from public.import_queue');
+		assert.equal(entry.name, 'BetterCharacterPanel');
+		assert.equal(entry.parent, 'ParentAddon');
+		await db.sql('update public.import_queue set name = $1 where id = $2', ['Better Character Panel', entry.id]);
+		assert.equal((await db.sql('select name from public.import_queue'))[0].name, 'BetterCharacterPanel');
+		await call(admin, 'select public.approve_imports($1)', [[entry.id]]);
+		assert.equal((await db.sql('select name from public.addons'))[0].name, 'BetterCharacterPanel');
+		await db.queueImports([{name:'Other Panel', url:'https://github.com/a/OtherPanel', description:'Another useful addon', category:'UI & Appearance'}]);
+		const [other] = await db.sql("select id from public.import_queue where status = 'pending'");
+		await call(admin, 'select public.publish_import($1, $2::jsonb)', [other.id, JSON.stringify({name:'Reviewed Panel', description:'Another useful addon', category:'UI & Appearance', images:[]})]);
+		assert.equal((await db.sql("select name from public.addons where name = 'ReviewedPanel'"))[0].name, 'ReviewedPanel');
+	});
+
 	const candidate = (name, url = `https://github.com/wiki/${name}`, extra = {}) => ({
 		name,
 		url,

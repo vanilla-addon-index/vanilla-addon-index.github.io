@@ -152,10 +152,11 @@ for (const group of [false,true]) {
    await expect(page.getByRole('heading',{level:1,name})).toBeVisible();
    await expect(page.getByText(`${name} was posted by a browser test.`,{exact:true})).toBeVisible();
   }else{
+   const importedName=version.replace(/\s+/g,'');
    await page.goto('/');
-   await page.getByLabel('Search addons').fill(version);
-   await page.getByRole('link',{name:version,exact:true}).click();
-   await expect(page.getByRole('heading',{level:1,name:version})).toBeVisible();
+   await page.getByLabel('Search addons').fill(importedName);
+   await page.getByRole('link',{name:importedName,exact:true}).click();
+   await expect(page.getByRole('heading',{level:1,name:importedName})).toBeVisible();
   }
  });
 }
