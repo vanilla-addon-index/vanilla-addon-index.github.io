@@ -253,7 +253,14 @@ export function parseWiki(wikitext: string): Omit<WikiRead, 'revision'> {
 		}
 	}
 
-	return { candidates: [...byKey.values()], problems, fromTables, repeated };
+	// Classify the readable wiki title first, then normalize display names across
+	// bullets, tables, alternative versions and parent references alike.
+	const candidates = [...byKey.values()].map((entry) => ({
+		...entry,
+		name: entry.name.replace(/\s+/g, ''),
+		parent: entry.parent?.replace(/\s+/g, '') ?? null
+	}));
+	return { candidates, problems, fromTables, repeated };
 }
 
 export async function readWiki(observe?: (metrics: RequestMetrics) => void): Promise<WikiRead> {

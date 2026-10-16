@@ -100,7 +100,7 @@ describe('a bullet of the list', () => {
 
 	test('wiki markup is taken out of the name and the description', () => {
 		const entry = only("* [https://github.com/a/b '''Bold''' Name] : ''a'' <big>big</big> [[Some page|thing]]<br /> here");
-		assert.equal(entry.name, 'Bold Name');
+		assert.equal(entry.name, 'BoldName');
 		assert.equal(entry.description, 'a big thing here');
 	});
 
@@ -126,7 +126,7 @@ describe('a bullet of the list', () => {
 
 	test('"(obsolete)" marks the entry and comes off the name', () => {
 		const entry = only('* [https://github.com/a/b Old Thing (obsolete)] replaced long ago');
-		assert.equal(entry.name, 'Old Thing');
+		assert.equal(entry.name, 'OldThing');
 		assert.equal(entry.obsolete, true);
 		assert.equal(only('* [https://github.com/a/c Thing] is deprecated now').obsolete, true);
 		assert.equal(only('* [https://github.com/a/d Thing] works fine').obsolete, false);
@@ -156,6 +156,18 @@ describe('a bullet of the list', () => {
 });
 
 describe('versions and repeats', () => {
+	test('import names have no whitespace across bullets, tables, mirrors and parent references', () => {
+		const { candidates } = parseWiki(page({
+			list: '* [https://github.com/a/BetterCharacterPanel Better Character Panel] Improves the character and inspect panel [https://github.com/b/BetterCharacterPanel Alt]\n** [https://github.com/a/Child Child Addon] extension',
+			superwow: '|[https://github.com/a/Table Table\u00a0Addon]\n|A useful description',
+			classicapi: '|[https://github.com/a/Other Other Addon]\n|Another description'
+		}));
+		assert.deepEqual(candidates.map((c) => c.name), ['BetterCharacterPanel', 'ChildAddon', 'TableAddon', 'OtherAddon', 'BetterCharacterPanel']);
+		assert.equal(candidates[1].parent, 'BetterCharacterPanel');
+		assert.equal(candidates[0].category, 'UI & Appearance');
+		assert.equal(candidates[0].description, 'Improves the character and inspect panel');
+		assert.equal(candidates[0].url, 'https://github.com/a/BetterCharacterPanel');
+	});
 	test('a link marked alt becomes an entry of its own, as a version of the first', () => {
 		const { candidates } = read('* [https://github.com/a/Bagnon Bagnon] one big bag [https://github.com/b/Bagnon (alt)] [https://gitlab.com/c/bagnon (Alt 2)]');
 		assert.deepEqual(
@@ -333,6 +345,7 @@ describe('the whole page, as it was at revision 23801', () => {
 		for (const c of candidates) {
 			assert.match(c.url, /^https:\/\/\S+$/, c.name);
 			assert.notEqual(c.name, '', c.url);
+		assert.doesNotMatch(c.name, /\s/, c.url);
 			assert.ok(CATEGORIES.includes(c.category), c.name);
 			assert.ok(c.images.length <= 5, c.name);
 		}

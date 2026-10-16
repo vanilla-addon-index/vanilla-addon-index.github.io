@@ -338,10 +338,10 @@ describe('rolling an account back', () => {
 
 		const result = await rollback(owner, admin2);
 		assert.deepEqual(kinds(result), [
-			'requeue Wiki two',
+			'requeue Wikitwo',
 			'restore Three',
 			'revert One',
-			'unapprove Wiki one',
+			'unapprove Wikione',
 			'unban bob',
 			'ungroup One'
 		]);
