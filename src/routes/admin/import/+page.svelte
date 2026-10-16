@@ -9,6 +9,7 @@
 	import { linkAuthor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
+	import { suggestCategory } from '#lib/category-scoring.ts';
 
 	const FILTERS = {
 		all: 'All',
@@ -16,7 +17,8 @@
 		duplicate: 'Possible versions'
 	} as const;
 	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete' | 'problem';
-	// "incomplete" also includes duplicates and problems that would be published with a gap.
+	// Review buckets are exclusive: missing details and repository issues need review
+	// before an entry can be treated as fine or as a possible version.
 	// "rejected" is not a filter on the queue but a second list: what was turned down.
 	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
 
@@ -70,7 +72,7 @@
 	// The author is the one the link names, which is what approving publishes.
 	function gaps(item: QueueItem) {
 		const missing: string[] = [];
-		if (!(CATEGORIES as readonly string[]).includes(item.category)) missing.push('category');
+		if (!(CATEGORIES as readonly string[]).includes(item.category) || suggestCategory(item.name, item.description).confidence === 'Uncertain') missing.push('category');
 		if (!linkAuthor(item.url)) missing.push('author');
 		if (!item.description.trim()) missing.push('description');
 		if (!item.url.trim()) missing.push('link');
@@ -79,7 +81,10 @@
 
 	function review(item: QueueItem): Review {
 		const forkMatch = publishedForkParent(imports.stats[item.key]?.fork_of, store.addons);
-		return { ...judge(item), forkMatch, missing: liveByName.has(plain(item.name)) || forkMatch ? [] : gaps(item) };
+		const judged = judge(item);
+		const existing = liveByName.has(plain(item.name)) || forkMatch;
+		const missing = gaps(item).filter(field => !existing || field === 'category');
+		return { ...judged, forkMatch, missing, verdict: missing.length || judged.verdict === 'problem' ? 'incomplete' : judged.verdict };
 	}
 
 	function judge(item: QueueItem): Omit<Review, 'missing'> {
@@ -136,11 +141,11 @@
 		const haystack = `${item.name} ${item.description} ${item.url} ${item.category}`.toLowerCase();
 		return words.every((w) => haystack.includes(w));
 	};
-	const incomplete = $derived(reviewed.filter((r) => r.missing.length).length);
+	const incomplete = $derived(totals.incomplete?.length ?? 0);
 	const visible = $derived(
 		reviewed.filter(
-			({ item, verdict, missing }) =>
-				(view === 'all' || (view === 'incomplete' ? missing.length > 0 : verdict === view)) && matches(item)
+			({ item, verdict }) =>
+				(view === 'all' || verdict === view) && matches(item)
 		)
 	);
 	const visibleRejected = $derived(imports.rejected.filter(matches));
@@ -290,7 +295,7 @@
 						value === 'all' ? reviewed.length : (totals[value as Verdict]?.length ?? 0)
 					)}
 				{/each}
-				{@render choice('incomplete', 'Missing details', incomplete)}
+				{@render choice('incomplete', 'Needs review', incomplete)}
 				<h2 class="label mt-2 border-t border-border px-3 pt-3">Decided</h2>
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
 			</div>
