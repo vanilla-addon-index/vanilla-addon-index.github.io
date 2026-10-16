@@ -12,7 +12,7 @@
 		// Position in the list, for the keyboard shortcuts.
 		index: number;
 		selected: boolean;
-		verdict: 'fine' | 'duplicate' | 'problem' | 'incomplete';
+		verdict: 'fine' | 'duplicate' | 'problem' | 'incomplete' | 'wiki';
 		// The one-line suggestion, then what it is based on.
 		advice: string;
 		notes: ReviewNote[];

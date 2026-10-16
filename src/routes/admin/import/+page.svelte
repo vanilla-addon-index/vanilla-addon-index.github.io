@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { similarAddon, publishedForkParent, type ReviewNote } from '#lib/import-review.ts';
+	import { similarAddon, publishedForkParent, isWikiPage, type ReviewNote } from '#lib/import-review.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
@@ -14,7 +14,8 @@
 	const FILTERS = {
 		all: 'All',
 		fine: 'Looks fine',
-		duplicate: 'Possible versions'
+		duplicate: 'Possible versions',
+		wiki: 'Wiki pages'
 	} as const;
 	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete' | 'problem';
 	// Review buckets are exclusive: missing details and repository issues need review
@@ -84,6 +85,7 @@
 		const judged = judge(item);
 		const existing = liveByName.has(plain(item.name)) || forkMatch;
 		const missing = gaps(item).filter(field => !existing || field === 'category');
+		if (isWikiPage(item.url)) return { ...judged, forkMatch, missing, verdict: 'wiki' };
 		return { ...judged, forkMatch, missing, verdict: missing.length || judged.verdict === 'problem' ? 'incomplete' : judged.verdict };
 	}
 

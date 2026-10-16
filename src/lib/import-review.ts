@@ -1,5 +1,14 @@
 import { linkKey } from './links.ts';
 import type { Addon } from './types.ts';
+import { WIKI } from './wiki.ts';
+
+/** Internal wiki pages need manual source-link review, regardless of other matches. */
+export function isWikiPage(url: string): boolean {
+	try {
+		const page = new URL(url), wiki = new URL(WIKI);
+		return ['https:', 'http:'].includes(page.protocol) && page.hostname.replace(/^www\./, '') === wiki.hostname && page.pathname.startsWith('/wiki/');
+	} catch { return false; }
+}
 
 export interface ReviewNote {
 	href?: string;
