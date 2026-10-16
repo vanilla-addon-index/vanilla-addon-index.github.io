@@ -45,7 +45,7 @@ export const CATEGORIES = [
 	'Miscellaneous'
 ] as const;
 
-// What the wiki import falls back to when it cannot guess. Posters must pick one themselves.
+// Ranked fallback with no evidence. Uncertain imports leave their category blank for review.
 export const DEFAULT_CATEGORY = 'Miscellaneous';
 
 // The columns of an addon a visitor may read, granted by the database migrations.

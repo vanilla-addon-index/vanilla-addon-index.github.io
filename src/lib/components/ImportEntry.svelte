@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { suggestCategory } from '#lib/category-scoring.ts';
 	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
@@ -23,11 +24,12 @@
 		run: (action: () => Promise<string>) => Promise<void>;
 	};
 	let { item, index, selected, verdict, advice, notes, match, forkMatch, onselect, run }: Props = $props();
+	const categorySuggestion = $derived(suggestCategory(item.name, item.description));
 
 	// What approving publishes when nothing is touched, the same as the database would.
 	const original = $derived({
 		name: item.name.slice(0, 60),
-		category: item.category,
+		category: categorySuggestion.confidence === 'Uncertain' ? '' : item.category,
 		author: linkAuthor(item.url),
 		description: item.description,
 		images: item.images.slice(0, MAX_IMAGES)
@@ -41,6 +43,7 @@
 	const addedPictures = $derived(destination ? Math.max(0, new Set([...destination.images, ...draft.images]).size - destination.images.length) : 0);
 	const pictureSlots = $derived(destination ? Math.max(0, MAX_IMAGES - destination.images.length) : 0);
 	const edited = $derived(Object.keys(edits).length > 0);
+	const categoryChosen = $derived((CATEGORIES as readonly string[]).includes(draft.category));
 	let saving = $state(false);
 
 	const field = <K extends keyof Draft>(key: K) => ({
@@ -60,6 +63,7 @@
 	// once. An edited one is posted the way the submit form does, then marked as imported.
 	const publish = (into?: Addon | null) =>
 		run(async () => {
+			if (!categoryChosen) throw new Error('Choose a category before approving this import.');
 			into = into === undefined ? destination : into;
 			if (edited || destination) {
 				saving = true;
@@ -125,7 +129,8 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch} bind:value={category.value}>
+		<select class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch && !!original.category} bind:value={category.value}>
+			<option value="" disabled>Choose a category…</option>
 			{#each CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
 			{/each}
@@ -195,17 +200,27 @@
 				</div>
 			{/each}
 		</dl>
+		<details class="mt-1 text-sm text-muted">
+			<summary class="cursor-pointer hover:text-fg">Category suggestion: {categorySuggestion.category} · {categorySuggestion.confidence}</summary>
+			<p class="mt-1">A suggestion for review; your selected category is what gets published.</p>
+			{#each categorySuggestion.matches.slice(0, 3) as candidate (candidate.category)}
+				<p class="mt-1"><span class="text-fg">{candidate.category}:</span>
+					{candidate.evidence.map(e => `${e.source}: “${e.text}”`).join('; ')}
+				</p>
+			{:else}<p class="mt-1">No category evidence found in the name or description.</p>{/each}
+		</details>
+		{#if !categoryChosen}<p class="mt-1 text-sm text-accent">Choose a category to enable approval.</p>{/if}
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
-			<button data-act="approve" class="btn btn-primary py-1" disabled={saving} onclick={() => publish()}>
+			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || !categoryChosen} onclick={() => publish()}>
 				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>
 			{#if match && !destination}
-				<button data-act="version" class="btn py-1" disabled={saving} onclick={() => publish(match)}>
+				<button data-act="version" class="btn py-1" disabled={saving || !categoryChosen} onclick={() => publish(match)}>
 					Add link to {match.name}
 				</button>
 			{/if}
 			{#if forkMatch && !nameMatch}
-				<button class="btn py-1" disabled={saving} onclick={() => publish(null)}>Approve separately</button>
+				<button class="btn py-1" disabled={saving || !categoryChosen} onclick={() => publish(null)}>Approve separately</button>
 			{/if}
 			<button data-act="reject" class="btn btn-danger py-1" disabled={saving} onclick={turnDown}>Reject</button>
 			{#if edited}

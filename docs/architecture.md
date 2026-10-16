@@ -69,6 +69,12 @@ queue for admin review. It then checks every supported published and pending
 repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old, inactive and
 previously missing repositories keep the same daily coverage.
 
+Category suggestions use [weighted evidence and confidence](category-matching.md)
+from the addon name and description. Import review explains the leading matches.
+Uncertain imports have no selected category: an admin must choose one before
+approving, including when adding a version. Buttons and keyboard shortcuts enforce
+this; the database also rejects new published entries with an empty category.
+
 When a submitted link matches a pending import's normalized key, the database
 resolves that candidate as `submitted` and records its live addon and submitting
 account. It preserves the member's details and ownership. This is separate from

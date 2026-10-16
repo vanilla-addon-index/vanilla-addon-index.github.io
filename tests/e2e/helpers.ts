@@ -23,6 +23,12 @@ export async function confirm(page: Page, action: string) {
 /** A name no other test uses, so tests can run in any order against the shared database. */
 export const unique = (name: string) => `${name} ${Date.now().toString(36).slice(-5)}`;
 
+/** Uncertain import suggestions require an explicit review choice. */
+export async function chooseImportCategory(entry: Locator) {
+	const category = entry.getByLabel('Category', {exact:true});
+	if (await category.inputValue() === '') await category.selectOption('Combat');
+}
+
 /** Posts an addon through the submit form and lands on its page. Returns that page's address. */
 export async function postAddon(page: Page, name: string, extra: { category?: string; description?: string } = {}) {
 	await page.goto('/submit');

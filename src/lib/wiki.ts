@@ -1,13 +1,19 @@
 // Reads the addon list from the Turtle WoW wiki and turns each entry into a candidate
 // for the import queue. Run by the nightly job and the dry run in scripts/.
-import { CATEGORIES, DEFAULT_CATEGORY, MAX_IMAGES } from './config.ts';
+import { MAX_IMAGES } from './config.ts';
 import { uncamo } from './github.ts';
 import { linkKey } from './links.ts';
 import { request, type RequestMetrics } from './request.ts';
+import { suggestCategory } from './category-scoring.ts';
 
 export const WIKI = 'https://turtle-wow.fandom.com';
 export const WIKI_PAGE = 'Addons';
 export const WIKI_NAME = 'Turtle WoW Wiki';
+
+const importCategory = (name: string, description: string) => {
+	const suggestion = suggestCategory(name, description);
+	return suggestion.confidence === 'Uncertain' ? '' : suggestion.category;
+};
 
 export interface Candidate {
 	key: string;
@@ -35,49 +41,6 @@ export interface WikiRead {
 	// Links the wiki lists more than once.
 	repeated: number;
 }
-
-// First match wins, so the specific rules come before the broad ones: an addon for one
-// class is filed under Class even though it is also about combat. The rules are tried on
-// the name, the name with its joined-up words apart ("RaidSummon" is also "Raid Summon"),
-// and the description. tests/app/wiki.test.mjs pins what they make of the whole wiki page.
-const CATEGORY_RULES: [(typeof CATEGORIES)[number], RegExp][] = [
-	['Libraries', /\b[Ll]ib[A-Z]\w+/],
-	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
-	['Boss Mods', /\b(boss ?mods?|boss(es)?\b|bigwigs|dbm|deadly boss|encounters?\b|raid warnings?\b|loatheb|c'?thun|nefarian|four horsemen|4hm)/i],
-	// Character/inspect panels are interface addons even when they list gear or spells.
-	['UI & Appearance', /\b(character|inspect(?:ion)?)(?:\s+stats?)?\s+(panels?|panes?|windows?|screens?|frames?)\b/i],
-	['Unit Frames', /\b(unit ?frames?|unitframes|raid ?frames?|party ?frames?|target ?frames?|player ?frames?|focus ?frames?|pet ?frames?|name ?plates?|plates|portraits?|health ?bars?)\b/i],
-	// Dedicated macro utilities can mention icons, buttons or tooltips as their UI.
-	['Macros', /\b(macro(?:text)?[ -]+(helpers?|editors?|debug(?:gers?|ging)?|managers?|systems?|conditions?|functionality|icon|text|tooltips?)|(?:debug(?:ging)?|edit(?:ing)?|creat(?:e|ing))\s+(?:your\s+)?macros?)\b/i],
-	['Macros', /\btooltips? for (?:your )?macros?\b/i],
-	['Action Bars', /\b(action ?bars?|action ?buttons?|bar mod|bongos|keybind(s|ings?)?|bindings?|buttons?)\b/i],
-	['Bags & Inventory', /\b(bags?|inventory|bank|containers?|sort(s|ing)? (your )?items?|equipment|outfits?|outfitter|trinkets?|durability)\b/i],
-	['Auction & Economy', /\b(auctions?|auctioneer|auctionator|ah|vendors?|vending|merchants?|gold|money|cash|prices?|sell(s|er)?|buy(s|ing)?|market|mail(box|s)?)\b/i],
-	['Map & Minimap', /\b(mini-?maps?|world ?maps?|maps?|coordinates?|waypoints?|compass|flight|gather(er|ing)? nodes?)\b/i],
-	['Quests & Leveling', /\b(quests?|questing|questie|leveling|level(s|ed)? ?up|xp|exp|experience|reputation|guides?|attune(ment)?s?|achievements?)\b/i],
-	['Buffs & Debuffs', /\b(buffs?|debuffs?|auras?|dots?|hots?|crowd control|absor(b|ption)s?)\b/i],
-	['Chat & Social', /\b(chat|chan(nel)?s?|whispers?|messenger|guild|friends?|social|emotes?|invites?|ignore|anti-?spam|spammers|goldspam|lfm|lfg|bulletin|translat(e|ion|or)|rp|role-?play(ing)?)\b/i],
-	['Tooltip', /\b(game ?)?tool-?tips?\b/i],
-	['Professions', /\b(professions?|trade ?skills?|craft(s|ing)?|recipes?|fishing|herbs?|herbalism|minerals?|mining|enchanting|disenchant(s|ing)?|alchemy|cooking)\b/i],
-	['PvP', /\b(pvp|battlegrounds?|battlefield|bgs?|av|ab|wsg|alterac valley|arathi basin|warsong gulch|arena|honor|flags?|enemy players?)\b/i],
-	['Class', /\b(warriors?|paladins?|pally|hunters?|rogues?|priests?|shamans?|mages?|warlocks?|druids?|feral|totems?|pets?|stance|shapeshift(ed|ing)?|shift|talents?|brainwash(er|ing)?|poisons?|shards?|soulstones?|curses?|librams?|combo points?|feign)\b/i],
-	['Raid & Party', /\b(raids?|raider|party|loot(ing)?|rolls?|dkp|epgp|groups?|assignments?|ready check|heal(s|er|ers|ing)?|tanks?)\b/i],
-	['Combat', /\b(combat|damage|dps|threat|aggro|cast(s|ing)? ?bars?|cast(s|ing)?|spells?|swing ?timers?|cooldowns?|meter|crit|attack|interrupts?|procs?|rage|energy|mana|kills?|taunts?)\b/i],
-	// Late, so that an addon that only mentions macros is filed by what it is for.
-	['Macros', /\bmacros?\b/i],
-	['UI & Appearance', /\b(full (ui|interface)|ui (replacement|overhaul|compilation|pack)|replacement for the original|complete (vanilla )?ui|comprehensive ui|interface suite|collection of interface)\b/i],
-	['UI & Appearance', /\b(ui|skins?|themes?|textures?|diablo[ -]*(?:like[ -]*)?orbs?|decorative|decorations?)\b/i],
-	// ElvUI, pfUI, SpartanUI: a name that ends in a capital "UI".
-	['UI & Appearance', /[a-zI]UI\b/]
-];
-
-// "AdvancedTradeSkillWindow2" -> "Advanced Trade Skill Window 2"
-const apart = (name: string) => name.replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/[_-]+/g, ' ');
-
-const guessCategory = (name: string, description: string) => {
-	const text = `${name} ${apart(name)} ${description}`;
-	return CATEGORY_RULES.find(([, rule]) => rule.test(text))?.[0] ?? DEFAULT_CATEGORY;
-};
 
 const plain = (wikitext: string) =>
 	wikitext
@@ -158,7 +121,7 @@ function parseBullet(line: string): Parsed {
 			// proxy, which stops working; the address behind it does not.
 			images: httpsOnly(images.map(uncamo)).slice(0, MAX_IMAGES),
 			alts: httpsOnly(alts),
-			category: guessCategory(name, description),
+			category: importCategory(name, description),
 			obsolete,
 			parent: null,
 			group_key: null,
@@ -226,7 +189,7 @@ export function parseWiki(wikitext: string): Omit<WikiRead, 'revision'> {
 				description,
 				images: [],
 				alts: [],
-				category: guessCategory(name, description),
+				category: importCategory(name, description),
 				obsolete: false,
 				parent: null,
 				group_key: null

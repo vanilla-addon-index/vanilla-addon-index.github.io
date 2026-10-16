@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { CATEGORIES } from '../../src/lib/config.ts';
 import { parseWiki } from '../../src/lib/wiki.ts';
+import { suggestCategory } from '../../src/lib/category-scoring.ts';
 
 // What the saved page gives. See the last group of tests.
 const TOTALS = {
@@ -28,25 +29,25 @@ const TOTALS = {
 	foldersOfCollections: 5
 };
 const CATEGORY_TOTALS = {
-	'Action Bars': 62,
-	'Auction & Economy': 49,
-	'Bags & Inventory': 40,
-	'Boss Mods': 28,
-	'Buffs & Debuffs': 55,
-	'Chat & Social': 103,
-	Class: 87,
-	Combat: 94,
-	'UI & Appearance': 44,
-	Libraries: 7,
-	Macros: 11,
-	'Map & Minimap': 32,
-	Professions: 24,
-	PvP: 23, // Avbars mentions AV and AB in its description.
-	'Quests & Leveling': 73,
-	'Raid & Party': 88,
-	Tooltip: 20,
-	'Unit Frames': 55,
-	Miscellaneous: 187
+	"Action Bars": 24,
+	"Auction & Economy": 30,
+	"Bags & Inventory": 14,
+	"Boss Mods": 17,
+	"Buffs & Debuffs": 31,
+	"Chat & Social": 47,
+	"Class": 63,
+	"Combat": 61,
+	"Libraries": 4,
+	"Macros": 11,
+	"Map & Minimap": 19,
+	"Professions": 18,
+	"PvP": 11,
+	"Quests & Leveling": 43,
+	"Raid & Party": 67,
+	"Tooltip": 9,
+	"UI & Appearance": 32,
+	"Unit Frames": 52,
+	"Miscellaneous": 0
 };
 
 // The page is found by its headings; everything between them is the test's own.
@@ -79,7 +80,7 @@ describe('a bullet of the list', () => {
 			description: 'View maps of dungeons and raids',
 			images: [],
 			alts: [],
-			category: 'Map & Minimap',
+			category: '',
 			obsolete: false,
 			parent: null,
 			group_key: null
@@ -174,9 +175,9 @@ describe('versions and repeats', () => {
 		assert.deepEqual(
 			candidates.map((c) => [c.key, c.name, c.description, c.category, c.group_key]),
 			[
-				['github.com/a/bagnon', 'Bagnon', 'one big bag', 'Bags & Inventory', null],
-				['github.com/b/bagnon', 'Bagnon', '', 'Bags & Inventory', 'github.com/a/bagnon'],
-				['gitlab.com/c/bagnon', 'Bagnon', '', 'Bags & Inventory', 'github.com/a/bagnon']
+				['github.com/a/bagnon', 'Bagnon', 'one big bag', '', null],
+				['github.com/b/bagnon', 'Bagnon', '', '', 'github.com/a/bagnon'],
+				['gitlab.com/c/bagnon', 'Bagnon', '', '', 'github.com/a/bagnon']
 			]
 		);
 		assert.deepEqual(candidates[0].alts, ['https://github.com/b/Bagnon', 'https://gitlab.com/c/bagnon']);
@@ -225,7 +226,7 @@ test('a page that has lost one of its headings is refused, not half read', () =>
 });
 
 describe('the category is guessed from the name and the description', () => {
-	const guess = (name, description = '') => only(`* [https://github.com/a/${name.replace(/\W/g, '')} ${name}] ${description}`).category;
+	const guess = (name, description = '') => suggestCategory(name, description).category;
 
 	test('one addon for each category', () => {
 		const cases = [
@@ -302,7 +303,7 @@ describe('the category is guessed from the name and the description', () => {
 			['MacroDebug', 'A macro debugger'],
 			['UltimaMacros', 'A lightweight, self-contained macro system']
 		]) assert.equal(guess(name, description), 'Macros', name);
-		assert.equal(guess('TotemBar', 'Shaman totem bar usable from a single macro or keybind'), 'Action Bars');
+		assert.equal(guess('TotemBar', 'Shaman totem bar usable from a single macro or keybind'), 'Class');
 		assert.equal(guess('LibramSwap', 'Adds automatic smart libram swapping for paladins - no macros required.'), 'Class');
 		assert.equal(guess('Flyout', 'Using a macro creates a flyout action button for spells'), 'Action Bars');
 	});
@@ -364,14 +365,15 @@ describe('the whole page, as it was at revision 23801', () => {
 			assert.match(c.url, /^https:\/\/\S+$/, c.name);
 			assert.notEqual(c.name, '', c.url);
 		assert.doesNotMatch(c.name, /\s/, c.url);
-			assert.ok(CATEGORIES.includes(c.category), c.name);
+			assert.ok(c.category === '' || CATEGORIES.includes(c.category), c.name);
 			assert.ok(c.images.length <= 5, c.name);
 		}
 	});
 
-	test('guesses a category for most of them', () => {
-		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, 'PvP');
+	test('only confident suggestions preselect a category; uncertain entries need a manual choice', () => {
+		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, '');
 		const per = Object.fromEntries(CATEGORIES.map((category) => [category, count((c) => c.category === category)]));
 		assert.deepEqual(per, CATEGORY_TOTALS);
+		assert.equal(count(c => c.category === ''), 529);
 	});
 });
