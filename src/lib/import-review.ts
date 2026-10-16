@@ -2,6 +2,7 @@ import { linkKey } from './links.ts';
 import type { Addon } from './types.ts';
 
 export interface ReviewNote {
+	href?: string;
 	label: string;
 	value: string;
 	tone?: 'warning' | 'danger';
