@@ -192,7 +192,11 @@
 			{#each notes as note (note.label)}
 				<div class="flex min-w-0 gap-1.5">
 					<dt class="shrink-0 text-muted">{note.label}</dt>
-					<dd class={['break-words [overflow-wrap:anywhere]', note.tone === 'danger' ? 'text-danger' : note.tone === 'warning' ? 'text-accent' : 'text-fg']}>{note.value}</dd>
+					<dd class={['break-words [overflow-wrap:anywhere]', note.tone === 'danger' ? 'text-danger' : note.tone === 'warning' ? 'text-accent' : 'text-fg']}>
+						{#if note.href}
+							<a href={note.href} target="_blank" rel="noopener noreferrer" class="underline decoration-current/50 underline-offset-2 hover:decoration-current">{note.value}</a>
+						{:else}{note.value}{/if}
+					</dd>
 				</div>
 			{/each}
 		</dl>
