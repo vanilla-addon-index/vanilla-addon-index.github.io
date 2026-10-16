@@ -44,6 +44,22 @@
 	const pictureSlots = $derived(destination ? Math.max(0, MAX_IMAGES - destination.images.length) : 0);
 	const edited = $derived(Object.keys(edits).length > 0);
 	const categoryChosen = $derived((CATEGORIES as readonly string[]).includes(draft.category));
+	const statusLabels = new Set(['Missing', 'Queue', 'Publish failed']);
+	const facts = $derived(notes.filter(note => !statusLabels.has(note.label)));
+	const statusMessages = $derived.by(() => {
+		const messages: string[] = [];
+		// Relationships are already shown with the facts and approval actions.
+		if (!['Ready', 'Incomplete', 'Add to existing page', 'Fork · existing page', 'Similar name · check match', 'Possible version'].includes(advice)) messages.push(advice);
+		if (!categoryChosen) messages.push('Choose a category');
+		for (const note of notes.filter(note => statusLabels.has(note.label))) {
+			const value = note.label === 'Missing' ? note.value.split(', ').filter(value =>
+				value === 'description' ? !draft.description.trim() : value === 'author' ? !draft.author.trim() : value !== 'category'
+			).join(', ') : note.value;
+			if (value) messages.push(note.label === 'Queue' ? value : `${note.label}: ${value}`);
+		}
+		if (destination && addedPictures > 0) messages.push(pictureSlots ? `+${Math.min(addedPictures, pictureSlots)} pictures` : 'Gallery full');
+		return messages.filter(Boolean);
+	});
 	let saving = $state(false);
 
 	const field = <K extends keyof Draft>(key: K) => ({
@@ -184,15 +200,18 @@
 	<!-- Set apart from the fields above: this part is the site's reading of the entry, not
 	     something that gets published. -->
 	<footer class="-mx-1.5 mt-2 -mb-1.5 border-t border-border bg-black/30 px-3 py-1.5">
-		<div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-			<span class={['font-bold', verdict === 'fine' ? 'text-fg' : verdict === 'problem' ? 'text-danger' : 'text-accent']}>{advice}</span>
-			{#if destination}<span class="text-muted">{pictureSlots ? `+${Math.min(addedPictures, pictureSlots)} pictures` : 'Gallery full'}</span>{/if}
-		</div>
+		{#if statusMessages.length}
+			<div role="note" aria-label="Import status" class="mb-2 border-l-2 border-border bg-raised/50 px-2 py-1 text-sm text-muted">
+				{#each statusMessages as message, index}
+					{#if index}<span class="px-2" aria-hidden="true">·</span>{/if}<span>{message}</span>
+				{/each}
+			</div>
+		{/if}
 		<dl class="mt-1 grid grid-cols-2 gap-x-5 gap-y-0.5 text-sm sm:flex sm:flex-wrap sm:gap-x-5">
-			{#each notes as note (note.label)}
+			{#each facts as note (note.label)}
 				<div class="flex min-w-0 gap-1.5">
 					<dt class="shrink-0 text-muted">{note.label}</dt>
-					<dd class={['break-words [overflow-wrap:anywhere]', note.tone === 'danger' ? 'text-danger' : note.tone === 'warning' ? 'text-accent' : 'text-fg']}>
+					<dd class="break-words text-fg [overflow-wrap:anywhere]">
 						{#if note.href}
 							<a href={note.href} target="_blank" rel="noopener noreferrer" class="underline decoration-current/50 underline-offset-2 hover:decoration-current">{note.value}</a>
 						{:else}{note.value}{/if}
@@ -200,16 +219,6 @@
 				</div>
 			{/each}
 		</dl>
-		<details class="mt-1 text-sm text-muted">
-			<summary class="cursor-pointer hover:text-fg">Category suggestion: {categorySuggestion.category} · {categorySuggestion.confidence}</summary>
-			<p class="mt-1">A suggestion for review; your selected category is what gets published.</p>
-			{#each categorySuggestion.matches.slice(0, 3) as candidate (candidate.category)}
-				<p class="mt-1"><span class="text-fg">{candidate.category}:</span>
-					{candidate.evidence.map(e => `${e.source}: “${e.text}”`).join('; ')}
-				</p>
-			{:else}<p class="mt-1">No category evidence found in the name or description.</p>{/each}
-		</details>
-		{#if !categoryChosen}<p class="mt-1 text-sm text-accent">Choose a category to enable approval.</p>{/if}
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
 			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || !categoryChosen} onclick={() => publish()}>
 				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}

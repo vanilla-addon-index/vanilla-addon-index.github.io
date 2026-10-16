@@ -6,7 +6,7 @@ Strong match requires at least 10 points (or explicit purpose evidence) and a le
 
 Uncertain imports have a blank category, including no-evidence entries whose explanation falls back to Miscellaneous. No approval or version-add action is enabled until an admin explicitly picks a valid category. Keyboard approval is guarded too. Miscellaneous remains available as a deliberate choice. The existing published category constraint rejects a new page with no category. Admin selections remain authoritative; no score auto-approves an entry.
 
-Import review recomputes explanations using current rules, independently of the selected category. Alternative wiki links may inherit a category without their own descriptive evidence; an uncertain review still requires an explicit choice. Deploy refresh writes current guesses, including blanks, into pending queue entries; published categories are not rewritten.
+Import review evaluates confidence using current rules, independently of the selected category. Evidence remains available in the scoring module for diagnostics; the review UI omits explanations and only shows actionable status messages. Alternative wiki links may inherit a category without their own descriptive evidence; an uncertain review still requires an explicit choice. Deploy refresh writes current guesses, including blanks, into pending queue entries; published categories are not rewritten.
 
 ## Saved wiki comparison
 
