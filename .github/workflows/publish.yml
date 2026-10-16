@@ -6,6 +6,10 @@ name: Publish site
 on:
   workflow_call:
     inputs:
+      refresh-imports:
+        description: Refresh wiki import candidates without fetching repository facts.
+        type: boolean
+        default: false
       prepared:
         description: The calling workflow has successfully validated this commit and applied its migrations.
         type: boolean
@@ -18,6 +22,46 @@ jobs:
       contents: read
     uses: ./.github/workflows/prepare.yml
     secrets: inherit
+
+  refresh-imports:
+    name: Refresh import candidates
+    needs: prepare
+    if: ${{ !cancelled() && inputs.refresh-imports && github.ref == 'refs/heads/main' && (needs.prepare.result == 'success' || (inputs.prepared && needs.prepare.result == 'skipped')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: database
+    # Import outages must not prevent publication or discard other completed work.
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Check that import rules are still current
+        id: current
+        run: |
+          head=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Skipped import refresh because main has newer rules."
+            echo "Import refresh skipped: main has newer rules." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Refresh the import queue
+        id: imports
+        if: steps.current.outputs.current == 'true'
+        continue-on-error: true
+        env:
+          NIGHTLY_TOKEN: ${{ secrets.NIGHTLY_TOKEN }}
+        run: node scripts/refresh-imports.mjs
+      - name: Report import refresh failure
+        if: ${{ !cancelled() && (steps.imports.outcome == 'failure' || steps.current.outcome == 'failure') }}
+        run: |
+          echo "::warning::Import refresh failed. Publication continues; retry Deploy or let Nightly refresh the queue."
+          echo "## Import refresh failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Publication continues. Retry Deploy or let Nightly refresh the queue." >> "$GITHUB_STEP_SUMMARY"
 
   build:
     # Builds the site. This is the one job that installs the site's dependencies and runs

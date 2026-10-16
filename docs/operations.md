@@ -7,7 +7,7 @@
 | Workflow | When | Responsibility |
 |---|---|---|
 | [CI](../.github/workflows/ci.yml) | Every PR | Tests, type checks, build and browser tests against a local backend |
-| [Deploy](../.github/workflows/deploy.yml) | `main` changes or manual runs | Prepare and publish the application |
+| [Deploy](../.github/workflows/deploy.yml) | `main` changes or manual runs | Prepare, refresh import candidates and publish the application |
 | [Nightly](../.github/workflows/nightly.yml) | Daily or manual runs | Wiki import, full repository checks, admin notifications and publication |
 | [Refresh](../.github/workflows/refresh.yml) | Hourly or manual runs | Compare public output and publish changes |
 | [Backup](../.github/workflows/backup.yml) | Daily or manual runs | Encrypt, verify and retain database backups |
@@ -49,6 +49,14 @@ save an artifact from an earlier attempt. Clearing the validation cache forces
 fresh validation if needed.
 
 ## Nightly diagnostics
+
+Deploy also refreshes the wiki import queue after successful preparation, using
+the current parser rules without repository or screenshot requests. Existing
+repository facts and screenshots are retained. This runs alongside publication;
+a refresh failure reports a workflow warning and summary without blocking the
+site. Retry Deploy or wait for Nightly to retry. Superseded Deploy runs skip this
+refresh so older parser rules cannot overwrite newer guesses. Nightly retains
+its full daily checks; the hourly Refresh does not reparse the wiki.
 
 The Actions log and job summary report phase timings, HTTP attempts, retries,
 rate limits, cache hits and incomplete checks. Timings can overlap and are not
