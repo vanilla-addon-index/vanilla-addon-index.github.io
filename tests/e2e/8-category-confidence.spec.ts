@@ -1,11 +1,11 @@
 import {expect, test} from './test.ts';
 import {loginAs} from './helpers.ts';
 
-test('old imports stay quiet, omit the obsolete filter and preserve admin category choices', async ({page}) => {
+test('old archived imports stay quiet, omit the obsolete filter and preserve admin category choices', async ({page}) => {
 	await loginAs(page, 'admin');
 	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[{
 		key:'github.com/a/chatmonitor', pushed_at:'2010-01-01T00:00:00Z', stars:1,
-		missing:false, archived:false, interface:11200, fork_of:null, canonical:null
+		missing:false, archived:true, interface:11200, fork_of:null, canonical:null
 	}]}));
 	await page.route('**/rest/v1/import_queue?*', async route => {
 		if (route.request().method() !== 'GET') return route.continue();
@@ -21,6 +21,8 @@ test('old imports stay quiet, omit the obsolete filter and preserve admin catego
 	await expect(entry.getByText(/Category suggestion:/)).toHaveCount(0);
 	await expect(entry.getByText('Ready', {exact:true})).toHaveCount(0);
 	await expect(entry.getByRole('note', {name:'Import status'})).toHaveCount(0);
+	await page.getByRole('button', {name:/^Looks fine/}).click();
+	await expect(entry).toHaveCount(1);
 	await entry.getByLabel('Category', {exact:true}).selectOption('Miscellaneous');
 	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Miscellaneous');
 	await expect(entry.getByRole('button', {name:'Undo my changes'})).toBeVisible();
