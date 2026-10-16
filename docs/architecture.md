@@ -102,6 +102,7 @@ reference. Rename-matching facts and commit-date records are retained.
 See [operations](operations.md) for deployment guards, diagnostics and recovery.
 
 OctoWoW checks use its public Gitea API under `/git/api/v1`, one repository at a
-time. Its DDoS protection can return an HTML challenge instead of API data; these
+time, using Node's default User-Agent because the site's protection challenges
+the custom `vanilla-addon-index` agent. Its DDoS protection can still return an HTML challenge instead of API data; these
 responses count as unavailable checks and previously known data is kept. Access
 from a local machine does not establish access from GitHub Actions.

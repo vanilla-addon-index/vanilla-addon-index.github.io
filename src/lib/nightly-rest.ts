@@ -81,7 +81,10 @@ export function createForgeRequests({
 			return await request(url, {
 				observe: observe(url), timeoutMs: 15_000, accept: [404, 304],
 				init: { headers: {
-					'User-Agent': 'vanilla-addon-index', Accept: as === 'json' ? 'application/json' : 'text/plain',
+					// OctoWoW challenges this custom agent even for public API requests.
+					// Keep the runtime's default agent for all its metadata and file requests.
+					...(new URL(url).hostname === 'octowow.st' ? {} : { 'User-Agent': 'vanilla-addon-index' }),
+					Accept: as === 'json' ? 'application/json' : 'text/plain',
 					...(before?.etag ? { 'If-None-Match': before.etag } : before?.lastModified ? { 'If-Modified-Since': before.lastModified } : {})
 				} },
 				read: async (response) => {
