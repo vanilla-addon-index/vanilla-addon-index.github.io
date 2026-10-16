@@ -30,22 +30,22 @@ const TOTALS = {
 const CATEGORY_TOTALS = {
 	'Action Bars': 72,
 	'Auction & Economy': 49,
-	'Bags & Inventory': 41,
+	'Bags & Inventory': 40,
 	'Boss Mods': 28,
 	'Buffs & Debuffs': 55,
 	'Chat & Social': 103,
 	Class: 87,
-	Combat: 96,
-	'UI & Appearance': 38,
+	Combat: 94,
+	'UI & Appearance': 44,
 	Libraries: 7,
 	'Map & Minimap': 32,
 	Professions: 24,
 	PvP: 23, // Avbars mentions AV and AB in its description.
 	'Quests & Leveling': 73,
-	'Raid & Party': 89,
+	'Raid & Party': 88,
 	Tooltip: 21,
 	'Unit Frames': 55,
-	Miscellaneous: 189
+	Miscellaneous: 187
 };
 
 // The page is found by its headings; everything between them is the test's own.
@@ -256,6 +256,19 @@ describe('the category is guessed from the name and the description', () => {
 		assert.equal(guess('AdvancedTradeSkillWindow2', 'Improved window'), 'Professions');
 		assert.equal(guess('RaidSummon', 'small frame'), 'Raid & Party');
 		assert.equal(guess('TurtlePvp', 'Broadcasts your location'), 'PvP');
+	});
+
+	test('character and inspect panels are UI addons even when they describe equipment or spells', () => {
+		for (const [name, description] of [
+			['Better Character Panel', 'Improves the default character and inspect panel by adding enchants effects and more! Made for TWoW'],
+			['BetterCharacterPanel', 'Improved equipment and spell statistics'],
+			['BetterCharacterStats', 'Backports the TBC character stats panel, collecting primary and secondary stats like spellpower, hit, crit'],
+			['InspectPlus', 'Overhauls the inspection pane for raid gear checks'],
+			['PaperDoll', 'Improves the character window'],
+			['InspectFrame', 'Adds equipment statistics']
+		]) assert.equal(guess(name, description), 'UI & Appearance', name);
+		assert.equal(guess('GearCheck', 'Inspect equipment for raids'), 'Bags & Inventory');
+		assert.equal(guess('PanelHelper', 'Improves a panel'), 'Miscellaneous');
 	});
 
 	test('plurals count too', () => {

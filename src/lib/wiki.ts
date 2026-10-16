@@ -44,6 +44,8 @@ const CATEGORY_RULES: [(typeof CATEGORIES)[number], RegExp][] = [
 	['Libraries', /\b[Ll]ib[A-Z]\w+/],
 	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
 	['Boss Mods', /\b(boss ?mods?|boss(es)?\b|bigwigs|dbm|deadly boss|encounters?\b|raid warnings?\b|loatheb|c'?thun|nefarian|four horsemen|4hm)/i],
+	// Character/inspect panels are interface addons even when they list gear or spells.
+	['UI & Appearance', /\b(character|inspect(?:ion)?)(?:\s+stats?)?\s+(panels?|panes?|windows?|screens?|frames?)\b/i],
 	['Unit Frames', /\b(unit ?frames?|unitframes|raid ?frames?|party ?frames?|target ?frames?|player ?frames?|focus ?frames?|pet ?frames?|name ?plates?|plates|portraits?|health ?bars?)\b/i],
 	['Action Bars', /\b(action ?bars?|action ?buttons?|bar mod|bongos|keybind(s|ings?)?|bindings?|buttons?)\b/i],
 	['Bags & Inventory', /\b(bags?|inventory|bank|containers?|sort(s|ing)? (your )?items?|equipment|outfits?|outfitter|trinkets?|durability)\b/i],
