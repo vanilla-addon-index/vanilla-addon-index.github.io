@@ -29,24 +29,24 @@ const TOTALS = {
 	foldersOfCollections: 5
 };
 const CATEGORY_TOTALS = {
-	"Action Bars": 24,
-	"Auction & Economy": 30,
-	"Bags & Inventory": 14,
-	"Boss Mods": 17,
-	"Buffs & Debuffs": 31,
-	"Chat & Social": 47,
-	"Class": 63,
-	"Combat": 61,
+	"Action Bars": 25,
+	"Auction & Economy": 41,
+	"Bags & Inventory": 30,
+	"Boss Mods": 19,
+	"Buffs & Debuffs": 45,
+	"Chat & Social": 81,
+	"Class": 92,
+	"Combat": 109,
 	"Libraries": 4,
-	"Macros": 11,
-	"Map & Minimap": 19,
-	"Professions": 18,
-	"PvP": 11,
-	"Quests & Leveling": 43,
-	"Raid & Party": 67,
-	"Tooltip": 9,
-	"UI & Appearance": 32,
-	"Unit Frames": 52,
+	"Macros": 12,
+	"Map & Minimap": 30,
+	"Professions": 26,
+	"PvP": 23,
+	"Quests & Leveling": 60,
+	"Raid & Party": 96,
+	"Tooltip": 17,
+	"UI & Appearance": 45,
+	"Unit Frames": 49,
 	"Miscellaneous": 0
 };
 
@@ -175,9 +175,9 @@ describe('versions and repeats', () => {
 		assert.deepEqual(
 			candidates.map((c) => [c.key, c.name, c.description, c.category, c.group_key]),
 			[
-				['github.com/a/bagnon', 'Bagnon', 'one big bag', '', null],
-				['github.com/b/bagnon', 'Bagnon', '', '', 'github.com/a/bagnon'],
-				['gitlab.com/c/bagnon', 'Bagnon', '', '', 'github.com/a/bagnon']
+				['github.com/a/bagnon', 'Bagnon', 'one big bag', 'Bags & Inventory', null],
+				['github.com/b/bagnon', 'Bagnon', '', 'Bags & Inventory', 'github.com/a/bagnon'],
+				['gitlab.com/c/bagnon', 'Bagnon', '', 'Bags & Inventory', 'github.com/a/bagnon']
 			]
 		);
 		assert.deepEqual(candidates[0].alts, ['https://github.com/b/Bagnon', 'https://gitlab.com/c/bagnon']);
@@ -316,8 +316,8 @@ describe('the category is guessed from the name and the description', () => {
 		}
 	});
 
-	test('an addon for one class is filed under that class, whatever else it is about', () => {
-		assert.equal(guess('SP_SwingTimer', 'Warrior Swing Timer'), 'Class');
+	test('class descriptions are considered alongside higher-priority name clues', () => {
+		assert.equal(guess('SP_SwingTimer', 'Warrior Swing Timer'), 'Combat');
 		assert.equal(guess('AutoLock', 'Priority-based spell rotation addon for Warlocks.'), 'Class');
 		assert.equal(guess('LibramSwap', 'Adds automatic smart libram swapping for paladins - no macros required.'), 'Class');
 	});
@@ -371,9 +371,9 @@ describe('the whole page, as it was at revision 23801', () => {
 	});
 
 	test('only confident suggestions preselect a category; uncertain entries need a manual choice', () => {
-		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, '');
+		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, 'PvP');
 		const per = Object.fromEntries(CATEGORIES.map((category) => [category, count((c) => c.category === category)]));
 		assert.deepEqual(per, CATEGORY_TOTALS);
-		assert.equal(count(c => c.category === ''), 529);
+		assert.equal(count(c => c.category === ''), 278);
 	});
 });

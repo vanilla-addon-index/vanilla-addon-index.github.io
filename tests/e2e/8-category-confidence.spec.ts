@@ -7,7 +7,7 @@ test('repository evidence corrects an existing guess and approval sends the disp
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
-		await route.fulfill({response, json:[{...rows[0], name:'ChatThing', key:'github.com/a/chatthing', url:'https://github.com/a/ChatThing', category:'Chat & Social', description:'', category_context:{repository:'A damage meter for your party.'}}]});
+		await route.fulfill({response, json:[{...rows[0], name:'MysteryThing', key:'github.com/a/chatthing', url:'https://github.com/a/ChatThing', category:'Chat & Social', description:'', category_context:{repository:'A damage meter for your party.'}}]});
 	});
 	await page.route('**/rest/v1/rpc/publish_import', route => route.fulfill({json:null}));
 	await page.goto('/admin/import');
