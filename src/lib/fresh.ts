@@ -1,6 +1,6 @@
 // What a visitor's list is made of: the snapshot the site was built with, and whatever
 // was posted or edited since, which the database is asked for. Kept apart from the rest
-// so that it can be tested without a browser; see tests/fresh.test.mjs.
+// so that it can be tested without a browser; see tests/app/fresh.test.mjs.
 
 type Stamped = { id: number; name: string; updated_at: string };
 

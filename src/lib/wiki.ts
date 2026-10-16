@@ -39,7 +39,7 @@ export interface WikiRead {
 // First match wins, so the specific rules come before the broad ones: an addon for one
 // class is filed under Class even though it is also about combat. The rules are tried on
 // the name, the name with its joined-up words apart ("RaidSummon" is also "Raid Summon"),
-// and the description. tests/wiki.test.mjs pins what they make of the whole wiki page.
+// and the description. tests/app/wiki.test.mjs pins what they make of the whole wiki page.
 const CATEGORY_RULES: [(typeof CATEGORIES)[number], RegExp][] = [
 	['Libraries', /\b[Ll]ib[A-Z]\w+/],
 	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
