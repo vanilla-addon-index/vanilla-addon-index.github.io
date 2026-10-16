@@ -60,9 +60,10 @@ const CATEGORY_RULES: [(typeof CATEGORIES)[number], RegExp][] = [
 	['Combat', /\b(combat|damage|dps|threat|aggro|cast(s|ing)? ?bars?|cast(s|ing)?|spells?|swing ?timers?|cooldowns?|meter|crit|attack|interrupts?|procs?|rage|energy|mana|kills?|taunts?)\b/i],
 	// Late, so that an addon that only mentions macros is filed by what it is for.
 	['Action Bars', /\bmacros?\b/i],
-	['Interface Suites', /\b(full (ui|interface)|ui (replacement|overhaul|compilation|pack)|replacement for the original|complete (vanilla )?ui|comprehensive ui|interface suite|collection of interface)\b/i],
+	['UI & Appearance', /\b(full (ui|interface)|ui (replacement|overhaul|compilation|pack)|replacement for the original|complete (vanilla )?ui|comprehensive ui|interface suite|collection of interface)\b/i],
+	['UI & Appearance', /\b(ui|skins?|themes?|textures?|diablo[ -]*(?:like[ -]*)?orbs?|decorative|decorations?)\b/i],
 	// ElvUI, pfUI, SpartanUI: a name that ends in a capital "UI".
-	['Interface Suites', /[a-zI]UI\b/]
+	['UI & Appearance', /[a-zI]UI\b/]
 ];
 
 // "AdvancedTradeSkillWindow2" -> "Advanced Trade Skill Window 2"

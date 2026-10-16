@@ -32,7 +32,6 @@ export const CATEGORIES = [
 	'Chat & Social',
 	'Class',
 	'Combat',
-	'Interface Suites',
 	'Libraries',
 	'Map & Minimap',
 	'Professions',
@@ -40,6 +39,7 @@ export const CATEGORIES = [
 	'Quests & Leveling',
 	'Raid & Party',
 	'Tooltip',
+	'UI & Appearance',
 	'Unit Frames',
 	'Miscellaneous'
 ] as const;
