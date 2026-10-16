@@ -15,7 +15,8 @@
 		all: 'All',
 		fine: 'Looks fine',
 		duplicate: 'Possible versions',
-		wiki: 'Wiki pages'
+		wiki: 'Wiki pages',
+		dead: 'Dead links'
 	} as const;
 	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete' | 'problem';
 	// Review buckets are exclusive: missing details and repository issues need review
@@ -86,6 +87,7 @@
 		const existing = liveByName.has(plain(item.name)) || forkMatch;
 		const missing = gaps(item).filter(field => !existing || field === 'category');
 		if (isWikiPage(item.url)) return { ...judged, forkMatch, missing, verdict: 'wiki' };
+		if (judged.verdict === 'dead') return { ...judged, forkMatch, missing };
 		return { ...judged, forkMatch, missing, verdict: missing.length || judged.verdict === 'problem' ? 'incomplete' : judged.verdict };
 	}
 
@@ -123,7 +125,7 @@
 		if (item.alts.length) notes.push({ label: 'Wiki versions', value: String(item.alts.length) });
 		if (item.problem) notes.push({ label: 'Publish failed', value: item.problem, tone: 'danger' });
 
-		if (stats?.missing) return { verdict: 'problem', advice: 'Dead link', notes, match };
+		if (stats?.missing) return { verdict: 'dead', advice: 'Dead link', notes, match };
 		if (renamedLive) return { verdict: 'duplicate', advice: `Already live · ${renamedLive.name}`, notes };
 		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
 		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };

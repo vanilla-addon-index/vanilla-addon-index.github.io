@@ -31,7 +31,7 @@ test('waiting filters partition every entry and review issues stay out of Looks 
 	const all = await entries.count();
 
 	const count = async (label: string) => Number((await page.getByRole('button', {name:new RegExp(`^${label}\\s+\\d+$`)}).innerText()).match(/\d+/)![0]);
-	expect(await count('Looks fine') + await count('Possible versions') + await count('Needs review') + await count('Wiki pages')).toBe(await count('All'));
+	expect(await count('Looks fine') + await count('Possible versions') + await count('Needs review') + await count('Wiki pages') + await count('Dead links')).toBe(await count('All'));
 	await page.getByRole('button', { name: /^Needs review/ }).click();
 	const incomplete = await entries.count();
 	expect(incomplete).toBeGreaterThan(0);

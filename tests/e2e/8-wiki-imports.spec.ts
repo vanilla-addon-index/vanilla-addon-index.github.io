@@ -13,7 +13,7 @@ test('wiki pages have an exclusive waiting filter even when matching a published
 	const entry = page.locator('[data-entry]');
 	await expect(entry).toHaveCount(1);
 	await expect(page.getByRole('button', {name:/^Wiki pages\s+1$/})).toBeVisible();
-	for (const label of ['Looks fine', 'Possible versions', 'Needs review']) {
+	for (const label of ['Looks fine', 'Possible versions', 'Needs review', 'Dead links']) {
 		await page.getByRole('button', {name:new RegExp(`^${label}\\s+0$`)}).click();
 		await expect(entry).toHaveCount(0);
 	}
