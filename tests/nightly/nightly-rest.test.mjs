@@ -9,6 +9,18 @@ const modified = 'Wed, 14 Oct 2026 12:00:00 GMT';
 const body = {id:1,full_name:'a/Addon',stars_count:3,archived:false,updated_at:'2026-10-14T12:00:00Z',default_branch:'main',parent:{full_name:'upstream/Addon'},private_unneeded_field:'omit-this'};
 const json = (value, headers = {}) => new Response(JSON.stringify(value),{headers:{'content-type':'application/json', ...headers}});
 
+test('OctoWoW metadata, history and files avoid the custom agent that triggers its HTML challenge', async () => {
+	globalThis.fetch = async (_, init) => init.headers['User-Agent']
+		? new Response('<html>Just a moment please...</html>', {headers:{'content-type':'text/html'}})
+		: init.headers.Accept === 'application/json' ? json(body)
+			: new Response('## Interface: 11200', {headers:{'content-type':'text/plain'}});
+	const session = createForgeRequests();
+	for (const path of ['api/v1/repos/Ade/AdeAlts', 'api/v1/repos/Ade/AdeAlts/commits?limit=1']) {
+		assert.equal((await session.ask(`https://octowow.st/git/${path}`, 'json')).status, 200);
+	}
+	assert.equal((await session.ask('https://octowow.st/git/api/v1/repos/Ade/AdeAlts/raw/AdeAlts.toc?ref=main', 'text')).body, '## Interface: 11200');
+});
+
 test('in-flight and completed endpoint reads share one request with isolated response objects', async () => {
 	let calls = 0;
 	let release;
