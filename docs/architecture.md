@@ -90,6 +90,12 @@ apply even when its revision has not changed.
 
 ## Private maintenance data
 
+`addon_favorites` stores private per-account addon bookmarks. Row-level policies
+allow only their owner to read, add or remove them; account or addon deletion
+removes associated bookmarks. Favorites are managed from addon pages and listed
+on the account page with current public code-update dates, newest first. They
+are excluded from the public snapshot.
+
 The import queue, review facts and repository caches do not enter the public
 snapshot. Successful checks save in independent checkpoints of at most 50
 records, so a failed save does not discard other completed result types.

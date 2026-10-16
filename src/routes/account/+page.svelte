@@ -7,6 +7,7 @@
 	import { ownedBy } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
+	import FavoritesList from '#lib/components/FavoritesList.svelte';
 	import { PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { supabase } from '#lib/supabase.ts';
@@ -115,6 +116,7 @@
 		</aside>
 
 		<section>
+			<FavoritesList />
 			<h2 class="label">Your addons</h2>
 			<div class="panel addon-list">
 				{#each mine as addon (addon.id)}
