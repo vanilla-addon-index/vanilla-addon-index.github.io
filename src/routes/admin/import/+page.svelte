@@ -125,7 +125,6 @@
 
 		if (stats?.missing) return { verdict: 'problem', advice: 'Dead link', notes, match };
 		if (renamedLive) return { verdict: 'duplicate', advice: `Already live · ${renamedLive.name}`, notes };
-		if (stats?.archived) return { verdict: 'problem', advice: 'Archived', notes, match };
 		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
 		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };
 		if (forkParent) return { verdict: 'fine', advice: 'Fork · existing page', notes, match: forkParent };
