@@ -1458,7 +1458,7 @@ describe('import queue', () => {
 			candidate('pfUI', 'https://github.com/brues-code/pfUI', {
 				description: 'UI',
 				alts: ['https://github.com/shagu/pfUI'],
-				category: 'Interface Suites'
+				category: 'UI & Appearance'
 			})
 		]);
 		const [{ id }] = await db.sql('select id from public.import_queue');
@@ -1471,7 +1471,7 @@ describe('import queue', () => {
 			name: 'pfUI',
 			slug: 'pfui',
 			description: 'UI',
-			category: 'Interface Suites',
+			category: 'UI & Appearance',
 			author: 'brues-code',
 			source: 'Turtle WoW Wiki',
 			// It belongs to nobody; who approved it is kept for the admin's profile.

@@ -36,7 +36,7 @@ const CATEGORY_TOTALS = {
 	'Chat & Social': 103,
 	Class: 87,
 	Combat: 96,
-	'Interface Suites': 24,
+	'UI & Appearance': 38,
 	Libraries: 7,
 	'Map & Minimap': 32,
 	Professions: 24,
@@ -45,7 +45,7 @@ const CATEGORY_TOTALS = {
 	'Raid & Party': 89,
 	Tooltip: 21,
 	'Unit Frames': 55,
-	Miscellaneous: 203
+	Miscellaneous: 189
 };
 
 // The page is found by its headings; everything between them is the test's own.
@@ -232,12 +232,24 @@ describe('the category is guessed from the name and the description', () => {
 			['Quiver', 'Hunter auto shot timer, castbar, and more', 'Class'],
 			['RollFor', 'An automated item roller for raids', 'Raid & Party'],
 			['KillTrack', 'Tracks any and all mob kills for you.', 'Combat'],
-			['SpartanUI', 'moves the interface elements to the bottom', 'Interface Suites'],
+			['SpartanUI', 'moves the interface elements to the bottom', 'UI & Appearance'],
 			['MoveAnything', 'Lets you move, scale, and hide anything at all', 'Miscellaneous']
 		];
 		for (const [name, description, expected] of cases) assert.equal(guess(name, description), expected, name);
 		// Every category has a case, so a rule cannot be lost without a test noticing.
 		assert.deepEqual([...new Set(cases.map((c) => c[2]))].sort(), [...CATEGORIES].sort());
+	});
+
+	test('visual addons fit UI & Appearance while functional categories keep priority', () => {
+		for (const [name, description] of [
+			["Beardley's Diablo Orbs", 'is a backported Diablo like UI'],
+			['SimpleSkin', 'A new skin for the interface'],
+			['DarkTheme', 'Darker textures and decorative elements'],
+			['pfUI', 'A full UI replacement']
+		]) assert.equal(guess(name, description), 'UI & Appearance', name);
+		assert.equal(guess('PrettyBars', 'A themed action bar replacement'), 'Action Bars');
+		assert.equal(guess('PrettyTooltip', 'A new tooltip skin'), 'Tooltip');
+		assert.equal(guess('PrettyMinimap', 'A minimap theme'), 'Map & Minimap');
 	});
 
 	test('words joined up in a name count as words', () => {
