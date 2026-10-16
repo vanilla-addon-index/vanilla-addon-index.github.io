@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { publishedForkParent, type ReviewNote } from '#lib/import-review.ts';
+	import { similarAddon, publishedForkParent, type ReviewNote } from '#lib/import-review.ts';
 	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
@@ -90,12 +90,10 @@
 		const name = plain(item.name);
 		const sameName = liveByName.get(name);
 		const forkParent = publishedForkParent(stats?.fork_of, store.addons);
-		const similar = sameName || name.length < 4 ? undefined : store.addons.find((a) => {
-			const other = plain(a.name);
-			return other.length >= 4 && (other.includes(name) || name.includes(other));
-		});
+		const similar = sameName ? undefined : similarAddon(item.name, store.addons);
 		const wikiMain = item.group_key ? liveByKey.get(item.group_key) : undefined;
-		const match = wikiMain ?? sameName ?? forkParent;
+		const confirmedMatch = wikiMain ?? sameName ?? forkParent;
+		const match = confirmedMatch ?? similar;
 		const movedTo = stats?.canonical && stats.canonical !== item.key ? stats.canonical : undefined;
 		const renamedLive = movedTo ? liveByKey.get(movedTo) : undefined;
 		const year = stats?.pushed_at ? new Date(stats.pushed_at).getFullYear() : undefined;
@@ -124,8 +122,8 @@
 		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
 		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };
 		if (forkParent) return { verdict: 'fine', advice: 'Fork · existing page', notes, match: forkParent };
-		if (match) return { verdict: 'duplicate', advice: 'Possible version', notes, match };
-		if (similar) return { verdict: 'duplicate', advice: 'Check similar name', notes };
+		if (confirmedMatch) return { verdict: 'duplicate', advice: 'Possible version', notes, match };
+		if (similar) return { verdict: 'duplicate', advice: 'Similar name · check match', notes, match: similar };
 		if (stale) return { verdict: 'problem', advice: '8+ years old', notes };
 		if (missing.length) return { verdict: 'incomplete', advice: 'Incomplete', notes };
 		return { verdict: 'fine', advice: 'Ready', notes };
