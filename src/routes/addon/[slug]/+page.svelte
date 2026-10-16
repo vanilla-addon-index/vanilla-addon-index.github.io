@@ -11,6 +11,7 @@
 	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
+	import FavoriteButton from '#lib/components/FavoriteButton.svelte';
 	import ReportDialog from '#lib/components/ReportDialog.svelte';
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
@@ -160,6 +161,7 @@
 	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
 		<div class="panel p-4">
 			<h1 class="text-3xl font-bold">{addon.name}</h1>
+			<div class="mt-3"><FavoriteButton addonId={addon.id} /></div>
 
 			<div class="mt-3 flex flex-wrap gap-1.5">
 				<a href={resolve(`/?cat=${encodeURIComponent(addon.category)}`)} class="chip">

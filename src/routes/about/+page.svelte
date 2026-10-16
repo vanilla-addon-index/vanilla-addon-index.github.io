@@ -60,6 +60,7 @@
 		<h3 class="field-label mt-5">If you log in</h3>
 		<p>Logging in goes through GitHub or Discord. From then on these are stored:</p>
 		<ul class="mt-1 list-disc space-y-1 pl-5">
+			<li><strong>Your favorites</strong>, visible only to you and removed when you delete your account.</li>
 			<li>
 				<strong>Your email address</strong>, your id at GitHub or Discord, and the display name and
 				picture link they send along. The login service requires the email. The site never shows
