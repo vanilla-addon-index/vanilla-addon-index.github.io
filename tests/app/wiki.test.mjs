@@ -28,7 +28,7 @@ const TOTALS = {
 	foldersOfCollections: 5
 };
 const CATEGORY_TOTALS = {
-	'Action Bars': 72,
+	'Action Bars': 62,
 	'Auction & Economy': 49,
 	'Bags & Inventory': 40,
 	'Boss Mods': 28,
@@ -38,12 +38,13 @@ const CATEGORY_TOTALS = {
 	Combat: 94,
 	'UI & Appearance': 44,
 	Libraries: 7,
+	Macros: 11,
 	'Map & Minimap': 32,
 	Professions: 24,
 	PvP: 23, // Avbars mentions AV and AB in its description.
 	'Quests & Leveling': 73,
 	'Raid & Party': 88,
-	Tooltip: 21,
+	Tooltip: 20,
 	'Unit Frames': 55,
 	Miscellaneous: 187
 };
@@ -245,6 +246,7 @@ describe('the category is guessed from the name and the description', () => {
 			['RollFor', 'An automated item roller for raids', 'Raid & Party'],
 			['KillTrack', 'Tracks any and all mob kills for you.', 'Combat'],
 			['SpartanUI', 'moves the interface elements to the bottom', 'UI & Appearance'],
+			['CleverMacro', 'Adds extra slash commands for use in macros', 'Macros'],
 			['MoveAnything', 'Lets you move, scale, and hide anything at all', 'Miscellaneous']
 		];
 		for (const [name, description, expected] of cases) assert.equal(guess(name, description), expected, name);
@@ -287,6 +289,22 @@ describe('the category is guessed from the name and the description', () => {
 		assert.equal(guess('CThunWarner', "Provides information for C'Thun raids"), 'Boss Mods');
 		assert.equal(guess('Crusader', 'Sphere addon for Paladins'), 'Class');
 		assert.equal(guess('AuctionAltBuy', 'Alt-Click auctions to buy and cancel instantly'), 'Auction & Economy');
+	});
+
+	test('macro utilities get their own category while incidental macros keep functional categories', () => {
+		for (const [name, description] of [
+			['CerniesWonderfulFunctions', 'Script methods for using specific items and helping players create simple(er) macros'],
+			['CleverMacro', 'Adds extra slash commands for use in macros'],
+			['CleveRoidMacros', 'More advanced and modern style macros'],
+			['PlayerStates', 'Macro Helper addon'],
+			['Iconic', 'Improves the default macro icon selection system by adding a search bar'],
+			['MacroTT-V', 'Create tooltips for your macros'],
+			['MacroDebug', 'A macro debugger'],
+			['UltimaMacros', 'A lightweight, self-contained macro system']
+		]) assert.equal(guess(name, description), 'Macros', name);
+		assert.equal(guess('TotemBar', 'Shaman totem bar usable from a single macro or keybind'), 'Action Bars');
+		assert.equal(guess('LibramSwap', 'Adds automatic smart libram swapping for paladins - no macros required.'), 'Class');
+		assert.equal(guess('Flyout', 'Using a macro creates a flyout action button for spells'), 'Action Bars');
 	});
 
 	test('battleground names and abbreviations identify PvP addons', () => {
