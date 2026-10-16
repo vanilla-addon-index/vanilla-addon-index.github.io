@@ -14,8 +14,8 @@ export interface GithubCheckCache {
 	head: string;
 	history?: { date: string | null };
 	tree?: { oid: string | null; entries: GithubTreeEntry[] };
-	toc?: { signature: string; interface: number | null; files: { path: string; oid: string | null }[] };
-	readme?: { file: string; oid: string; images: string[] };
+	toc?: { signature: string; interface: number | null; files: { path: string; oid: string | null }[]; notes?: string };
+	readme?: { file: string; oid: string; images: string[]; text?: string };
 }
 
 export function githubScope(owner: string, name: string, ref: string, path: string): string {
@@ -67,7 +67,7 @@ export interface ForgeCheckCache {
 	identity: string;
 	head: string;
 	history?: { date: string };
-	toc?: { signature: string | null; interface: number | null };
+	toc?: { signature: string | null; interface: number | null; notes?: string };
 	readme?: { text: string; base: string } | null;
 }
 

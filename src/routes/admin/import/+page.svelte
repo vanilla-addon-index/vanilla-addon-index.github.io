@@ -9,6 +9,7 @@
 	import { linkAuthor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
+	import { categoryDescription } from '#lib/category-context.ts';
 	import { suggestCategory } from '#lib/category-scoring.ts';
 
 	const FILTERS = {
@@ -74,7 +75,7 @@
 	// The author is the one the link names, which is what approving publishes.
 	function gaps(item: QueueItem) {
 		const missing: string[] = [];
-		if (!(CATEGORIES as readonly string[]).includes(item.category) || suggestCategory(item.name, item.description).confidence === 'Uncertain') missing.push('category');
+		if (suggestCategory(item.name, categoryDescription(item)).confidence === 'Uncertain') missing.push('category');
 		if (!linkAuthor(item.url)) missing.push('author');
 		if (!item.description.trim()) missing.push('description');
 		if (!item.url.trim()) missing.push('link');

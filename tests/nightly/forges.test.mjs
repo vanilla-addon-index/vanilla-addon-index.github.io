@@ -87,6 +87,7 @@ describe('what GitLab says about a repository', () => {
 		});
 		assert.deepEqual(await askForge(forgePlace('https://gitlab.com/Artur91425/Automaton'), ask, true), {
 			project: 'Artur91425/Automaton',
+			description: '', notes: '',
 			stars: 3,
 			// The last commit, not the last time anything at all happened.
 			pushed_at: '2024-06-14T14:00:48Z',
@@ -183,6 +184,7 @@ describe('what a Gitea site says about a repository', () => {
 		});
 		assert.deepEqual(await askForge(forgePlace('https://codeberg.org/Old/Addon'), ask, true), {
 			project: 'New/Addon',
+			description: '', notes: '',
 			stars: 12,
 			pushed_at: '2023-05-05T10:00:00+02:00',
 			code_update: { date: '2023-05-05T10:00:00+02:00', url: 'https://codeberg.org/New/Addon/commits/branch/main' },

@@ -1,6 +1,23 @@
 import {expect, test} from './test.ts';
 import {loginAs} from './helpers.ts';
 
+test('repository evidence corrects an existing guess and approval sends the displayed category', async ({page}) => {
+	await loginAs(page, 'admin');
+	await page.route('**/rest/v1/import_queue?*', async route => {
+		if (route.request().method() !== 'GET') return route.continue();
+		const response = await route.fetch(), rows = await response.json();
+		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
+		await route.fulfill({response, json:[{...rows[0], name:'ChatThing', key:'github.com/a/chatthing', url:'https://github.com/a/ChatThing', category:'Chat & Social', description:'', category_context:{repository:'A damage meter for your party.'}}]});
+	});
+	await page.route('**/rest/v1/rpc/publish_import', route => route.fulfill({json:null}));
+	await page.goto('/admin/import');
+	const entry = page.locator('[data-entry]').first();
+	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Combat');
+	const request = page.waitForRequest('**/rest/v1/rpc/publish_import');
+	await entry.locator('[data-act="approve"]').click();
+	expect((await request).postDataJSON().input.category).toBe('Combat');
+});
+
 test('old archived imports stay quiet, omit the obsolete filter and preserve admin category choices', async ({page}) => {
 	await loginAs(page, 'admin');
 	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[{

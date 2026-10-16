@@ -264,7 +264,7 @@ describe('import queue', () => {
 			{ key: 'github.com/someone/port', url: 'https://github.com/Someone/Port/tree/Vanilla-Port', readme: false },
 			{ key: 'github.com/wiki/atlas', url: 'https://github.com/wiki/Atlas', readme: false },
 			// Waiting, and not looked at yet: it comes with the pictures it has, here none.
-			{ key: 'github.com/wiki/bagnon', url: 'https://github.com/wiki/Bagnon', readme: true, images: [] }
+			{ key: 'github.com/wiki/bagnon', url: 'https://github.com/wiki/Bagnon', readme: true, images: [], category_item: {name:'Bagnon', description:'Bagnon from the wiki', category_context:{}} }
 		]);
 
 		const store = 'select public.store_repo_stats($1, $2::jsonb) as n';

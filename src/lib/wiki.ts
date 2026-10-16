@@ -16,6 +16,7 @@ const importCategory = (name: string, description: string) => {
 };
 
 export interface Candidate {
+ category_context?: Record<string, string>;
 	key: string;
 	name: string;
 	url: string;
