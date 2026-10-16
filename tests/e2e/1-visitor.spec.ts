@@ -46,11 +46,15 @@ test('sort choice survives addon navigation, browser back and reload while expli
 	await sort.selectOption('code');
 	await expect(page).toHaveURL(/sort=code/);
 	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
+	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper', exact: true })).toBeVisible();
 	await page.getByRole('link', { name: '← All addons' }).click();
 	await expect(sort).toHaveValue('code');
 	await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
 	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
+	await expect(page).toHaveURL('/addon/raidhelper');
+	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper', exact: true })).toBeVisible();
 	await page.goBack();
+	await expect(page).toHaveURL('/?sort=code');
 	await expect(sort).toHaveValue('code');
 	await page.reload();
 	await expect(sort).toHaveValue('code');
