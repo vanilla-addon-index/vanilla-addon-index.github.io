@@ -23,20 +23,20 @@ test('the report a member sent shows up, with a count on the Admin button, and c
 	await expect(admin).not.toContainText('1');
 });
 
-test('the queue narrows to the entries that would be published with something missing', async ({ page }) => {
+test('waiting filters partition every entry and review issues stay out of Looks fine', async ({ page }) => {
 	await loginAs(page, 'admin');
 	await page.goto('/admin/import');
 	const entries = page.locator('[data-entry]');
 	await expect(entries.first()).toBeVisible();
 	const all = await entries.count();
 
-	await page.getByRole('button', { name: /^Missing details/ }).click();
-	// Each says what it lacks; the test queue has a few with no description.
-	await expect(entries.first().getByRole('note', { name: 'Import status' })).toContainText(/Missing:\s*description/);
+	const count = async (label: string) => Number((await page.getByRole('button', {name:new RegExp(`^${label}\\s+\\d+$`)}).innerText()).match(/\d+/)![0]);
+	expect(await count('Looks fine') + await count('Possible versions') + await count('Needs review')).toBe(await count('All'));
+	await page.getByRole('button', { name: /^Needs review/ }).click();
 	const incomplete = await entries.count();
 	expect(incomplete).toBeGreaterThan(0);
 	expect(incomplete).toBeLessThan(all);
-	await expect(entries.filter({ has: page.getByRole('note', { name: 'Import status' }).filter({ hasText: /Missing:\s*description/ }) })).toHaveCount(incomplete);
+	await expect(entries.getByRole('note', {name:'Import status'})).toHaveCount(incomplete);
 	await expect(entries.filter({ hasText: 'Ready' })).toHaveCount(0);
 	const names = await entries.getByLabel('Name', { exact: true }).evaluateAll((inputs) =>
 		inputs.map((input) => (input as HTMLInputElement).value)
