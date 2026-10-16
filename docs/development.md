@@ -57,17 +57,20 @@ Files in [supabase/migrations](../supabase/migrations) run once, in order. Test 
 the rule change and the user flow it affects. Deployment applies pending
 migrations before publishing code that depends on them.
 
+See the [database guide](../supabase/README.md) for the table map, migration entry
+points, local configuration and instructions for inspecting the current schema.
+
 ## Useful entry points
 
 - [src/routes](../src/routes): pages and forms.
 - [src/lib](../src/lib): shared UI, account state and data access.
 - [src/lib/config.ts](../src/lib/config.ts): public configuration, categories and allowed hosts.
-- [tests](../tests): database, parser and workflow tests.
+- [tests/README.md](../tests/README.md): test organization, commands and browser ordering constraints.
 - [scripts](../scripts): local backend, importer, snapshot and backup tools.
 
 For wiki-parser work, `node scripts/wiki-import.mjs` reads the current wiki and
 writes a dry-run report to `wiki-import/` without changing the database. The saved
-wiki fixture and its expected categories live in [wiki.test.mjs](../tests/wiki.test.mjs).
+wiki fixture and its expected categories live in [wiki.test.mjs](../tests/app/wiki.test.mjs).
 
 Member link rules are defined in `LINK_HOSTS` and `IMAGE_HOSTS` in the public config
 and `allowed_hosts()` in SQL. Change both together; a test checks they agree.
