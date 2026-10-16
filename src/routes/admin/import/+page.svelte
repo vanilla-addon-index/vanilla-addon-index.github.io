@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { similarAddon, publishedForkParent, type ReviewNote } from '#lib/import-review.ts';
 	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { store } from '#lib/addons.svelte.ts';
@@ -107,8 +108,11 @@
 		if (missing.length && !sameName && !forkParent) notes.push({ label: 'Missing', value: missing.join(', '), tone: 'warning' });
 		if (sameName) notes.push({ label: 'Page', value: sameName.name });
 		if (item.group_key && (!wikiMain || wikiMain !== sameName)) notes.push({ label: 'Wiki version', value: wikiMain?.name ?? `${item.group_key} (not live)` });
-		if (forkParent || stats?.fork_of) notes.push({ label: 'Fork of', value: forkParent?.name ?? stats!.fork_of! });
-		if (similar) notes.push({ label: 'Similar name', value: similar.name, tone: 'warning' });
+		if (forkParent || stats?.fork_of) notes.push({
+			label: 'Fork of', value: forkParent?.name ?? stats!.fork_of!,
+			href: forkParent ? resolve('/addon/[slug]', {slug: forkParent.slug}) : `https://${stats!.fork_of!}`
+		});
+		if (similar) notes.push({ label: 'Similar name', value: similar.name, tone: 'warning', href: resolve('/addon/[slug]', {slug: similar.slug}) });
 		if ((queuedNames.get(name) ?? 0) > 1) notes.push({ label: 'Queue', value: 'Same name twice', tone: 'warning' });
 		if (movedTo) notes.push({ label: 'Moved to', value: movedTo });
 		if (item.parent) notes.push({ label: 'Extends', value: item.parent });
