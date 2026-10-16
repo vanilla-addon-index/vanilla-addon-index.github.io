@@ -21,4 +21,6 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/publish.yml
+    with:
+      refresh-imports: true
     secrets: inherit
