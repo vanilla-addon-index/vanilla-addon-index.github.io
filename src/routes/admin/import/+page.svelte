@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ReviewNote } from '#lib/import-review.ts';
+	import { publishedForkParent, type ReviewNote } from '#lib/import-review.ts';
 	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
@@ -62,6 +62,7 @@
 		notes: ReviewNote[];
 		// A live addon this entry probably belongs to.
 		match?: Addon;
+		forkMatch?: Addon;
 		// What approving it untouched would publish without: any of category, author,
 		// description and link.
 		missing: string[];
@@ -78,7 +79,8 @@
 	}
 
 	function review(item: QueueItem): Review {
-		return { ...judge(item), missing: liveByName.has(plain(item.name)) ? [] : gaps(item) };
+		const forkMatch = publishedForkParent(imports.stats[item.key]?.fork_of, store.addons);
+		return { ...judge(item), forkMatch, missing: liveByName.has(plain(item.name)) || forkMatch ? [] : gaps(item) };
 	}
 
 	function judge(item: QueueItem): Omit<Review, 'missing'> {
@@ -87,7 +89,7 @@
 		const stats = imports.stats[item.key];
 		const name = plain(item.name);
 		const sameName = liveByName.get(name);
-		const forkParent = stats?.fork_of ? liveByKey.get(stats.fork_of) : undefined;
+		const forkParent = publishedForkParent(stats?.fork_of, store.addons);
 		const similar = sameName || name.length < 4 ? undefined : store.addons.find((a) => {
 			const other = plain(a.name);
 			return other.length >= 4 && (other.includes(name) || name.includes(other));
@@ -104,7 +106,7 @@
 		notes.push({ label: 'Updated', value: year ? String(year) : 'Unknown', tone: stale ? 'warning' : undefined });
 		if (stats && !stats.missing) notes.push({ label: 'Stars', value: String(stats.stars) });
 		notes.push({ label: 'Client', value: stats?.interface === VANILLA_INTERFACE ? '1.12' : stats?.interface != null ? String(stats.interface) : 'Unknown', tone: wrongClient ? 'danger' : undefined });
-		if (missing.length && !sameName) notes.push({ label: 'Missing', value: missing.join(', '), tone: 'warning' });
+		if (missing.length && !sameName && !forkParent) notes.push({ label: 'Missing', value: missing.join(', '), tone: 'warning' });
 		if (sameName) notes.push({ label: 'Page', value: sameName.name });
 		if (item.group_key && (!wikiMain || wikiMain !== sameName)) notes.push({ label: 'Wiki version', value: wikiMain?.name ?? `${item.group_key} (not live)` });
 		if (forkParent || stats?.fork_of) notes.push({ label: 'Fork of', value: forkParent?.name ?? stats!.fork_of! });
@@ -121,6 +123,7 @@
 		if (stats?.archived) return { verdict: 'problem', advice: 'Archived', notes, match };
 		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
 		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };
+		if (forkParent) return { verdict: 'fine', advice: 'Fork · existing page', notes, match: forkParent };
 		if (match) return { verdict: 'duplicate', advice: 'Possible version', notes, match };
 		if (similar) return { verdict: 'duplicate', advice: 'Check similar name', notes };
 		if (stale) return { verdict: 'problem', advice: '8+ years old', notes };
@@ -354,7 +357,7 @@
 							: 'The queue is empty. New addons on the wiki are added every night.'}
 					</p>
 				{:else}
-					{#each page as { item, verdict, advice, notes, match }, index (item.id)}
+					{#each page as { item, verdict, advice, notes, match, forkMatch }, index (item.id)}
 						<ImportEntry
 							{item}
 							{index}
@@ -362,6 +365,7 @@
 							{advice}
 							{notes}
 							{match}
+							{forkMatch}
 							{run}
 							selected={index === current}
 							onselect={() => (current = index)}
