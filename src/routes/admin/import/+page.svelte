@@ -13,7 +13,7 @@
 	const FILTERS = {
 		all: 'All',
 		fine: 'Looks fine',
-		duplicate: 'Possible duplicates',
+		duplicate: 'Possible versions',
 		problem: 'Obsolete or dead'
 	} as const;
 	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete';
