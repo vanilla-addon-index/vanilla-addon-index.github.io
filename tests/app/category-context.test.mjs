@@ -11,9 +11,9 @@ test('repository prose resolves cryptic names without replacing the wiki descrip
  assert.equal(item.description, 'A useful addon');
 });
 
-test('richer evidence can correct an existing name-only guess', () => {
- const item = {name:'ChatThing', description:'', category_context:{readme:'A damage meter for your party.'}};
- assert.equal(suggestCategory(item.name, '').category, 'Chat & Social');
+test('richer evidence resolves a name without category clues', () => {
+ const item = {name:'MysteryThing', description:'', category_context:{readme:'A damage meter for your party.'}};
+ assert.equal(suggestCategory(item.name, '').confidence, 'Uncertain');
  assert.equal(suggestCategory(item.name, categoryDescription(item)).category, 'Combat');
 });
 

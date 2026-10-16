@@ -90,9 +90,10 @@ function evidence(pattern: RegExp, text: string, source: CategoryEvidence['sourc
 		let weight = base;
 		if (/^buttons?$/i.test(match[0])) weight = 1;
 		// A UI framework prefix on an extension is compatibility evidence, not its job.
-		if (source === 'Name' && base === 3 && /ui$/i.test(match[0]) && frameworkExtension) weight = -3;
+		if (source === 'Name' && base === 3 && /ui$/i.test(match[0]) && frameworkExtension) weight = -13;
 		if (source === 'Description' && /^mini-?maps?$/i.test(match[0]) && /^\s+(?:buttons?|icons?)\b/i.test(after)) weight = 1;
-		return {source, text:match[0], weight:weight + (source === 'Name' && !/^buttons?$/i.test(match[0]) ? 4 : 0)};
+		// Every category clue in the addon's name gets the same priority bonus.
+		return {source, text:match[0], weight:weight + (source === 'Name' ? 13 : 0)};
 	}
 }
 
@@ -119,6 +120,6 @@ export function suggestCategory(name: string, description = ''): CategorySuggest
 		.sort((a, b) => b.score - a.score || a.category.localeCompare(b.category));
 	const first = matches[0], margin = first ? first.score - (matches[1]?.score ?? 0) : 0;
 	const confidence = first && (first.score >= 10 || first.evidence.some(e => e.weight >= 11)) && margin >= 4 ? 'Strong match'
-		: first && first.score >= 4 && margin >= 2 ? 'Possible match' : 'Uncertain';
+		: first && margin >= 2 ? 'Possible match' : 'Uncertain';
 	return {category:first?.category ?? DEFAULT_CATEGORY, confidence, matches};
 }
