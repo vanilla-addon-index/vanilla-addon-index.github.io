@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { commitCategoryOnFocus } from '#lib/category-select.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -321,7 +322,7 @@
 					</div>
 					<div>
 						<label class="field-label" for="category">Category</label>
-						<select id="category" class="input disabled:opacity-40" disabled={!!matched} required bind:value={form.category}>
+						<select use:commitCategoryOnFocus id="category" class="input disabled:opacity-40" disabled={!!matched} required bind:value={form.category}>
 							<!-- Placeholder: shown until a category is picked, not offered in the list. -->
 							<option value="" hidden>Pick the one that fits best</option>
 							{#each CATEGORIES as c (c)}
