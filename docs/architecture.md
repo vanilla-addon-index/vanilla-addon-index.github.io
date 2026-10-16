@@ -70,7 +70,7 @@ repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old, inactiv
 previously missing repositories keep the same daily coverage.
 
 Category suggestions use [weighted evidence and confidence](category-matching.md)
-from the addon name and description. Import review explains the leading matches.
+from the addon name and description. Import review only shows actionable status messages.
 Uncertain imports have no selected category: an admin must choose one before
 approving, including when adding a version. Buttons and keyboard shortcuts enforce
 this; the database also rejects new published entries with an empty category.

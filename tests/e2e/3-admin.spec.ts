@@ -32,11 +32,11 @@ test('the queue narrows to the entries that would be published with something mi
 
 	await page.getByRole('button', { name: /^Missing details/ }).click();
 	// Each says what it lacks; the test queue has a few with no description.
-	await expect(entries.first()).toContainText(/Missing\s*description/);
+	await expect(entries.first().getByRole('note', { name: 'Import status' })).toContainText(/Missing:\s*description/);
 	const incomplete = await entries.count();
 	expect(incomplete).toBeGreaterThan(0);
 	expect(incomplete).toBeLessThan(all);
-	await expect(entries.filter({ hasText: /Missing\s*description/ })).toHaveCount(incomplete);
+	await expect(entries.filter({ has: page.getByRole('note', { name: 'Import status' }).filter({ hasText: /Missing:\s*description/ }) })).toHaveCount(incomplete);
 	await expect(entries.filter({ hasText: 'Ready' })).toHaveCount(0);
 	const names = await entries.getByLabel('Name', { exact: true }).evaluateAll((inputs) =>
 		inputs.map((input) => (input as HTMLInputElement).value)
@@ -47,7 +47,7 @@ test('the queue narrows to the entries that would be published with something mi
 	await fine.click();
 	await expect(entries).toHaveCount(fineCount);
 	expect(fineCount).toBeGreaterThan(0);
-	await expect(entries.filter({ hasText: /Missing\s*description/ })).toHaveCount(0);
+	await expect(entries.filter({ has: page.getByRole('note', { name: 'Import status' }).filter({ hasText: /Missing:\s*description/ }) })).toHaveCount(0);
 	for (const name of names) await expect(entry(page, name)).toHaveCount(0);
 });
 
