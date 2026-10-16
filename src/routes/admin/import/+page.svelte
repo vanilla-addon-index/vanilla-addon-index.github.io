@@ -106,12 +106,11 @@
 		const movedTo = stats?.canonical && stats.canonical !== item.key ? stats.canonical : undefined;
 		const renamedLive = movedTo ? liveByKey.get(movedTo) : undefined;
 		const year = stats?.pushed_at ? new Date(stats.pushed_at).getFullYear() : undefined;
-		const wrongClient = stats?.interface != null && stats.interface !== VANILLA_INTERFACE;
 
 		// Facts always come first, in the same order. Warnings and relationships follow.
 		notes.push({ label: 'Updated', value: year ? String(year) : 'Unknown' });
 		if (stats && !stats.missing) notes.push({ label: 'Stars', value: String(stats.stars) });
-		notes.push({ label: 'Client', value: stats?.interface === VANILLA_INTERFACE ? '1.12' : stats?.interface != null ? String(stats.interface) : 'Unknown', tone: wrongClient ? 'danger' : undefined });
+		notes.push({ label: 'Client', value: stats?.interface === VANILLA_INTERFACE ? '1.12' : stats?.interface != null ? String(stats.interface) : 'Unknown' });
 		if (missing.length && !sameName && !forkParent) notes.push({ label: 'Missing', value: missing.join(', '), tone: 'warning' });
 		if (sameName) notes.push({ label: 'Page', value: sameName.name });
 		if (item.group_key && (!wikiMain || wikiMain !== sameName)) notes.push({ label: 'Wiki version', value: wikiMain?.name ?? `${item.group_key} (not live)` });
@@ -128,7 +127,6 @@
 
 		if (stats?.missing) return { verdict: 'dead', advice: 'Dead link', notes, match };
 		if (renamedLive) return { verdict: 'duplicate', advice: `Already live · ${renamedLive.name}`, notes };
-		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
 		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };
 		if (forkParent) return { verdict: 'fine', advice: 'Fork · existing page', notes, match: forkParent };
 		if (confirmedMatch) return { verdict: 'duplicate', advice: 'Possible version', notes, match };
