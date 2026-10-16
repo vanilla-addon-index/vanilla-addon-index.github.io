@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { similarAddon, publishedForkParent, type ReviewNote } from '#lib/import-review.ts';
-	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
@@ -14,10 +13,9 @@
 	const FILTERS = {
 		all: 'All',
 		fine: 'Looks fine',
-		duplicate: 'Possible versions',
-		problem: 'Obsolete or dead'
+		duplicate: 'Possible versions'
 	} as const;
-	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete';
+	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete' | 'problem';
 	// "incomplete" also includes duplicates and problems that would be published with a gap.
 	// "rejected" is not a filter on the queue but a second list: what was turned down.
 	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
@@ -98,11 +96,10 @@
 		const movedTo = stats?.canonical && stats.canonical !== item.key ? stats.canonical : undefined;
 		const renamedLive = movedTo ? liveByKey.get(movedTo) : undefined;
 		const year = stats?.pushed_at ? new Date(stats.pushed_at).getFullYear() : undefined;
-		const stale = isOlderAddon(stats?.pushed_at);
 		const wrongClient = stats?.interface != null && stats.interface !== VANILLA_INTERFACE;
 
 		// Facts always come first, in the same order. Warnings and relationships follow.
-		notes.push({ label: 'Updated', value: year ? String(year) : 'Unknown', tone: stale ? 'warning' : undefined });
+		notes.push({ label: 'Updated', value: year ? String(year) : 'Unknown' });
 		if (stats && !stats.missing) notes.push({ label: 'Stars', value: String(stats.stars) });
 		notes.push({ label: 'Client', value: stats?.interface === VANILLA_INTERFACE ? '1.12' : stats?.interface != null ? String(stats.interface) : 'Unknown', tone: wrongClient ? 'danger' : undefined });
 		if (missing.length && !sameName && !forkParent) notes.push({ label: 'Missing', value: missing.join(', '), tone: 'warning' });
@@ -121,14 +118,12 @@
 
 		if (stats?.missing) return { verdict: 'problem', advice: 'Dead link', notes, match };
 		if (renamedLive) return { verdict: 'duplicate', advice: `Already live · ${renamedLive.name}`, notes };
-		if (item.obsolete) return { verdict: 'problem', advice: 'Obsolete', notes, match };
 		if (stats?.archived) return { verdict: 'problem', advice: 'Archived', notes, match };
 		if (wrongClient) return { verdict: 'problem', advice: 'Wrong client', notes, match };
 		if (sameName) return { verdict: 'fine', advice: 'Add to existing page', notes, match: sameName };
 		if (forkParent) return { verdict: 'fine', advice: 'Fork · existing page', notes, match: forkParent };
 		if (confirmedMatch) return { verdict: 'duplicate', advice: 'Possible version', notes, match };
 		if (similar) return { verdict: 'duplicate', advice: 'Similar name · check match', notes, match: similar };
-		if (stale) return { verdict: 'problem', advice: '8+ years old', notes };
 		if (missing.length) return { verdict: 'incomplete', advice: 'Incomplete', notes };
 		return { verdict: 'fine', advice: 'Ready', notes };
 	}
