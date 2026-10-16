@@ -40,7 +40,6 @@
 				{#if tab.path === '/admin/reports' && reports.open}<span class="text-accent">{reports.open}</span>{/if}
 			</a>
 		{/each}
-		<span class="ml-auto text-sm text-muted">{auth.isOwner ? 'Owner' : 'Admin'} · {auth.username}</span>
 	</nav>
 	{@render children()}
 {/if}

@@ -86,7 +86,7 @@
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="truncate text-2xl leading-tight font-bold">{auth.username}</h1>
 					<p class={auth.isAdmin ? 'text-accent' : 'text-muted'}>
-						{auth.isAdmin ? 'Admin' : 'Member'}
+						{auth.isOwner ? 'Owner' : auth.isAdmin ? 'Admin' : 'Member'}
 					</p>
 				</div>
 				<dl>
