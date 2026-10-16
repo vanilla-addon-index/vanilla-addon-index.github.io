@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { commitCategoryOnFocus } from '#lib/category-select.ts';
 	import { categoryDescription } from '#lib/category-context.ts';
 	import { suggestCategory } from '#lib/category-scoring.ts';
 	import type { ReviewNote } from '#lib/import-review.ts';
@@ -146,7 +147,7 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch && !!original.category} bind:value={category.value}>
+		<select use:commitCategoryOnFocus class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch && !!original.category} bind:value={category.value}>
 			<option value="" disabled>Choose a category…</option>
 			{#each CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
