@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { categoryDescription } from '#lib/category-context.ts';
 	import { suggestCategory } from '#lib/category-scoring.ts';
 	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
@@ -24,12 +25,12 @@
 		run: (action: () => Promise<string>) => Promise<void>;
 	};
 	let { item, index, selected, verdict, advice, notes, match, forkMatch, onselect, run }: Props = $props();
-	const categorySuggestion = $derived(suggestCategory(item.name, item.description));
+	const categorySuggestion = $derived(suggestCategory(item.name, categoryDescription(item)));
 
 	// What approving publishes when nothing is touched, the same as the database would.
 	const original = $derived({
 		name: item.name.slice(0, 60),
-		category: categorySuggestion.confidence === 'Uncertain' ? '' : item.category,
+		category: categorySuggestion.confidence === 'Uncertain' ? '' : categorySuggestion.category,
 		author: linkAuthor(item.url),
 		description: item.description,
 		images: item.images.slice(0, MAX_IMAGES)
@@ -81,7 +82,7 @@
 		run(async () => {
 			if (!categoryChosen) throw new Error('Choose a category before approving this import.');
 			into = into === undefined ? destination : into;
-			if (edited || destination) {
+			if (edited || destination || draft.category !== item.category) {
 				saving = true;
 				try {
 					await publishEdited(

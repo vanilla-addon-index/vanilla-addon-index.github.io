@@ -29,7 +29,7 @@ globalThis.fetch = async (url, init = {}) => {
    {key:'github.com/a/addon', url:'https://github.com/a/addon/tree/other', readme:false}
   ]);
   if (name === 'nightly_links' && ['forge-batched', 'forge-late-stop'].includes(scenario)) return json(Array.from({length:9}, (_, i) => ({key:'codeberg.org/a/addon'+i, url:'https://codeberg.org/a/addon'+i, readme:true, images:[]})));
-  if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', readme: scenario !== 'already-checked', images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
+  if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', category_item: scenario.startsWith('category-') ? {name:'ChatThing', description:'Chat addon', category_context:{}} : undefined, readme: !['already-checked', 'category-all'].includes(scenario), images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
   if (name === 'nightly_waiting') return json({reports:0, suggestions:0});
   return json(0);
  }
@@ -46,7 +46,7 @@ globalThis.fetch = async (url, init = {}) => {
   calls.push({name:'github', phase:query.includes('stargazerCount') ? 'metadata' : query.includes('code:') || query.includes('top:') ? 'details' : query.includes('f0:') ? 'toc' : 'readme'});
   if (query.includes('stargazerCount') || query.includes('code:') || query.includes('top:')) {
    if (query.includes('stargazerCount') && ++metadataBatches === 3 && scenario === 'late-stop') {console.log('__RESULT__' + JSON.stringify(calls)); process.exit(2);}
-   const repo = {nameWithOwner:'a/addon',stargazerCount:3,pushedAt:'2026-01-01T00:00:00Z',isArchived:false,parent:null,
+   const repo = {description:'A damage meter',nameWithOwner:'a/addon',stargazerCount:3,pushedAt:'2026-01-01T00:00:00Z',isArchived:false,parent:null,
     code:{history:{nodes:[{committedDate:'2024-01-01T00:00:00Z'}]}},
     top:{entries: scenario === 'confirmed-absence' ? [] : [{name:'Addon.toc',type:'blob'},{name:'README.md',type:'blob'}]}};
    if (scenario === 'directory-failure') {repo.top=null; return json({data:{r0:repo},errors:[{type:'INTERNAL',path:['r0','top']}]});}
@@ -55,10 +55,10 @@ globalThis.fetch = async (url, init = {}) => {
    const data = Object.fromEntries([...query.matchAll(/r(\\d+): repository\\(owner: "([^"]+)", name: "([^"]+)"/g)].map(([, n, owner, name]) => ['r'+n, {...repo, nameWithOwner:owner+'/'+name}]));
    return json({data});
   }
-  if (query.includes('f0:')) return scenario === 'toc-failure'
+  if (query.includes('f0:')) return ['toc-failure', 'category-toc-failure'].includes(scenario)
    ? json({data:{r0:{f0:null}},errors:[{type:'INTERNAL',path:['r0','f0']}]})
-   : json({data:Object.fromEntries([...query.matchAll(/r(\\d+): repository/g)].map(([, n]) => ['r'+n, {f0:{text:'## Interface: 11200'}}]))});
-  if (query.includes('readme:')) return scenario === 'readme-failure'
+   : json({data:Object.fromEntries([...query.matchAll(/r(\\d+): repository/g)].map(([, n]) => ['r'+n, {f0:{text:'## Interface: 11200\\n## Notes: Tracks damage'}}]))});
+  if (query.includes('readme:')) return ['readme-failure', 'category-readme-failure'].includes(scenario)
    ? json({data:{r0:{readme:null}},errors:[{type:'INTERNAL',path:['r0','readme']}]})
    : json({data:Object.fromEntries([...query.matchAll(/r(\\d+): repository/g)].map(([, n]) => ['r'+n, {readme:{text:'No screenshots in this README.'}}]))});
  }
@@ -271,4 +271,26 @@ test('Nightly prepares the schema first and only reuses preparation after it suc
 	assert.ok(!job(prepare, 'migrate').includes('npm ci'));
 	assert.match(job(deploy, 'build'), /needs: prepare/);
 	assert.match(job(deploy, 'build'), /needs\.prepare\.result == 'success'/);
+});
+
+
+test('every queued import gets category evidence even with an existing guess and completed screenshots', () => {
+ const calls = run('category-all');
+ const stored = calls.filter(c => c.name === 'store_category_context').flatMap(c => c.args.items);
+ const context = Object.assign({}, ...stored.map(i => i.context));
+ assert.equal(context.repository, 'A damage meter');
+ assert.match(context.toc, /Tracks damage/);
+ assert.match(context.readme, /No screenshots/);
+ assert.ok(calls.some(c => c.name === 'github' && c.phase === 'readme'));
+ assert.ok(!calls.some(c => c.name === 'store_queue_images'));
+});
+
+
+test('failed category file checks do not replace stored evidence with empty text', () => {
+ for (const [scenario, source] of [['category-toc-failure', 'toc'], ['category-readme-failure', 'readme']]) {
+  const calls = run(scenario);
+  const stored = calls.filter(c => c.name === 'store_category_context').flatMap(c => c.args.items);
+  assert.ok(stored.length > 0);
+  assert.ok(stored.every(item => !(source in item.context)), scenario);
+ }
 });

@@ -8,6 +8,23 @@ Uncertain imports have a blank category, including no-evidence entries whose exp
 
 Import review evaluates confidence using current rules, independently of the selected category. Evidence remains available in the scoring module for diagnostics; the review UI omits explanations and only shows actionable status messages. Alternative wiki links may inherit a category without their own descriptive evidence; an uncertain review still requires an explicit choice. Deploy refresh writes current guesses, including blanks, into pending queue entries; published categories are not rewritten.
 
+## Repository evidence
+
+The nightly job now gathers extra category evidence for every pending repository import,
+including imports that already have a category guess. Repository descriptions, `.toc`
+Notes (including localized Notes), and README prose are stored separately in the queue's
+`category_context`. Admin review ranks categories using this text alongside the wiki
+description and addon name. The displayed choice and approval use the same result.
+Public descriptions are unchanged. Wiki refreshes preserve the collected context.
+
+README evidence is bounded to 6,000 characters after removing code blocks, images,
+URLs, HTML markup, and Markdown installation/dependency/changelog/license sections.
+Repository descriptions and TOC Notes are each bounded to 2,000 characters. Existing
+confidence thresholds still apply. File checks reuse unchanged cached results; failed
+checks preserve existing evidence and are retried on later runs. Supported repository
+hosts are GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Other links continue to use
+the name and wiki description.
+
 ## Saved wiki comparison
 
 Compared all 1082 entries at revision 23801. 529 are left blank for manual review under the conservative thresholds. The table lists 121 changed ranked suggestions relative to the former first-match rules, including alternative links evaluated independently. Ranked suggestions are retained as guidance even when selection is blank. These counts are not an accuracy measurement; old labels are not ground truth.
