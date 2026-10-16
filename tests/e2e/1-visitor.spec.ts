@@ -40,6 +40,33 @@ test('date sorting follows last code update and accepts old sort links', async (
 	}
 });
 
+test('sort choice survives addon navigation, browser back and reload while explicit sort links win', async ({ page }) => {
+	await page.goto('/');
+	const sort = page.getByRole('combobox', { name: 'Sort by' });
+	await sort.selectOption('code');
+	await expect(page).toHaveURL(/sort=code/);
+	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
+	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper', exact: true })).toBeVisible();
+	await page.getByRole('link', { name: '← All addons' }).click();
+	await expect(sort).toHaveValue('code');
+	await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
+	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
+	await expect(page).toHaveURL('/addon/raidhelper');
+	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper', exact: true })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL('/?sort=code');
+	await expect(sort).toHaveValue('code');
+	await page.reload();
+	await expect(sort).toHaveValue('code');
+	await page.goto('/?sort=name');
+	await expect(sort).toHaveValue('name');
+	await page.goto('/');
+	await expect(sort).toHaveValue('code');
+	await sort.selectOption('name');
+	await page.reload();
+	await expect(sort).toHaveValue('name');
+});
+
 test('an addon page shows its shared links and no admin controls', async ({ page }) => {
 	await page.goto('/addon/raidhelper');
 	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper' })).toBeVisible();
