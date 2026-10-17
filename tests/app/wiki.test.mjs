@@ -34,16 +34,17 @@ const CATEGORY_TOTALS = {
 	"Bags & Inventory": 30,
 	"Boss Mods": 19,
 	"Buffs & Debuffs": 45,
-	"Chat & Social": 81,
+	"Chat & Social": 80,
 	"Class": 92,
 	"Combat": 109,
 	"Libraries": 4,
+	"Loot Distribution": 25,
 	"Macros": 12,
 	"Map & Minimap": 30,
 	"Professions": 26,
 	"PvP": 23,
 	"Quests & Leveling": 60,
-	"Raid & Party": 96,
+	"Raid & Party": 76,
 	"Tooltip": 17,
 	"UI & Appearance": 45,
 	"Unit Frames": 49,
@@ -244,7 +245,8 @@ describe('the category is guessed from the name and the description', () => {
 			['Artisan', 'Compact professions window', 'Professions'],
 			['BGFlag', 'status of the Alliance and Horde flags', 'PvP'],
 			['Quiver', 'Hunter auto shot timer, castbar, and more', 'Class'],
-			['RollFor', 'An automated item roller for raids', 'Raid & Party'],
+			['RollFor', 'An automated item roller for raids', 'Loot Distribution'],
+			['RaidHelper', 'Raid assignments and ready checks', 'Raid & Party'],
 			['KillTrack', 'Tracks any and all mob kills for you.', 'Combat'],
 			['SpartanUI', 'moves the interface elements to the bottom', 'UI & Appearance'],
 			['CleverMacro', 'Adds extra slash commands for use in macros', 'Macros'],
@@ -374,6 +376,6 @@ describe('the whole page, as it was at revision 23801', () => {
 		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, 'PvP');
 		const per = Object.fromEntries(CATEGORIES.map((category) => [category, count((c) => c.category === category)]));
 		assert.deepEqual(per, CATEGORY_TOTALS);
-		assert.equal(count(c => c.category === ''), 278);
+		assert.equal(count(c => c.category === ''), 274);
 	});
 });

@@ -2,6 +2,40 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {suggestCategory as suggest} from '../../src/lib/category-scoring.ts';
 
+test('loot allocation tools outrank guild, chat, auction and general raid vocabulary', () => {
+	for (const [name, description] of [
+		['DKPAuctionBidder','Small UI to bid in DKP auctions'],
+		['DPEPGP','De Profundis EP/GP Loot System'],
+		['GuildRoll','Basic Effort Points (EP) manager'],
+		['TitanGuild','TitanGuild with EPGP display'],
+		['ChaosReserves','Self-service reserve managing chatbot'],
+		['ChatLootBidder','A Master-Loot addon to assist in loot distribution'],
+		['RaidRollHelper','Fair item distribution with /roll in raids'],
+		['RollFor','An automated item roller with soft ressing support'],
+		['CleanRolls','A floating window that tracks group loot rolls'],
+		['NewHelper','A loot council manager for your guild'],
+		['NewSystem','EPGP management for guilds']
+	]) {
+		const result=suggest(name,description);
+		assert.equal(result.category,'Loot Distribution',name);
+		assert.equal(result.confidence,'Strong match',name);
+	}
+});
+
+test('loot browsers, notifications, raid scheduling and master-loot reminders stay outside distribution', () => {
+	for (const [name, description] of [
+		['AtlasLoot','Browse boss loot tables'],
+		['LootMonitor','Floating notifications when you loot items or coins'],
+		['LootAtMouse','Opens the loot window at the mouse cursor'],
+		['XLoot','A remake of the built-in loot frame'],
+		['RaidCalendar','View and sign up to raids and register soft reserves'],
+		['MasterLootRemind','Prompt Raid Leader to Set Master Loot when a Boss is detected'],
+		['LootTracker','Track loot that you and your party receive'],
+		['AuctionHelper','Auction house management addon'],
+		['PriestBiS','Loot and upgrade assistant for priests']
+	]) assert.notEqual(suggest(name,description).category,'Loot Distribution',name);
+});
+
 test('ChatMonitor beats incidental minimap controls with explainable purpose evidence', () => {
 	const result = suggest('ChatMonitor', 'Monitors the chat and alerts you when user-defined keywords are found. Features a nice GUI and a right-clickable minimap button to start/stop the monitoring.');
 	assert.equal(result.category, 'Chat & Social');
