@@ -175,7 +175,7 @@
 		{/each}
 	</aside>
 
-	<section class="md:flex md:h-full md:min-h-0 md:flex-col">
+	<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 		<!-- The search box and the letter bar stay where they are while the list scrolls. They
 		     bring the gaps around them along, painted like the page, so rows vanish at the lower
 		     edge of the gap under them and never show above or between them. -->
@@ -188,13 +188,13 @@
 					aria-label="Search addons"
 					bind:value={query}
 				/>
-				<select class="input w-auto flex-1 sm:flex-none md:hidden" aria-label="Category" bind:value={category}>
+				<select class="input min-w-0 w-auto flex-1 sm:flex-none md:hidden" aria-label="Category" bind:value={category}>
 					<option value="">All categories</option>
 					{#each CATEGORIES as c (c)}
 						<option value={c}>{c} ({counts[c]?.length ?? 0})</option>
 					{/each}
 				</select>
-				<select class="input w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort} onchange={() => saveSort(sort)}>
+				<select class="input min-w-0 w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort} onchange={() => saveSort(sort)}>
 					{#each Object.entries(SORTS) as [value, label] (value)}
 						<option {value}>{label}</option>
 					{/each}
@@ -202,11 +202,11 @@
 			</div>
 
 			{#if sort === 'name' && blocks.length}
-					<nav bind:this={bar} class="panel mt-2 grid grid-cols-9 px-1 sm:flex" aria-label="Jump to a letter">
+					<nav bind:this={bar} class="letter-navigation panel mt-2 flex overflow-x-auto px-1" aria-label="Jump to a letter">
 						{#each LETTERS as letter (letter)}
 							<button
 								class={[
-									'min-w-6 py-0.5 text-center text-sm font-bold transition-colors duration-100 sm:flex-1',
+									'min-h-11 min-w-11 shrink-0 py-0.5 text-center text-sm font-bold sm:min-h-0 sm:min-w-6 transition-colors duration-100 sm:flex-1',
 									!letters.has(letter)
 										? 'text-muted/30'
 										: ['cursor-pointer hover:bg-raised hover:text-accent', letter === current ? 'text-accent' : 'text-muted']

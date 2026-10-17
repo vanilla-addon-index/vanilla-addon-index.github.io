@@ -14,7 +14,7 @@
 	] as const;
 </script>
 
-<nav class="panel mt-2 grid grid-cols-2 px-1 sm:flex" aria-label="Admin">
+<nav class="section-navigation panel mt-2 grid grid-cols-2 px-1 sm:flex" aria-label="Admin">
 	{#each tabs as tab (tab.path)}
 		{@const active=page.url.pathname.startsWith(resolve(tab.path))}
 		<a href={resolve(tab.path)} aria-current={active?'page':undefined}
