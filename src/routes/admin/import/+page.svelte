@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { resolve } from '$app/paths';
 	import { similarAddon, publishedForkParent, isWikiPage, type ReviewNote } from '#lib/import-review.ts';
 	import { store } from '#lib/addons.svelte.ts';
@@ -265,6 +266,8 @@
 {:else}
 	<div class="admin-workspace">
 		<aside class="admin-sidebar">
+			<ResponsiveSidebar label="Import filters and counts">
+			{#snippet children()}
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="text-2xl leading-tight font-bold">Import</h1>
@@ -322,6 +325,8 @@
 					<p>Ctrl+Enter approves from a field</p>
 				{/if}
 			</div>
+			{/snippet}
+		</ResponsiveSidebar>
 		</aside>
 
 		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">

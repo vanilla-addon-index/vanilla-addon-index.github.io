@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -37,6 +38,7 @@
 
 <div class="page-workspace">
 	<aside class="page-sidebar">
+			<ResponsiveSidebar label="About this site">
 		<div class="panel p-3">
 			<h1 class="text-2xl font-bold">About</h1>
 			<p class="text-muted">{SITE_NAME}</p>
@@ -47,11 +49,12 @@
 		<a href={resolve('/')} class="btn block text-center">← All addons</a>
 		<a href={REPO_URL} target="_blank" rel="noopener" class="btn block text-center">Source on GitHub</a>
 		<a href={ISSUES} target="_blank" rel="noopener" class="btn block text-center">Open an issue</a>
-	</aside>
+	</ResponsiveSidebar>
+		</aside>
 	<div class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 		<div class="shrink-0 pb-2">
 			<p class="flex min-h-[calc(1lh+0.75rem+2px)] items-center border border-transparent py-1.5 text-muted">The project, your privacy, and how to contribute.</p>
-			<nav class="panel mt-2 grid grid-cols-2 px-1 sm:flex" aria-label="About sections">
+			<nav class="section-navigation panel mt-2 grid grid-cols-2 px-1 sm:flex" aria-label="About sections">
 				{#each tabs as tab (tab.id)}
 					<a
 						href={resolve('/about') + (tab.id === 'about' ? '' : `#${tab.id}`)}

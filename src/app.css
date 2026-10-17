@@ -236,3 +236,29 @@
 ::view-transition-new(root) {
 	animation-duration: 0.1s;
 }
+
+@layer utilities {
+	/* On phones, section bars stay one row and can be swiped without moving the page. */
+	@media (width < 48rem) {
+		.letter-navigation > button {
+			min-height: 44px;
+			min-width: 44px;
+			flex: 0 0 auto;
+		}
+		nav.section-navigation {
+			@apply flex overflow-x-auto;
+		}
+		.section-navigation > :is(a, button) {
+			@apply min-h-11 items-center justify-center px-3;
+			display: inline-flex;
+			flex: 1 0 auto;
+			white-space: nowrap;
+		}
+	}
+	@media (width < 48rem) and (pointer: coarse) {
+		.btn,
+		.input {
+			min-height: 44px;
+		}
+	}
+}

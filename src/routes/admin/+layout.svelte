@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import {setContext, type Snippet} from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -30,7 +31,7 @@
 	{@render children()}
 {:else}
 	<div class="admin-workspace">
-		<aside class="admin-sidebar">{@render sidebar?.()}</aside>
+		<aside class="admin-sidebar"><ResponsiveSidebar label="Page details and filters">{@render sidebar?.()}</ResponsiveSidebar></aside>
 		<div class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 			<div class="shrink-0 pb-2">{@render toolbar?.()}</div>
 			<!-- Keyboard users can focus the entries while the toolbar stays outside the scroll area. -->

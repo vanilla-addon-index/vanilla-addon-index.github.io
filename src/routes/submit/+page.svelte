@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -267,6 +268,7 @@
 {:else}
 	<div class="page-workspace">
 		<aside class="page-sidebar">
+			<ResponsiveSidebar label="Submission guidance">
 			<div class="panel">
 			<div class="border-b border-border px-3 py-3">
 				<h1 class="text-2xl leading-tight font-bold">{editing ? 'Edit addon' : 'Submit addon'}</h1>
@@ -285,12 +287,13 @@
 				</li>
 			</ul>
 			</div>
+		</ResponsiveSidebar>
 		</aside>
 
 		<form onsubmit={save} class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 			<div class="shrink-0 pb-2">
 				<p class="flex min-h-[calc(1lh+0.75rem+2px)] items-center border border-transparent py-1.5 text-muted">{editing ? 'Update the details and check the preview before saving.' : 'Add the details and check the preview before posting.'}</p>
-				<nav class="panel mt-2 flex px-1" aria-label="Form sections">
+				<nav class="section-navigation panel mt-2 flex px-1" aria-label="Form sections">
 					{#each [{ id: 'required-details', label: 'Required details' }, { id: 'optional-details', label: 'Optional details' }, { id: 'addon-preview', label: 'Preview' }] as section}
 						<button type="button" class="min-w-0 flex-1 cursor-pointer px-2 py-0.5 text-center text-sm font-bold text-muted hover:bg-raised hover:text-accent" onclick={() => jump(section.id)}>{section.label}</button>
 					{/each}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { onMount } from 'svelte';
 	import { preferences, loadPreferences, savePreferences } from '#lib/preferences.svelte.ts';
 	import { goto } from '$app/navigation';
@@ -95,6 +96,7 @@
 {:else}
 	<div class="page-workspace">
 		<aside class="page-sidebar">
+			<ResponsiveSidebar label="Account details and options">
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="truncate text-2xl leading-tight font-bold">{auth.username}</h1>
@@ -126,12 +128,13 @@
 			{#if !auth.isOwner}
 				<button class="btn btn-danger w-full" onclick={askToLeave}>Delete account</button>
 			{/if}
+		</ResponsiveSidebar>
 		</aside>
 
 		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 			<div class="shrink-0 pb-2">
 				<input class="input w-full" type="search" aria-label="Search your addons" placeholder="Search your favorites and addons" bind:value={query} />
-				<nav class="panel mt-2 flex px-1" aria-label="Account sections">
+				<nav class="section-navigation panel mt-2 flex px-1" aria-label="Account sections">
 					{#each [{ id: 'favorites-title', label: 'Favorites' }, { id: 'account-posted', label: 'Your addons' }, ...(imported.length ? [{ id: 'account-imports', label: 'Approved imports' }] : [])] as tab}
 						<button
 							class="min-w-0 flex-1 cursor-pointer py-0.5 text-center text-sm font-bold text-muted hover:bg-raised hover:text-accent"
