@@ -350,9 +350,9 @@
 				{/if}
 			</div>
 
-			<!-- This scroll region is focusable for keyboard scrolling. -->
+			<!-- Keep keyboard scrolling; the selected entry's highlight marks the position without outlining the whole panel. -->
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-			<div class="panel mt-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={entries} role="region" aria-label="Import entries" tabindex="0">
+			<div class="panel mt-2 focus-visible:outline-none md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={entries} role="region" aria-label="Import entries" tabindex="0">
 				{#if view === 'rejected' || view === 'dead'}
 					{#if view === 'dead' ? !imports.loaded : !imports.rejectedLoaded}
 						<p class="px-3 py-8 text-center text-muted">{view === 'dead' ? 'Loading dead links…' : 'Loading the rejected entries…'}</p>
