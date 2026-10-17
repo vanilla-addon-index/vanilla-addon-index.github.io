@@ -30,23 +30,24 @@ const TOTALS = {
 };
 const CATEGORY_TOTALS = {
 	"Action Bars": 25,
-	"Auction & Economy": 41,
+	"Auction & Economy": 39,
 	"Bags & Inventory": 30,
 	"Boss Mods": 19,
 	"Buffs & Debuffs": 45,
-	"Chat & Social": 73,
+	"Chat & Social": 69,
 	"Class": 92,
 	"Combat": 109,
+	"Hardcore": 13,
 	"Libraries": 4,
 	"Loot Distribution": 25,
 	"Macros": 12,
-	"Map & Minimap": 30,
+	"Map & Minimap": 28,
 	"Professions": 26,
-	"PvP": 23,
-	"Quests & Leveling": 60,
+	"PvP": 22,
+	"Quests & Leveling": 59,
 	"Raid & Party": 76,
 	"Roleplay": 7,
-	"Tooltip": 17,
+	"Tooltip": 16,
 	"UI & Appearance": 45,
 	"Unit Frames": 49,
 	"Miscellaneous": 0
@@ -250,6 +251,7 @@ describe('the category is guessed from the name and the description', () => {
 			['RaidHelper', 'Raid assignments and ready checks', 'Raid & Party'],
 			['TurtleRP', 'An RP addon custom-made for turtle', 'Roleplay'],
 			['KillTrack', 'Tracks any and all mob kills for you.', 'Combat'],
+			['HardcoreAlarms', 'Danger warnings for hardcore characters', 'Hardcore'],
 			['SpartanUI', 'moves the interface elements to the bottom', 'UI & Appearance'],
 			['CleverMacro', 'Adds extra slash commands for use in macros', 'Macros'],
 			['MoveAnything', 'Lets you move, scale, and hide anything at all', 'Miscellaneous']
@@ -378,6 +380,6 @@ describe('the whole page, as it was at revision 23801', () => {
 		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, 'PvP');
 		const per = Object.fromEntries(CATEGORIES.map((category) => [category, count((c) => c.category === category)]));
 		assert.deepEqual(per, CATEGORY_TOTALS);
-		assert.equal(count(c => c.category === ''), 274);
+		assert.equal(count(c => c.category === ''), 272);
 	});
 });

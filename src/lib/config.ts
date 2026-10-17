@@ -32,6 +32,7 @@ export const CATEGORIES = [
 	'Chat & Social',
 	'Class',
 	'Combat',
+	'Hardcore',
 	'Libraries',
 	'Loot Distribution',
 	'Macros',
