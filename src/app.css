@@ -133,6 +133,13 @@
 	.addon-list > * {
 		@apply sm:col-span-full;
 	}
+	@media (min-width: 48rem) {
+		.deferred-addon {
+			content-visibility: auto;
+			/* Match the single-line content height; padding and borders are added separately. */
+			contain-intrinsic-block-size: auto 1.25rem;
+		}
+	}
 	.btn {
 		@apply inline-flex cursor-pointer items-center justify-center gap-2 border border-border bg-surface px-3 py-1.5 leading-tight transition-colors duration-100 hover:border-accent/40 hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50;
 	}
@@ -238,6 +245,12 @@
 }
 
 @layer utilities {
+	@media (min-width: 48rem) {
+		/* Independent row tracks keep containment from breaking inherited subgrid tracks. */
+		.addon-list > .deferred-addon {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+	}
 	/* On phones, section bars stay one row and can be swiped without moving the page. */
 	@media (width < 48rem) {
 		.letter-navigation > button {

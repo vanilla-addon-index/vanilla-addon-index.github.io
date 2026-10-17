@@ -45,6 +45,42 @@ test('date sorting follows last code update and accepts old sort links', async (
 	}
 });
 
+test('a large catalogue reuses rows when sorting and keeps groups searchable', async ({ page }) => {
+	const addons = Array.from({ length: 900 }, (_, index) => ({
+		id: 10000 + index,
+		slug: `sample-${index}`,
+		name: `${index < 300 ? 'A' : index < 600 ? 'M' : 'Z'}Sample${String(index).padStart(4, '0')}`,
+		description: index === 800 ? 'Distinctive grouped fork' : 'A catalogue performance sample',
+		category: 'Combat', author: '',
+		repo_url: `https://github.com/example/Sample${index}`,
+		versions: [{ url: `https://github.com/example/Sample${index}`, note: '' }],
+		images: [], group_id: [400, 800].includes(index) ? 99 : null, is_main: index === 400,
+		code_update: { date: new Date(Date.UTC(2023, 0, index + 1)).toISOString(), url: '' }
+	}));
+	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: addons }));
+	await page.goto('/?sort=name');
+	const list = page.getByRole('region', { name: 'Addon list', exact: true });
+	const rows = list.locator('a[href^="/addon/"]');
+	await expect(rows).toHaveCount(900);
+	const first = list.locator('a[href="/addon/sample-0"]');
+	const node = await first.elementHandle();
+	const row = first.locator('..').locator('..');
+	await expect(row).toHaveCSS('content-visibility', 'auto');
+	const nameBox = await first.boundingBox();
+	const categoryBox = await row.getByText('Combat', { exact: true }).boundingBox();
+	expect(Math.abs(nameBox!.y - categoryBox!.y)).toBeLessThan(5);
+	const sort = page.getByRole('combobox', { name: 'Sort by' });
+	await sort.selectOption('code');
+	await expect(rows.first()).toHaveText('ZSample0899');
+	await sort.selectOption('name');
+	await expect(rows.first()).toHaveText('ASample0000');
+	expect(await node!.evaluate(element => element.isConnected)).toBe(true);
+	await page.getByRole('navigation', { name: 'Jump to a letter' }).getByRole('button', { name: 'M', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeInViewport();
+	await page.getByLabel('Search addons').fill('Distinctive grouped fork');
+	await expect(rows).toHaveText([/^MSample0400/, /^ZSample0800/]);
+});
+
 test('sort choice survives addon navigation, browser back and reload while explicit sort links win', async ({ page }) => {
 	await page.goto('/');
 	const sort = page.getByRole('combobox', { name: 'Sort by' });

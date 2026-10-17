@@ -8,13 +8,15 @@
 		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url'>;
 		// Renders the row without links, for the live preview on the submit page.
 		preview?: boolean;
+		// Let the desktop catalogue skip layout for rows outside its scroll viewport.
+		defer?: boolean;
 		// Who hosts it, shown when another addon in the list has the same name or it is in a group.
 		owner?: string;
 		// Another version in a group: indented under the group's main version, with a line down
 		// the indent joining them.
 		minor?: boolean;
 	};
-	let { addon, preview = false, owner, minor = false }: Props = $props();
+	let { addon, preview = false, defer = false, owner, minor = false }: Props = $props();
 
 	// The row shows where the description starts.
 	const blurb = $derived(addon.description.trim().split('\n')[0]);
@@ -28,6 +30,7 @@
 	class={[
 		'relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-b border-l-2 border-border/50 border-l-transparent px-3 py-1.25 font-read text-sm last:border-b-0 sm:grid-cols-subgrid',
 		!preview && 'transition-colors duration-100 hover:border-l-accent/60 hover:bg-raised',
+		defer && 'deferred-addon',
 		minor && 'pl-8 before:absolute before:top-0 before:-bottom-px before:left-4 before:border-l before:border-border'
 	]}
 >
