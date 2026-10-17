@@ -161,7 +161,6 @@
 	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
 		<div class="panel p-4">
 			<h1 class="text-3xl font-bold">{addon.name}</h1>
-			<div class="mt-3"><FavoriteButton addonId={addon.id} /></div>
 
 			<div class="mt-3 flex flex-wrap gap-1.5">
 				<a href={resolve(`/?cat=${encodeURIComponent(addon.category)}`)} class="chip">
@@ -254,6 +253,7 @@
             {/if}
 
             {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
+			<FavoriteButton addonId={addon.id} />
             {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>{addon.versions.length ? 'Add another link' : 'Add a link'}</a>{/if}
             {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
             {#if auth.session && pending && !auth.isAdmin}<div class="panel px-3 py-2 text-sm"><p>Your edit is waiting for admin review.</p><button class="btn mt-2" onclick={withdraw}>Withdraw proposal</button></div>{/if}

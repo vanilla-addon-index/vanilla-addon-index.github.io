@@ -40,12 +40,13 @@
 
 {#if auth.ready}
 	{#if auth.session}
-		<button class="btn" aria-pressed={saved} disabled={loading || busy || loadFailed} onclick={toggle}>
-			{loading ? 'Loading favorite…' : saved ? 'Remove from favorites' : 'Add to favorites'}
+		<button class="btn w-full" aria-label={loading ? 'Loading favorite…' : saved ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={saved} disabled={loading || busy || loadFailed} onclick={toggle}>
+			<span aria-hidden="true">{saved ? '★' : '☆'}</span>
+			{loading ? 'Loading favorite…' : saved ? 'Favorited' : 'Add to favorites'}
 		</button>
 		{#if error}<p class="mt-1 text-sm text-danger" role="alert">{error}</p>{/if}
 		{#if loadFailed}<button class="btn mt-1" onclick={() => retry++}>Try again</button>{/if}
 	{:else}
-		<a class="btn" href={loginHref(page.url)}>Log in to favorite</a>
+		<a class="btn w-full" href={loginHref(page.url)}>Log in to favorite</a>
 	{/if}
 {/if}
