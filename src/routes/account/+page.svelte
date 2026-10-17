@@ -11,13 +11,25 @@
 	import { PROVIDER_NAMES, SITE_NAME } from '#lib/config.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { supabase } from '#lib/supabase.ts';
+	import type { Addon } from '#lib/types.ts';
 	onMount(loadPreferences);
+	let query = $state('');
+	let list = $state<HTMLDivElement>();
+	let section = $state<'favorites' | 'posted' | 'imports'>('favorites');
+	const searchLabel = $derived(section === 'favorites' ? 'Search your favorites' : section === 'posted' ? 'Search your addons' : 'Search approved imports');
+	const matches = (addon: Addon) => [addon.name, addon.description, addon.category, ...addon.versions.map(version => version.url)].join(' ').toLowerCase().includes(query.trim().toLowerCase());
+	function select(value: typeof section) {
+		section = value;
+		list?.scrollTo(0, 0);
+	}
 
 	// An admin who approves imports becomes their keeper, but did not post them: they are
 	// listed apart, so "Your addons" stays what the account itself submitted.
 	const owned = $derived(ownedBy(auth.session?.user.id));
 	const mine = $derived(owned.posted);
 	const imported = $derived(owned.imported);
+	const postedMatches = $derived(mine.filter(matches));
+	const importedMatches = $derived(imported.filter(matches));
 	const user = $derived(auth.session?.user);
 	const logins = $derived(
 		(user?.app_metadata.providers as string[] | undefined)?.map((p) => PROVIDER_NAMES[p] ?? p).join(', ')
@@ -80,8 +92,8 @@
 		<a href={loginHref(page.url)} class="btn btn-primary mt-4">Log in</a>
 	</div>
 {:else}
-	<div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
-		<aside class="space-y-2">
+	<div class="page-workspace">
+		<aside class="page-sidebar">
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="truncate text-2xl leading-tight font-bold">{auth.username}</h1>
@@ -115,31 +127,46 @@
 			{/if}
 		</aside>
 
-		<section>
-			<FavoritesList />
-			<h2 class="label">Your addons</h2>
+		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
+			<div class="shrink-0 pb-2">
+				<input class="input w-full" type="search" aria-label={searchLabel} placeholder={searchLabel} bind:value={query} />
+				<nav class="panel mt-2 flex px-1" aria-label="Account sections">
+					{#each [{ id: 'favorites', label: 'Favorites' }, { id: 'posted', label: 'Your addons' }, ...(imported.length ? [{ id: 'imports', label: 'Approved imports' }] : [])] as tab}
+						<button
+							class={['min-w-0 flex-1 cursor-pointer py-0.5 text-center text-sm font-bold hover:bg-raised hover:text-accent', section === tab.id ? 'text-accent' : 'text-muted']}
+							aria-pressed={section === tab.id}
+							onclick={() => select(tab.id as typeof section)}
+						>{tab.label}</button>
+					{/each}
+				</nav>
+			</div>
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="min-w-0 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={list} role="region" aria-label="Account addons" tabindex="0">
+			<div hidden={section !== 'favorites'}><FavoritesList {query} /></div>
+			{#if section === 'posted'}
+			<h2 id="account-posted" class="label">Your addons</h2>
 			<div class="panel addon-list">
-				{#each mine as addon (addon.id)}
+				{#each postedMatches as addon (addon.id)}
 					<AddonCard {addon} />
 				{:else}
-					<p class="px-3 py-8 text-center text-muted">You have not posted anything yet.</p>
+					<p class="px-3 py-8 text-center text-muted">{mine.length ? 'No posted addons match your search.' : 'You have not posted anything yet.'}</p>
 				{/each}
 			</div>
 
-			{#if imported.length}
-				<!-- Closed until asked for: an admin can have approved hundreds. -->
-				<details class="group mt-4">
-					<summary class="label cursor-pointer hover:text-fg">
-						<span class="inline-block transition-transform group-open:rotate-90">▸</span>
-						Imports you approved · {imported.length}
-					</summary>
+			{/if}
+			{#if section === 'imports' && imported.length}
+				<section aria-labelledby="account-imports">
+					<h2 id="account-imports" class="label">Imports you approved · {imported.length}</h2>
 					<div class="panel addon-list">
-						{#each imported as addon (addon.id)}
+						{#each importedMatches as addon (addon.id)}
 							<AddonCard {addon} />
+						{:else}
+							<p class="px-3 py-8 text-center text-muted">No approved imports match your search.</p>
 						{/each}
 					</div>
-				</details>
+				</section>
 			{/if}
+			</div>
 		</section>
 	</div>
 

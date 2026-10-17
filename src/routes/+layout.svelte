@@ -7,7 +7,7 @@
 	import { loadAddons, readCache, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
-	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
+	import { SITE_NAME } from '#lib/config.ts';
 	import { countEditReviews, editReviews } from '#lib/edit-reviews.svelte.ts';
 	import { countReports, reports } from '#lib/reports.svelte.ts';
 	import { loginHref, takeReturn } from '#lib/return.ts';
@@ -146,7 +146,6 @@
 			<div class="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-sm text-muted">
 				<span>Interface\AddOns, indexed. Free and open source.</span>
 				<a href={resolve('/about')} class="ml-auto hover:text-accent">About and privacy</a>
-				<a href={REPO_URL} class="hover:text-accent">Source on GitHub</a>
 			</div>
 		</div>
 	</footer>

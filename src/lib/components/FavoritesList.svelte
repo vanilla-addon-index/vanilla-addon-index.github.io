@@ -4,9 +4,11 @@
 	import { store } from '#lib/addons.svelte.ts';
 	import { supabase } from '#lib/supabase.ts';
 	import { byCodeUpdate } from '#lib/addon-sort.ts';
+	let { query = '' }: { query?: string } = $props();
 	let ids = $state<number[]>([]), loading = $state(true), error = $state('');
 	let retry = $state(0);
 	const favorites = $derived(store.addons.filter((a) => ids.includes(a.id)).sort(byCodeUpdate));
+	const matching = $derived(favorites.filter(addon => [addon.name, addon.description, addon.category, ...addon.versions.map(version => version.url)].join(' ').toLowerCase().includes(query.trim().toLowerCase())));
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 	$effect(() => {
 		const user = auth.session?.user.id;
@@ -33,7 +35,7 @@
 			<p class="px-3 py-6 text-center text-muted">Loading favorites…</p>
 		{:else}
 			<ul>
-				{#each favorites as addon (addon.id)}
+				{#each matching as addon (addon.id)}
 					<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 py-2 last:border-b-0">
 						<a class="font-bold hover:text-accent" href={resolve('/addon/[slug]', {slug: addon.slug})}>{addon.name}</a>
 						<span class="text-sm text-muted">Last code update:
@@ -43,7 +45,7 @@
 						</span>
 					</li>
 				{:else}
-					<li class="px-3 py-6 text-center text-muted">No favorites yet. Open an addon and choose “Add to favorites.”</li>
+					<li class="px-3 py-6 text-center text-muted">{favorites.length ? 'No favorites match your search.' : 'No favorites yet. Open an addon and choose “Add to favorites.”'}</li>
 				{/each}
 			</ul>
 		{/if}

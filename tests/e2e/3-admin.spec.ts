@@ -170,7 +170,7 @@ test('the log is searched in the database: by name, by kind, by addon and by acc
 	await page.getByRole('link', { name: 'History' }).click();
 	await expect(page).toHaveURL(/\/admin\/log\?addon=\d+/);
 	await expect(page.getByText(`History of ${name}`)).toBeVisible();
-	const lines = page.locator('.panel > div');
+	const lines = page.getByRole('region', {name:'Admin content',exact:true}).locator('.panel > div.border-b');
 	await expect(lines).toHaveCount(2);
 	await expect(lines.nth(0)).toContainText(`edited ${name}`);
 	await expect(lines.nth(1)).toContainText(`posted ${name}`);
@@ -293,7 +293,7 @@ test('the owner makes a member an admin and takes the role away again; an admin 
 	await page.getByRole('button', { name: 'Make admin' }).click();
 	await confirm(page, 'Make admin');
 	await expect(page.getByText('member2 is an admin.')).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Admin content', exact: true }).getByRole('complementary').getByText('Admin', { exact: true })).toBeVisible();
+	await expect(page.getByRole('complementary').filter({has:page.getByRole('heading', {name:'member2',exact:true})}).getByText('Admin', { exact: true })).toBeVisible();
 	await page.goto('/admin/log?kind=user');
 	await expect(logLine(page, /owner made an admin of member2/)).toBeVisible();
 

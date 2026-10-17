@@ -17,6 +17,14 @@
 	// Must match the checks on addons.description in the schema migration and the import migration.
 	const DESCRIPTION_MIN = 15;
 	const DESCRIPTION_MAX = 5000;
+	let fields = $state<HTMLDivElement>();
+	function jump(id: string) {
+		const target = fields?.querySelector<HTMLElement>(`#${id}`);
+		if (!fields || !target) return;
+		if (getComputedStyle(fields).overflowY === 'auto') {
+			fields.scrollTo({ top: target.getBoundingClientRect().top - fields.getBoundingClientRect().top + fields.scrollTop });
+		} else target.scrollIntoView({ block: 'start' });
+	}
 
 	const editSlug = page.url.searchParams.get('edit');
 	const splitId = Number(page.url.searchParams.get('split'));
@@ -257,8 +265,9 @@
 		{/if}
 	</div>
 {:else}
-	<div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
-		<aside class="panel">
+	<div class="page-workspace">
+		<aside class="page-sidebar">
+			<div class="panel">
 			<div class="border-b border-border px-3 py-3">
 				<h1 class="text-2xl leading-tight font-bold">{editing ? 'Edit addon' : 'Submit addon'}</h1>
 				<p class="text-muted">{editing ? editing.name : 'Add one to the index'}</p>
@@ -266,7 +275,7 @@
 			<ul class="space-y-2 px-3 py-3 text-sm text-muted">
 				<li>Name, link, category and description are <span class="text-accent">required</span>.</li>
 				<li>Everything else is optional and helps players find the addon.</li>
-				<li>You can edit your own entry directly until it becomes shared. Original owners and contributors can then propose edits for admin review and remove their own links.</li>
+				<li>You can edit your own addon's details directly. If it becomes part of a grouped entry, you can propose changes for admin review and remove your own links.</li>
 				{#if !auth.isAdmin}
 					<li>The link must be on one of: {hostNames('link')}.</li>
 				{/if}
@@ -275,9 +284,20 @@
 					<a href={resolve('/about#rules')} class="underline hover:text-accent">rules for posting</a>.
 				</li>
 			</ul>
+			</div>
 		</aside>
 
-		<form onsubmit={save}>
+		<form onsubmit={save} class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
+			<div class="shrink-0 pb-2">
+				<p class="flex min-h-[calc(1lh+0.75rem+2px)] items-center border border-transparent py-1.5 text-muted">{editing ? 'Update the details and check the preview before saving.' : 'Add the details and check the preview before posting.'}</p>
+				<nav class="panel mt-2 flex px-1" aria-label="Form sections">
+					{#each [{ id: 'required-details', label: 'Required details' }, { id: 'optional-details', label: 'Optional details' }, { id: 'addon-preview', label: 'Preview' }] as section}
+						<button type="button" class="min-w-0 flex-1 cursor-pointer px-2 py-0.5 text-center text-sm font-bold text-muted hover:bg-raised hover:text-accent" onclick={() => jump(section.id)}>{section.label}</button>
+					{/each}
+				</nav>
+			</div>
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="min-w-0 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={fields} role="region" aria-label="Addon details" tabindex="0">
             {#if proposing}<p class="panel mb-4 p-3 text-accent">Your edits go to an admin for review. The live page stays unchanged until accepted.</p>{/if}
             {#if proposing && pending}
                 <div class="panel mb-4 p-3">
@@ -290,7 +310,7 @@
                 </div>
             {/if}
 			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. Only your link will be added; edits to the shared page are reviewed by admins.</p>{/if}
-			<h2 class="section-title text-accent">Required</h2>
+			<h2 id="required-details" class="section-title text-accent">Required</h2>
 			<p class="mb-2 text-muted">{matched ? 'Add a repository link to the existing page.' : 'The four things every entry needs.'}</p>
 			<div class="panel space-y-4 border-accent/30 p-4">
 				<div class="grid gap-4 sm:grid-cols-2">
@@ -361,7 +381,7 @@
 				</div>
 			</div>
 
-			<h2 class="section-title mt-8">Optional</h2>
+			<h2 id="optional-details" class="section-title mt-8">Optional</h2>
 			<p class="mb-2 text-muted">Leave any of these empty.</p>
 			<fieldset disabled={!!matched} class="panel space-y-4 p-4 disabled:opacity-40">
 				<div class="grid gap-4 sm:grid-cols-2">
@@ -488,7 +508,7 @@
 				</div>
 			</fieldset>
 
-			<h2 class="section-title mt-8">Preview</h2>
+			<h2 id="addon-preview" class="section-title mt-8">Preview</h2>
 			<p class="mb-2 text-muted">How it will look in the list.</p>
 			<div class="panel addon-list">
 				<AddonCard
@@ -503,15 +523,17 @@
 				/>
 			</div>
 
-			{#if error}<p class="mt-4 text-danger">{error}</p>{/if}
-
-			<div class="mt-4 flex gap-2">
+			</div>
+			<div class="shrink-0 pt-2">
+				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
+			<div class="flex gap-2">
 				<button class="btn btn-primary" disabled={saving}>
 					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? 'Add link' : splitting ? 'Separate addon' : 'Post addon'}
 				</button>
 				<a href={editing ? resolve('/addon/[slug]', { slug: editing.slug }) : resolve('/')} class="btn">
 					Cancel
 				</a>
+			</div>
 			</div>
 		</form>
 	</div>

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
+	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
+	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
@@ -167,6 +170,8 @@
 	<title>{name} · {SITE_NAME}</title>
 </svelte:head>
 
+<AdminToolbar><AdminNavigation /></AdminToolbar>
+
 {#snippet fact(label: string, value: string)}
 	<div class="flex justify-between gap-4 border-b border-border px-3 py-1.5 last:border-b-0">
 		<dt class="text-muted">{label}</dt>
@@ -176,9 +181,13 @@
 
 <a href={resolve('/admin/users')} class="text-muted hover:text-accent">← All accounts</a>
 
-<p class={['mt-2 min-h-[1lh] truncate', error ? 'text-danger' : 'text-accent']} aria-live="polite">
+<div aria-live="polite">
+{#if error || notice}
+<p class={['mb-2 truncate', error ? 'text-danger' : 'text-accent']}>
 	{error || notice}
 </p>
+{/if}
+</div>
 
 {#if !loaded && !user}
 	<p class="py-12 text-center text-muted">Loading…</p>
@@ -187,8 +196,8 @@
 		<p class="text-muted">There is no account named "{name}".</p>
 	</div>
 {:else}
-	<div class="mt-1 grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
-		<aside class="space-y-2">
+	<div class="mt-1">
+		<AdminSidebarContent>
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="truncate text-2xl leading-tight font-bold">{user.username}</h1>
@@ -228,7 +237,7 @@
 					</button>
 				</div>
 			{/if}
-		</aside>
+		</AdminSidebarContent>
 
 		<section>
 			{#if plan}

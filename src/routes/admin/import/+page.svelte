@@ -265,7 +265,6 @@
 {:else}
 	<div class="admin-workspace">
 		<aside class="admin-sidebar">
-			<AdminNavigation />
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="text-2xl leading-tight font-bold">Import</h1>
@@ -338,6 +337,7 @@
 					entries?.scrollTo(0, 0);
 				}}
 			/>
+			<AdminNavigation />
 
 			<div aria-live="polite">
 				{#if error || notice}
