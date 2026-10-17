@@ -21,8 +21,28 @@ test('confirmed dead links have an exclusive filter even with missing details an
 	}
 	await page.getByRole('button', {name:/^Dead links\s+1$/}).click();
 	await expect(entry).toHaveCount(1);
-	await expect(entry.getByRole('note', {name:'Import status'})).toContainText('Dead link');
-	await expect(entry.getByRole('button', {name:'Reject', exact:true})).toBeEnabled();
-	await page.getByRole('button', {name:/^All\s+1$/}).click();
+	await expect(entry).toContainText('Repository no longer available');
+	await expect(entry.getByRole('button')).toHaveCount(0);
+	await page.keyboard.press('a');
+	await page.keyboard.press('r');
 	await expect(entry).toHaveCount(1);
+	await page.getByRole('button', {name:/^All\s+0$/}).click();
+	await expect(entry).toHaveCount(0);
+});
+
+test('filed dead links appear under Decided without manual decisions', async ({page}) => {
+	await loginAs(page, 'admin');
+	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[]}));
+	await page.route('**/rest/v1/import_queue?*', async route => {
+		const url = new URL(route.request().url());
+		if (url.searchParams.get('status') !== 'eq.dead') return route.continue();
+		return route.fulfill({json:[{id:999999,key:'github.com/missing/gone',url:'https://github.com/missing/Gone',name:'GoneAddon',description:'An unavailable repository.',category:'Miscellaneous',images:[],alts:[],status:'dead'}]});
+	});
+	await page.goto('/admin/import');
+	await page.getByRole('button', {name:/^Dead links\s+1$/}).click();
+	const entry = page.locator('[data-entry]');
+	await expect(entry).toContainText('GoneAddon');
+	await expect(entry.getByRole('button')).toHaveCount(0);
+	await page.getByLabel('Search',{exact:true}).fill('unmatched');
+	await expect(entry).toHaveCount(0);
 });
