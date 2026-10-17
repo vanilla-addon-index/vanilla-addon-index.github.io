@@ -4,6 +4,7 @@
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
+	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { CATEGORIES, SITE_NAME } from '#lib/config.ts';
 	import { imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
 	import { linkAuthor, linkKey } from '#lib/links.ts';
@@ -33,6 +34,7 @@
 	let shown = $state(PAGE);
 	// Position of the entry the keyboard shortcuts act on.
 	let current = $state(0);
+	let entries = $state<HTMLElement>();
 	let notice = $state('');
 	let error = $state('');
 
@@ -162,6 +164,7 @@
 		view = next;
 		shown = PAGE;
 		current = 0;
+		entries?.scrollTo(0, 0);
 	}
 
 	// Entries leave the list the moment they are decided, so several can be handled in a row
@@ -260,8 +263,9 @@
 		<p class="text-muted">Only admins can review imports.</p>
 	</div>
 {:else}
-	<div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
-		<aside class="space-y-2">
+	<div class="admin-workspace">
+		<aside class="admin-sidebar">
+			<AdminNavigation />
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="text-2xl leading-tight font-bold">Import</h1>
@@ -321,9 +325,9 @@
 			</div>
 		</aside>
 
-		<section>
+		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 			<input
-				class="input"
+				class="input shrink-0"
 				type="search"
 				placeholder={view === 'dead' ? 'Search dead links' : view === 'rejected' ? 'Search the rejected entries' : 'Search the queue'}
 				aria-label="Search"
@@ -331,6 +335,7 @@
 				oninput={() => {
 					shown = PAGE;
 					current = 0;
+					entries?.scrollTo(0, 0);
 				}}
 			/>
 
@@ -340,7 +345,9 @@
 				{/if}
 			</div>
 
-			<div class="panel mt-2">
+			<!-- This scroll region is focusable for keyboard scrolling. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="panel mt-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={entries} role="region" aria-label="Import entries" tabindex="0">
 				{#if view === 'rejected' || view === 'dead'}
 					{#if view === 'dead' ? !imports.loaded : !imports.rejectedLoaded}
 						<p class="px-3 py-8 text-center text-muted">{view === 'dead' ? 'Loading dead links…' : 'Loading the rejected entries…'}</p>

@@ -12,9 +12,14 @@ test('the list loads, and search and categories narrow it', async ({ page }) => 
 	await expect(letters.getByRole('button', { name: '#', exact: true })).toBeDisabled();
 	await letters.getByRole('button', { name: 'R', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'R', exact: true })).toBeInViewport();
+	const list = page.getByRole('region', { name: 'Addon list', exact: true });
+	await expect.poll(() => list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+	expect(await page.evaluate(() => window.scrollY)).toBe(0);
+	await expect(letters.getByRole('button', { name: 'R', exact: true })).toHaveAttribute('aria-current', 'true');
 
 	await page.getByLabel('Search addons').fill('member bags');
 	await expect(page.getByRole('link', { name: /^Member Bags/ })).toBeVisible();
+	await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(0);
 	await expect(page.getByRole('link', { name: /^Member Map/ })).toHaveCount(0);
 	// The search is in the address, so it can be shared.
 	await expect(page).toHaveURL(/q=member\+bags/);

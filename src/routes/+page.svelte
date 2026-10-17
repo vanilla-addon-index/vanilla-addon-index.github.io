@@ -85,7 +85,8 @@
 
 	function track() {
 		// A little below the bar, so the heading a jump lands on counts as reached.
-		const edge = Math.max(bar?.getBoundingClientRect().bottom ?? 0, 0) + 16;
+		const edge = Math.max(list && getComputedStyle(list).overflowY === 'auto'
+			? list.getBoundingClientRect().top : bar?.getBoundingClientRect().bottom ?? 0, 0) + 16;
 		let reached = '';
 		for (const heading of list?.querySelectorAll('h2') ?? []) {
 			if (heading.getBoundingClientRect().top > edge) break;
@@ -97,12 +98,20 @@
 		void blocks;
 		track();
 	});
+	$effect(() => {
+		void query; void category; void sort;
+		if (list) list.scrollTop = 0;
+	});
 
-	// Puts a letter's heading right under the search box and the bar, where they rest once
-	// the page has scrolled. On a phone nothing rests there, and the heading goes to the top.
+	// Desktop letters scroll the list itself. Smaller layouts keep the page jump,
+	// accounting for sticky controls where present.
 	function jump(letter: string) {
 		const heading = document.getElementById(`letter-${letter}`);
 		if (!heading || !controls) return;
+		if (list && getComputedStyle(list).overflowY === 'auto') {
+			list.scrollBy(0, heading.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop);
+			return;
+		}
 		const resting =
 			getComputedStyle(controls).position === 'sticky'
 				? parseFloat(getComputedStyle(controls).top) + controls.offsetHeight
@@ -154,10 +163,10 @@
 	</button>
 {/snippet}
 
-<div class="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
+<div class="grid items-start gap-4 md:h-[calc(100dvh-var(--header-h)-var(--footer-h)-1.25rem)] md:min-h-0 md:grid-cols-[13rem_minmax(0,1fr)]">
 	<!-- Stays where it is beside the list; on a window too short for it, it scrolls by itself. -->
 	<aside
-		class="panel hidden max-h-[calc(100vh-var(--header-h)-var(--footer-h)-1.25rem)] overflow-y-auto py-1 md:sticky md:top-[calc(var(--header-h)+1.25rem)] md:block"
+		class="panel hidden max-h-full overflow-y-auto py-1 md:block"
 	>
 		<h2 class="label px-3 pt-2">Categories</h2>
 		{@render categoryButton('', 'All addons', visibleAddons.length)}
@@ -166,7 +175,7 @@
 		{/each}
 	</aside>
 
-	<section>
+	<section class="md:flex md:h-full md:min-h-0 md:flex-col">
 		<!-- The search box and the letter bar stay where they are while the list scrolls. They
 		     bring the gaps around them along, painted like the page, so rows vanish at the lower
 		     edge of the gap under them and never show above or between them. -->
@@ -213,7 +222,9 @@
 			{/if}
 		</div>
 
-		<div class="panel addon-list" bind:this={list}>
+		<!-- This scroll region is focusable so keyboard users can scroll it directly. -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div class="panel addon-list md:min-h-0 md:flex-1 md:content-start md:overflow-y-auto md:overscroll-contain" bind:this={list} onscroll={track} role="region" aria-label="Addon list" tabindex="0">
 			{#if !store.loaded}
 				<p class="px-3 py-8 text-center text-muted">Loading addons…</p>
 			{:else if blocks.length}

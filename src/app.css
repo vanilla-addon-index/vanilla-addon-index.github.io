@@ -62,9 +62,55 @@
 	::selection {
 		@apply bg-accent text-black;
 	}
+	/* Style native desktop scrollbars without replacing their scrolling behavior.
+	   Touch devices and high-contrast preferences keep the browser's own treatment. */
+	@media (hover: hover) and (pointer: fine) and (forced-colors: none) and (prefers-contrast: no-preference) {
+		* {
+			scrollbar-width: thin;
+			scrollbar-color: #40392b var(--color-bg);
+		}
+		/* Chromium/WebKit allow a precise hit area and thumb-only hover feedback.
+		   Their standard scrollbar properties must be auto for these rules to apply. */
+		@supports selector(::-webkit-scrollbar) {
+			* {
+				scrollbar-width: auto;
+				scrollbar-color: auto;
+			}
+			::-webkit-scrollbar {
+				width: 10px;
+				height: 10px;
+			}
+			::-webkit-scrollbar-track,
+			::-webkit-scrollbar-corner {
+				background: var(--color-bg);
+			}
+			::-webkit-scrollbar-thumb {
+				min-height: 32px;
+				border: 2px solid var(--color-bg);
+				border-radius: 5px;
+				background: #40392b;
+				background-clip: padding-box;
+			}
+			::-webkit-scrollbar-thumb:hover {
+				background-color: #5a4e36;
+			}
+			::-webkit-scrollbar-thumb:active {
+				background-color: #75613c;
+			}
+		}
+	}
 }
 
 @layer components {
+	.admin-workspace {
+		@apply grid items-start gap-4 md:min-h-0 md:grid-cols-[13rem_minmax(0,1fr)];
+		@media (min-width: 48rem) {
+			height: calc(100dvh - var(--header-h) - var(--footer-h) - 1.25rem);
+		}
+	}
+	.admin-sidebar {
+		@apply min-w-0 space-y-2 md:max-h-full md:overflow-y-auto md:overscroll-contain;
+	}
 	.panel {
 		@apply border border-border bg-surface;
 	}
@@ -77,10 +123,10 @@
 			background-attachment: fixed;
 		}
 	}
-	/* A panel of AddonCard rows. The link and category columns are as wide as the widest
-	   one in the list and shared by every row, so they line up without reserved space. */
+	/* Shared row columns: flexible addon text and a right-aligned category/link group.
+	   Keep each category next to its link instead of reserving separate empty tracks. */
 	.addon-list {
-		@apply sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-4;
+		@apply sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4;
 	}
 	.addon-list > * {
 		@apply sm:col-span-full;
@@ -109,8 +155,6 @@
 	   lands first. They are capped so a tall one never runs off the top. */
 	.dialog {
 		@apply fixed top-1/4 left-1/2 m-0 max-h-[48vh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-accent/30 bg-bg text-fg backdrop:bg-black/70;
-		scrollbar-width: thin;
-		scrollbar-color: var(--color-border) transparent;
 		overscroll-behavior: contain;
 	}
 	/* Forms read in three levels: a section title, the name of each field, and the grey
@@ -157,8 +201,6 @@
 	   as readable text. */
 	select.input::picker(select) {
 		@apply mt-1 max-h-80 overflow-y-auto border border-border bg-surface p-0 backdrop-blur-md backdrop-brightness-50;
-		scrollbar-width: thin;
-		scrollbar-color: var(--color-border) transparent;
 		overscroll-behavior: contain;
 	}
 	/* An unset dropdown reads like a text field's placeholder. */
