@@ -33,7 +33,7 @@
 
 	// One block per addon, or per group of versions. A group shows when any of its versions
 	// matches, and is placed in the list by its main version.
-	const blocks = $derived.by(() => {
+	const filteredBlocks = $derived.by(() => {
 		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 		const matches = (a: Addon) => {
 			if (category && a.category !== category) return false;
@@ -63,9 +63,11 @@
 			list.push({ main, others });
 		}
 
-		if (sort === 'code') return list.sort((a, b) => byCodeUpdate(a.main, b.main));
-		return list.sort((a, b) => a.main.name.localeCompare(b.main.name));
+		return list;
 	});
+	const nameBlocks = $derived(filteredBlocks.toSorted((a, b) => a.main.name.localeCompare(b.main.name)));
+	const codeBlocks = $derived(filteredBlocks.toSorted((a, b) => byCodeUpdate(a.main, b.main)));
+	const blocks = $derived(sort === 'code' ? codeBlocks : nameBlocks);
 
 	// The heading an addon files under when the list is sorted by name.
 	function letterOf(name: string) {
@@ -84,6 +86,10 @@
 	let current = $state('');
 
 	function track() {
+		if (sort !== 'name') {
+			current = '';
+			return;
+		}
 		// A little below the bar, so the heading a jump lands on counts as reached.
 		const edge = Math.max(list && getComputedStyle(list).overflowY === 'auto'
 			? list.getBoundingClientRect().top : bar?.getBoundingClientRect().bottom ?? 0, 0) + 16;
@@ -239,10 +245,11 @@
 					{/if}
 					<AddonCard
 						addon={main}
+						defer
 						owner={others.length > 0 || sharedNames.has(main.name.toLowerCase()) ? creditFor(main, true) : ''}
 					/>
 					{#each others as other (other.id)}
-						<AddonCard addon={other} owner={creditFor(other, true)} minor />
+						<AddonCard addon={other} owner={creditFor(other, true)} minor defer />
 					{/each}
 				{/each}
 			{:else}
