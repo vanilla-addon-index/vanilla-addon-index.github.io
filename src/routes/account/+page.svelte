@@ -15,12 +15,13 @@
 	onMount(loadPreferences);
 	let query = $state('');
 	let list = $state<HTMLDivElement>();
-	let section = $state<'favorites' | 'posted' | 'imports'>('favorites');
-	const searchLabel = $derived(section === 'favorites' ? 'Search your favorites' : section === 'posted' ? 'Search your addons' : 'Search approved imports');
 	const matches = (addon: Addon) => [addon.name, addon.description, addon.category, ...addon.versions.map(version => version.url)].join(' ').toLowerCase().includes(query.trim().toLowerCase());
-	function select(value: typeof section) {
-		section = value;
-		list?.scrollTo(0, 0);
+	function jump(id: string) {
+		const target = list?.querySelector<HTMLElement>(`#${id}`);
+		if (!list || !target) return;
+		if (getComputedStyle(list).overflowY === 'auto') {
+			list.scrollTo({ top: target.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop });
+		} else target.scrollIntoView({ block: 'start' });
 	}
 
 	// An admin who approves imports becomes their keeper, but did not post them: they are
@@ -129,21 +130,19 @@
 
 		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 			<div class="shrink-0 pb-2">
-				<input class="input w-full" type="search" aria-label={searchLabel} placeholder={searchLabel} bind:value={query} />
+				<input class="input w-full" type="search" aria-label="Search your addons" placeholder="Search your favorites and addons" bind:value={query} />
 				<nav class="panel mt-2 flex px-1" aria-label="Account sections">
-					{#each [{ id: 'favorites', label: 'Favorites' }, { id: 'posted', label: 'Your addons' }, ...(imported.length ? [{ id: 'imports', label: 'Approved imports' }] : [])] as tab}
+					{#each [{ id: 'favorites-title', label: 'Favorites' }, { id: 'account-posted', label: 'Your addons' }, ...(imported.length ? [{ id: 'account-imports', label: 'Approved imports' }] : [])] as tab}
 						<button
-							class={['min-w-0 flex-1 cursor-pointer py-0.5 text-center text-sm font-bold hover:bg-raised hover:text-accent', section === tab.id ? 'text-accent' : 'text-muted']}
-							aria-pressed={section === tab.id}
-							onclick={() => select(tab.id as typeof section)}
+							class="min-w-0 flex-1 cursor-pointer py-0.5 text-center text-sm font-bold text-muted hover:bg-raised hover:text-accent"
+							onclick={() => jump(tab.id)}
 						>{tab.label}</button>
 					{/each}
 				</nav>
 			</div>
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="min-w-0 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={list} role="region" aria-label="Account addons" tabindex="0">
-			<div hidden={section !== 'favorites'}><FavoritesList {query} /></div>
-			{#if section === 'posted'}
+			<FavoritesList {query} />
 			<h2 id="account-posted" class="label">Your addons</h2>
 			<div class="panel addon-list">
 				{#each postedMatches as addon (addon.id)}
@@ -153,9 +152,8 @@
 				{/each}
 			</div>
 
-			{/if}
-			{#if section === 'imports' && imported.length}
-				<section aria-labelledby="account-imports">
+			{#if imported.length}
+				<section class="mt-5" aria-labelledby="account-imports">
 					<h2 id="account-imports" class="label">Imports you approved · {imported.length}</h2>
 					<div class="panel addon-list">
 						{#each importedMatches as addon (addon.id)}
