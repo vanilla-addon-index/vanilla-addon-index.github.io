@@ -2,6 +2,30 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {suggestCategory as suggest} from '../../src/lib/category-scoring.ts';
 
+test('dedicated roleplaying tools outrank generic chat and emote features',()=>{
+	for(const [name,description] of [
+		['TurtleRP','An RP addon custom-made for turtle.'],
+		['Erea-RP','Lets Game Masters create and distribute interactive RP items to players.'],
+		['RoleplayingHelper','Roleplaying addon that allows your character to speak and react via emotes to various events'],
+		['Journal','simple notebook addon for RP players.'],
+		['NewTool','Creates roleplaying profiles and character biographies']
+	]) {
+		const result=suggest(name,description);
+		assert.equal(result.category,'Roleplay',name);
+		assert.equal(result.confidence,'Strong match',name);
+	}
+	for(const [name,description] of [
+		['ChatEmote','Chat emoticon to Emote Addon'],
+		['ROAR-Guild','Battle emotes on action slots with optional global trigger'],
+		['TwitchEmotes','Twitch and Discord emotes in chat'],
+		['CaramelNotes','Write notes about other players.'],
+		['CTPlayerNotes','Save notes for friends and guildies'],
+		['ImmersiveDialogUI','An immersive quest dialog interface'],
+		['VanillaStoryline','Enhance readability and immersion when questing'],
+		['TurtleTranslator','Translates chat across several languages']
+	]) assert.notEqual(suggest(name,description).category,'Roleplay',name);
+});
+
 test('loot allocation tools outrank guild, chat, auction and general raid vocabulary', () => {
 	for (const [name, description] of [
 		['DKPAuctionBidder','Small UI to bid in DKP auctions'],

@@ -40,6 +40,7 @@ export const CATEGORIES = [
 	'PvP',
 	'Quests & Leveling',
 	'Raid & Party',
+	'Roleplay',
 	'Tooltip',
 	'UI & Appearance',
 	'Unit Frames',

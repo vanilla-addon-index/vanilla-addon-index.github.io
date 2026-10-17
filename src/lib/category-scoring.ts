@@ -5,6 +5,7 @@ const CATEGORY_RULES: [Category, RegExp][] = [
 	['Libraries', /\b[Ll]ib[A-Z]\w+/],
 	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
 	['Loot Distribution', /\b(?:dkp|ep[\s/-]?gp|effort points?|gear points?)\b/i],
+	['Roleplay', /\b(?:role[ -]?play(?:ing)?|rp)\b/i],
 	['Boss Mods', /\b(boss ?mods?|boss(es)?\b|bigwigs|dbm|deadly boss|encounters?\b|raid warnings?\b|loatheb|c'?thun|nefarian|four horsemen|4hm)/i],
 	// Character/inspect panels are interface addons even when they list gear or spells.
 	['UI & Appearance', /\b(character|inspect(?:ion)?)(?:\s+stats?)?\s+(panels?|panes?|windows?|screens?|frames?)\b/i],
@@ -18,7 +19,7 @@ const CATEGORY_RULES: [Category, RegExp][] = [
 	['Map & Minimap', /\b(mini-?maps?|world ?maps?|maps?|coordinates?|waypoints?|compass|flight|gather(er|ing)? nodes?)\b/i],
 	['Quests & Leveling', /\b(quests?|questing|questie|leveling|level(s|ed)? ?up|xp|exp|experience|reputation|guides?|attune(ment)?s?|achievements?)\b/i],
 	['Buffs & Debuffs', /\b(buffs?|debuffs?|auras?|dots?|hots?|crowd control|absor(b|ption)s?)\b/i],
-	['Chat & Social', /\b(chat|chan(nel)?s?|whispers?|messenger|guild|friends?|social|emotes?|invites?|ignore|anti-?spam|spammers|goldspam|lfm|lfg|bulletin|translat(e|ion|or)|rp|role-?play(ing)?)\b/i],
+	['Chat & Social', /\b(chat|chan(nel)?s?|whispers?|messenger|guild|friends?|social|emotes?|invites?|ignore|anti-?spam|spammers|goldspam|lfm|lfg|bulletin|translat(e|ion|or))\b/i],
 	['Tooltip', /\b(game ?)?tool-?tips?\b/i],
 	['Professions', /\b(professions?|trade ?skills?|craft(s|ing)?|recipes?|fishing|herbs?|herbalism|minerals?|mining|enchanting|disenchant(s|ing)?|alchemy|cooking)\b/i],
 	['PvP', /\b(pvp|battlegrounds?|battlefield|bgs?|av|ab|wsg|alterac valley|arathi basin|warsong gulch|arena|honor|flags?|enemy players?)\b/i],
@@ -55,6 +56,9 @@ const apart = (name: string) => name.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
 
 // Specific purposes are stronger evidence than broad feature vocabulary.
 const PURPOSES: [Category, RegExp, number?][] = [
+	// Dedicated RP tools, not general emotes, player notes or immersive quest panels.
+	['Roleplay', /^(?:TurtleRP|Erea-RP|RoleplayingHelper|Journal)$/i, 14],
+	['Roleplay', /\b(?:role[ -]?play(?:ing)?|rp)\s+(?:addons?|players?|items?|profiles?|characters?|events?|tools?)\b/i, 24],
 	// Audited allocation tools include companion displays and standby EP management.
 	// Do not infer this category from "loot" alone: loot browsers and notifications differ.
 	['Loot Distribution', /^(?:DKPList|DKPAuctionBidder|WebDKPElysium|DPEPGP|EZ-EPGP|EPGPexport|GuildRoll|TitanGuild|ChaosReserves|ChatLootBidder|EasyLoot|LootRes|RollFor|RoundRobinhood|LootBlare(?:2\.0)?|RaidRollBuddy|RaidRollHelper|SmartRoll|CleanRolls|XckMasterLootAdvanced|AutoMasterLooter|MasterLootByClass)$/i, 14],
