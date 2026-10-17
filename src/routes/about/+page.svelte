@@ -1,11 +1,25 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { REPO_URL, SITE_NAME } from '#lib/config.ts';
 	import { hostNames } from '#lib/hosts.ts';
 	import { ABOUT_TITLE } from '#lib/seo.ts';
 	import { WIKI, WIKI_NAME, WIKI_PAGE } from '#lib/wiki.ts';
 
 	const ISSUES = `${REPO_URL}/issues`;
+	const tabs = [
+		{ id: 'about', label: 'About' },
+		{ id: 'privacy', label: 'Privacy' },
+		{ id: 'rules', label: 'Posting rules' },
+		{ id: 'contact', label: 'Contact' }
+	];
+	const selected = $derived(tabs.some(tab => tab.id === page.url.hash.slice(1)) ? page.url.hash.slice(1) : 'about');
+	let content = $state<HTMLDivElement>();
+	$effect(() => {
+		void selected;
+		content?.scrollTo(0, 0);
+	});
 </script>
 
 <svelte:head>
@@ -16,10 +30,41 @@
 	<a {href} target="_blank" rel="noopener" class="text-accent hover:underline">{text}</a>
 {/snippet}
 
-<article class="mx-auto max-w-3xl space-y-4 leading-relaxed">
-	<a href={resolve('/')} class="text-muted hover:text-accent">← All addons</a>
-	<section class="panel p-4">
-		<h1 class="text-3xl font-bold">About</h1>
+<div class="page-workspace">
+	<aside class="page-sidebar">
+		<div class="panel p-3">
+			<h1 class="text-2xl font-bold">About</h1>
+			<p class="text-muted">{SITE_NAME}</p>
+		</div>
+		<div class="panel p-3 text-sm text-muted">
+			<p>A community addon index for World of Warcraft 1.12.1. Free, open source, and without ads.</p>
+		</div>
+		<a href={resolve('/')} class="btn block text-center">← All addons</a>
+		<a href={REPO_URL} target="_blank" rel="noopener" class="btn block text-center">Source on GitHub</a>
+		<a href={ISSUES} target="_blank" rel="noopener" class="btn block text-center">Open an issue</a>
+	</aside>
+	<div class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
+		<div class="shrink-0 pb-2">
+			<p class="flex min-h-[calc(1lh+0.75rem+2px)] items-center border border-transparent py-1.5 text-muted">The project, your privacy, and how to contribute.</p>
+			<nav class="panel mt-2 grid grid-cols-2 px-1 sm:flex" aria-label="About sections">
+				{#each tabs as tab (tab.id)}
+					<a
+						href={resolve('/about') + (tab.id === 'about' ? '' : `#${tab.id}`)}
+						aria-current={selected === tab.id ? 'page' : undefined}
+						class={['min-w-0 px-2 py-0.5 text-center text-sm font-bold hover:bg-raised hover:text-accent sm:flex-1', selected === tab.id ? 'text-accent' : 'text-muted']}
+						onclick={(event) => {
+							event.preventDefault();
+							goto(event.currentTarget.href, { reset: false });
+						}}
+					>{tab.label}</a>
+				{/each}
+			</nav>
+		</div>
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div class="min-w-0 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={content} role="region" aria-label="About content" tabindex="0">
+		<article class="about-copy leading-relaxed">
+	<section class="panel p-4" hidden={selected !== 'about'}>
+		<h2 class="section-title">About the index</h2>
 		<p class="mt-3">
 			{SITE_NAME} is a community list of addons for the 1.12.1 client of World of Warcraft. It
 			links to where each addon lives; it hosts no addon files itself. Anyone can browse it, and
@@ -37,7 +82,7 @@
 		</p>
 	</section>
 
-	<section class="panel p-4" id="privacy">
+	<section class="panel p-4" id="privacy" hidden={selected !== 'privacy'}>
 		<h2 class="section-title">Privacy</h2>
 		<p class="mt-3">
 			Browsing needs no account, and the site uses no analytics, no ads and no tracking cookies.
@@ -124,7 +169,7 @@
 		</p>
 	</section>
 
-	<section class="panel p-4" id="rules">
+	<section class="panel p-4" id="rules" hidden={selected !== 'rules'}>
 		<h2 class="section-title">Rules for posting</h2>
 		<p class="mt-3">Anyone with an account can post, and nobody reviews an entry first. So:</p>
 		<ul class="mt-1 list-disc space-y-1 pl-5">
@@ -160,7 +205,7 @@
 		</p>
 	</section>
 
-	<section class="panel p-4" id="contact">
+	<section class="panel p-4" id="contact" hidden={selected !== 'contact'}>
 		<h2 class="section-title">Contact</h2>
 		<p class="mt-3">
 			For questions, mistakes in the list or anything about this page,
@@ -169,3 +214,12 @@
 		</p>
 	</section>
 </article>
+		</div>
+	</div>
+</div>
+
+<style>
+	.about-copy :is(p, ul) {
+		max-width: 75ch;
+	}
+</style>

@@ -103,7 +103,8 @@ test('the footer leads to what the site is and what it stores', async ({ page })
 	await page.goto('/');
 	await page.getByRole('link', { name: 'About and privacy' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'About' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
+	await page.getByRole('navigation', { name: 'About sections' }).getByRole('link', { name: 'Privacy', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Privacy', exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'open an issue on GitHub' }).first()).toHaveAttribute('href', /\/issues$/);
 });
 

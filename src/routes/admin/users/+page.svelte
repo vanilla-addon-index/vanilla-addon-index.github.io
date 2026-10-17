@@ -1,4 +1,7 @@
 <script lang="ts">
+	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
+	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
+	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { listUsers, loginsOf, remembered, setAdmin, setBanned, type UserRow } from '#lib/admin.ts';
 	import { ownedBy, ownedText } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
@@ -14,17 +17,24 @@
 	let notice = $state('');
 	let error = $state('');
 
-	async function search() {
+	async function search(term = query.trim()) {
 		try {
-			users = await listUsers(query.trim());
+			const matches = await listUsers(term);
+			if (term !== query.trim()) return;
+			users = matches;
+			error = '';
 			// Only the unfiltered list is worth showing again later.
-			if (!query.trim()) remembered.users = users;
+			if (!term) remembered.users = users;
 			loaded = true;
 		} catch (e) {
-			error = (e as Error).message;
+			if (term === query.trim()) error = (e as Error).message;
 		}
 	}
-	search();
+	$effect(() => {
+		const term = query.trim();
+		const typing = setTimeout(() => search(term), 300);
+		return () => clearTimeout(typing);
+	});
 
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 
@@ -87,22 +97,33 @@
 	<title>Users · {SITE_NAME}</title>
 </svelte:head>
 
-<form
-	class="flex gap-2"
-	onsubmit={(e) => {
-		e.preventDefault();
-		search();
-	}}
->
-	<input class="input" type="search" placeholder="Search by username" aria-label="Search accounts" bind:value={query} />
-	<button class="btn shrink-0">Search</button>
-</form>
+<AdminToolbar>
+<AdminSidebarContent>
+	<div class="panel p-3"><h1 class="text-2xl font-bold">Users</h1><p class="text-muted">Accounts and permissions.</p></div>
+	<div class="panel p-3">
+		<h2 class="label">Displayed accounts</h2>
+		<dl class="space-y-2 text-sm">
+			{#each Object.entries(ROLES) as [role,label]}
+				<div class="flex justify-between gap-2"><dt class="text-muted">{label}</dt><dd>{loaded ? users.filter(user => user.role === role).length : '…'}</dd></div>
+			{/each}
+			<div class="flex justify-between gap-2"><dt class="text-muted">Banned / suspended</dt><dd>{loaded ? users.filter(user => user.banned).length : '…'}</dd></div>
+		</dl>
+	</div>
+	<p class="panel p-3 text-sm text-muted">Search by username. Open a profile to review contributions and recovery options. Only the owner can change admin roles.</p>
+</AdminSidebarContent>
+<input class="input w-full" type="search" placeholder="Search by username" aria-label="Search accounts" bind:value={query} />
+<AdminNavigation />
+</AdminToolbar>
 
-<p class={['mt-2 min-h-[1lh] truncate', error ? 'text-danger' : 'text-accent']} aria-live="polite">
+<div aria-live="polite">
+{#if error || notice}
+<p class={['mb-2 truncate', error ? 'text-danger' : 'text-accent']}>
 	{error || notice}
 </p>
+{/if}
+</div>
 
-<div class="panel mt-1">
+<div class="panel">
 	{#if !loaded}
 		<p class="px-3 py-8 text-center text-muted">Loading accounts…</p>
 	{:else if !users.length}

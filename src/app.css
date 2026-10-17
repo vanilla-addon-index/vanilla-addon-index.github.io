@@ -102,12 +102,14 @@
 }
 
 @layer components {
+	.page-workspace,
 	.admin-workspace {
 		@apply grid items-start gap-4 md:min-h-0 md:grid-cols-[13rem_minmax(0,1fr)];
 		@media (min-width: 48rem) {
 			height: calc(100dvh - var(--header-h) - var(--footer-h) - 1.25rem);
 		}
 	}
+	.page-sidebar,
 	.admin-sidebar {
 		@apply min-w-0 space-y-2 md:max-h-full md:overflow-y-auto md:overscroll-contain;
 	}

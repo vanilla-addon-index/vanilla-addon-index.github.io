@@ -10,6 +10,7 @@ test('a member posts an addon, edits it and deletes it', async ({ page }) => {
 	const address = await postAddon(page, name);
 
 	await page.goto('/account');
+	await page.getByRole('navigation', { name: 'Account sections' }).getByRole('button', { name: 'Your addons', exact: true }).click();
 	await expect(page.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
 
 	await page.goto(address);

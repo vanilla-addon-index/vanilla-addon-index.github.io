@@ -14,12 +14,11 @@
 	] as const;
 </script>
 
-<nav class="panel py-1" aria-label="Admin">
-	<h2 class="label px-3 pt-2">Admin</h2>
+<nav class="panel mt-2 grid grid-cols-2 px-1 sm:flex" aria-label="Admin">
 	{#each tabs as tab (tab.path)}
 		{@const active=page.url.pathname.startsWith(resolve(tab.path))}
 		<a href={resolve(tab.path)} aria-current={active?'page':undefined}
-			class={['flex items-center justify-between gap-2 border-l-2 px-3 py-1 hover:bg-raised',active?'border-accent text-accent':'border-transparent']}>
+			class={['flex min-w-0 items-center justify-center gap-1 px-2 py-0.5 text-center text-sm font-bold transition-colors duration-100 hover:bg-raised hover:text-accent sm:flex-1',active?'text-accent':'text-muted']}>
 			<span>{tab.label}</span>
 			{#if tab.path==='/admin/edits' && editReviews.pending}<span class="text-sm text-accent">{editReviews.pending}</span>{/if}
 			{#if tab.path==='/admin/reports' && reports.open}<span class="text-sm text-accent">{reports.open}</span>{/if}
