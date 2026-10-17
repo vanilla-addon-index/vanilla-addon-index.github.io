@@ -1,4 +1,7 @@
 <script lang="ts">
+	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
+	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
+	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -265,6 +268,18 @@
 	<title>Log · {SITE_NAME}</title>
 </svelte:head>
 
+<AdminToolbar>
+<AdminSidebarContent>
+	<div class="panel p-3"><h1 class="text-2xl font-bold">Log</h1><p class="text-muted">Activity and recovery.</p></div>
+	<dl class="panel p-3"><div class="flex justify-between gap-2"><dt class="text-muted">Loaded entries</dt><dd>{loaded ? entries.length : '…'}</dd></div></dl>
+	<div class="panel p-3">
+	<label class="label" for="log-kind">Kind of action</label>
+	<select id="log-kind" class="input" aria-label="Kind of action" value={filter.kind ?? 'all'} onchange={(event) => narrow({kind:event.currentTarget.value === 'all' ? undefined : event.currentTarget.value})}>
+		{#each Object.entries(GROUPS) as [value,label]}<option {value}>{label}</option>{/each}
+	</select>
+	</div>
+	<p class="panel p-3 text-sm text-muted">Search by person or addon. Expand an entry to inspect its changes and available undo actions.</p>
+</AdminSidebarContent>
 <div class="flex flex-wrap gap-2">
 	<input
 		class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
@@ -274,20 +289,13 @@
 		bind:value={query}
 		oninput={search}
 	/>
-	<select
-		class="input w-auto flex-1 sm:w-44 sm:flex-none"
-		aria-label="Kind of action"
-		value={filter.kind ?? 'all'}
-		onchange={(event) => narrow({ kind: event.currentTarget.value === 'all' ? undefined : event.currentTarget.value })}
-	>
-		{#each Object.entries(GROUPS) as [value, label] (value)}
-			<option {value}>{label}</option>
-		{/each}
-	</select>
 </div>
 
+<AdminNavigation />
+</AdminToolbar>
+
 {#if filter.addonId || filter.by}
-	<p class="mt-2">
+	<p class="mb-2">
 		{#if filter.addonId}History of <span class="font-bold">{historyOf}</span>{/if}
 		{#if filter.by}{filter.addonId ? ', by' : 'Everything done by'} <span class="font-bold">{filter.by}</span>{/if}
 		<button
@@ -301,11 +309,11 @@
 
 <div aria-live="polite">
 	{#if error || notice}
-		<p class={['mt-2 break-words', error ? 'text-danger' : 'text-accent']}>{error || notice}</p>
+		<p class={['mb-2 break-words', error ? 'text-danger' : 'text-accent']}>{error || notice}</p>
 	{/if}
 </div>
 
-<div class="panel mt-2">
+<div class="panel">
 	{#if !loaded}
 		<p class="px-3 py-8 text-center text-muted">Loading the log…</p>
 	{:else if !entries.length}

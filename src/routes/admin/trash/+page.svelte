@@ -1,4 +1,7 @@
 <script lang="ts">
+	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
+	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
+	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { resolve } from '$app/paths';
 	import { TRASH_DAYS, loadTrash, purgeTrash, remembered, restoreAddon, type TrashEntry } from '#lib/admin.ts';
 	import { loadAddons } from '#lib/addons.svelte.ts';
@@ -78,6 +81,19 @@
 	<title>Trash · {SITE_NAME}</title>
 </svelte:head>
 
+<AdminToolbar>
+<AdminSidebarContent>
+	<div class="panel p-3"><h1 class="text-2xl font-bold">Trash</h1><p class="text-muted">Recover removed addons.</p></div>
+	<dl class="panel space-y-2 p-3 text-sm">
+		<div class="flex justify-between gap-2"><dt class="text-muted">Stored entries</dt><dd>{loaded ? entries.length : '…'}</dd></div>
+		<div class="flex justify-between gap-2"><dt class="text-muted">Matching entries</dt><dd>{loaded ? visible.length : '…'}</dd></div>
+		<div class="flex justify-between gap-2"><dt class="text-muted">Retention</dt><dd>{TRASH_DAYS} days</dd></div>
+	</dl>
+	<p class="panel p-3 text-sm text-muted">Restore an addon to recover its saved details. Permanent deletion cannot be undone.</p>
+	{#if auth.isOwner && entries.length}
+		<button class="btn btn-danger w-full" onclick={() => purge(entries.map(entry => entry.id), `Remove all ${entries.length} trashed addons for good?`)}>Empty the trash</button>
+	{/if}
+</AdminSidebarContent>
 <div class="flex flex-wrap gap-2">
 	<input
 		class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
@@ -86,24 +102,23 @@
 		aria-label="Search the trash"
 		bind:value={query}
 	/>
-	{#if auth.isOwner && entries.length}
-		<button
-			class="btn btn-danger"
-			onclick={() => purge(entries.map((e) => e.id), `Remove all ${entries.length} trashed addons for good?`)}
-		>
-			Empty the trash
-		</button>
-	{/if}
 </div>
 
-<p class={['mt-2 min-h-[1lh] truncate', error ? 'text-danger' : 'text-accent']} aria-live="polite">
+<AdminNavigation />
+</AdminToolbar>
+
+<div aria-live="polite">
+{#if error || notice || restored}
+<p class={['mb-2 truncate', error ? 'text-danger' : 'text-accent']}>
 	{error || notice}
 	{#if restored}
 		<a href={resolve('/addon/[slug]', { slug: restored })} class="underline">Open it</a>
 	{/if}
 </p>
+{/if}
+</div>
 
-<div class="panel mt-1">
+<div class="panel">
 	{#if !loaded}
 		<p class="px-3 py-8 text-center text-muted">Loading the trash…</p>
 	{:else if !visible.length}

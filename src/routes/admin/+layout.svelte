@@ -1,11 +1,21 @@
 <script lang="ts">
+	import {setContext, type Snippet} from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '#lib/auth.svelte.ts';
-	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+	let sidebar = $state<Snippet>();
+	let toolbar = $state<Snippet>();
+	setContext('admin-toolbar', { register(content: Snippet) {
+		toolbar = content;
+		return () => { if (toolbar === content) toolbar = undefined; };
+	} });
+	setContext('admin-sidebar', {register(content: Snippet) {
+		sidebar = content;
+		return () => {if (sidebar === content) sidebar = undefined;};
+	}});
 
 	const importing = $derived(page.url.pathname.startsWith(resolve('/admin/import')));
 </script>
@@ -20,11 +30,14 @@
 	{@render children()}
 {:else}
 	<div class="admin-workspace">
-		<aside class="admin-sidebar"><AdminNavigation /></aside>
-		<!-- Keyboard users can focus the content to scroll it without moving navigation. -->
-		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-		<div class="min-w-0 md:h-full md:min-h-0 md:overflow-y-auto md:overscroll-contain" role="region" aria-label="Admin content" tabindex="0">
-			{@render children()}
+		<aside class="admin-sidebar">{@render sidebar?.()}</aside>
+		<div class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
+			<div class="shrink-0 pb-2">{@render toolbar?.()}</div>
+			<!-- Keyboard users can focus the entries while the toolbar stays outside the scroll area. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="min-w-0 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" role="region" aria-label="Admin content" tabindex="0">
+				{@render children()}
+			</div>
 		</div>
 	</div>
 {/if}
