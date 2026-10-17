@@ -109,9 +109,12 @@ test('admins can merge links, pin the leader and restore a merged page from tras
  const picker=page.getByPlaceholder('Merge another addon’s links here…');
  await picker.fill(two); await page.getByRole('option',{name:new RegExp('^'+two)}).click();
  const links=page.locator('aside ol li'); await expect(links).toHaveCount(2);
- await links.nth(1).getByRole('button',{name:'Pin',exact:true}).click();
+ const controls=page.getByRole('region',{name:'Admin controls'});
+ await expect(controls.getByRole('link',{name:'History',exact:true})).toBeVisible();
+ await expect(links.getByRole('button',{name:'Pin',exact:true})).toHaveCount(0);
+ await controls.locator('[data-link-controls]').nth(1).getByRole('button',{name:'Pin',exact:true}).click();
  await expect(links.first()).toContainText('Pinned');
- await links.first().getByRole('button',{name:'Unpin',exact:true}).click();
+ await controls.getByRole('button',{name:'Unpin',exact:true}).click();
  await expect(page.getByText('Pinned',{exact:true})).toHaveCount(0);
  await page.goto('/admin/trash');
  const trashed=page.locator('.panel > div').filter({hasText:two});
