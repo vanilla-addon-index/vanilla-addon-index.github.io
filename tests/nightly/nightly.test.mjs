@@ -31,6 +31,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (name === 'nightly_links' && ['forge-batched', 'forge-late-stop'].includes(scenario)) return json(Array.from({length:9}, (_, i) => ({key:'codeberg.org/a/addon'+i, url:'https://codeberg.org/a/addon'+i, readme:true, images:[]})));
   if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', category_item: scenario.startsWith('category-') ? {name:'ChatThing', description:'Chat addon', category_context:{}} : undefined, readme: !['already-checked', 'category-all'].includes(scenario), images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
   if (name === 'nightly_waiting') return json({reports:0, suggestions:0});
+  if (name === 'retire_dead_links') return json({queued:0,links_removed:0,addons_removed:0});
   return json(0);
  }
  if (url.startsWith('https://codeberg.org/api/')) {
@@ -51,6 +52,7 @@ globalThis.fetch = async (url, init = {}) => {
     top:{entries: scenario === 'confirmed-absence' ? [] : [{name:'Addon.toc',type:'blob'},{name:'README.md',type:'blob'}]}};
    if (scenario === 'directory-failure') {repo.top=null; return json({data:{r0:repo},errors:[{type:'INTERNAL',path:['r0','top']}]});}
    if (scenario === 'metadata-failure') {repo.stargazerCount=null; return json({data:{r0:repo},errors:[{type:'INTERNAL',path:['r0','stargazerCount']}]});}
+   if (scenario === 'missing-repo') return json({data:{r0:null},errors:[{type:'NOT_FOUND',path:['r0'],message:'Not found'}]});
    if (scenario === 'history-failure') {repo.code=null; return json({data:{r0:repo},errors:[{type:'INTERNAL',path:['r0','code']}]});}
    const data = Object.fromEntries([...query.matchAll(/r(\\d+): repository\\(owner: "([^"]+)", name: "([^"]+)"/g)].map(([, n, owner, name]) => ['r'+n, {...repo, nameWithOwner:owner+'/'+name}]));
    return json({data});
@@ -101,6 +103,15 @@ test('a failed repository field cannot overwrite known facts with defaults', () 
 	const calls = run('metadata-failure');
 	assert.ok(!calls.some((c) => c.name === 'store_repo_stats'));
 	assert.equal(calls.find((c) => c.name === 'store_code_updates').args.updates.length, 1);
+});
+
+test('nightly retirement receives only confirmed missing repositories after their facts are saved', () => {
+	for (const scenario of ['missing-repo', 'metadata-failure', 'confirmed-absence']) {
+		const calls = run(scenario);
+		const retirement = calls.findIndex(c => c.name === 'retire_dead_links');
+		assert.deepEqual(calls[retirement].args.keys, scenario === 'missing-repo' ? ['github.com/a/addon'] : []);
+		if (scenario === 'missing-repo') assert.ok(retirement > calls.findLastIndex(c => c.name === 'store_repo_stats'));
+	}
 });
 
 test('missing nightly configuration fails instead of silently skipping the import', () => {
@@ -194,7 +205,7 @@ test('diagnostics distinguish network requests, field failures, unchanged dates 
 	assert.equal(metrics.phases['GitHub .toc'].attempts, 1);
 	assert.equal(metrics.phases['GitHub README'].attempts, 1);
 	assert.equal(metrics.phases['Database reads'].attempts, 2);
-	assert.equal(metrics.phases['Database writes'].attempts, 7);
+	assert.equal(metrics.phases['Database writes'].attempts, 8);
 	assert.equal(metrics.counters.commit_dates_left_unchanged, 0);
 	assert.equal(metrics.counters.cache_hits, 0);
 	assert.match(stdout, /\[Nightly\] GitHub metadata 1\/1/);

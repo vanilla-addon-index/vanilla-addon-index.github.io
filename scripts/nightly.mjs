@@ -7,6 +7,8 @@
 //      kept there (stars, last update, archived, fork parent, current address, and the
 //      game version its .toc file declares) and stores the answers for the review page.
 //      GitHub is asked with the workflow's own token; the others need none.
+//      Confirmed missing links are filed separately from rejections and removed from
+//      published entries; a page stays live as long as it has another link.
 //   5. Looks at the screenshots of each queued entry, once: keeps the wiki's that still
 //      load, adds the ones in the repository's README, and stores them for the review.
 //
@@ -296,6 +298,7 @@ async function flushProgress() {
 
 // Entries on unsupported hosts can already have completed their screenshot checks.
 await saveProgress();
+
 const withToc = [];
 // Queued entries whose README is needed for screenshots or category evidence.
 const withReadme = [];
@@ -616,6 +619,10 @@ for (const outcome of outcomes) if (outcome.status === 'rejected') {
 	process.exitCode = 1;
 }
 await saveProgress();
+
+// Only explicit missing answers from this run qualify; failed checks keep live links.
+const retired = await db('retire_dead_links', { keys: stats.filter(row => row.missing).map(row => row.key) });
+console.log(`Dead links: ${retired.queued} imports filed, ${retired.links_removed} live links removed, ${retired.addons_removed} addons removed.`);
 
 console.log(`Processed ${saved.stats} repository fact records, commit dates for ${saved.dates} addon links, and ${saved.pictures} completed screenshot checks; unanswered checks retain their last known facts.`);
 

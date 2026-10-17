@@ -12,6 +12,12 @@ and manage your own entries.
 - **GitHub Actions** imports wiki candidates for admin review, checks repositories
   daily, refreshes the published site when needed, and makes encrypted backups.
 
+Confirmed unavailable repositories are automatically filed under **Decided → Dead
+links**, separately from admin rejections. Nightly removes dead links from published
+addons, keeping any working alternatives. An addon leaves the live list when its last
+link is gone; its details are preserved in the dead-link record and normal trash.
+Unanswered checks, temporary host failures and archived repositories stay unchanged.
+
 The snapshot keeps browsing fast and available during database outages. Recent
 posts and edits are fetched separately. See [the architecture guide](docs/architecture.md)
 for the data flow and freshness limits.
