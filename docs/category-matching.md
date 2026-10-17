@@ -23,6 +23,16 @@ and their existing Raid & Party or Chat & Social categories. It does not recateg
 the whole database using keywords. Future import suggestions use the scoring rules,
 and admins can still choose another category.
 
+## Roleplay
+
+Roleplay covers dedicated RP tools: character profiles, RP items, notebooks for
+RP players and character speech/emote helpers. The initial migration moves TurtleRP,
+Erea-RP, RoleplayingHelper and Journal from Chat & Social using their audited slugs.
+Import scoring recognizes these tools and explicit roleplaying purpose phrases.
+General emotes, ordinary player notes, translation addons and immersive quest panels
+do not become RP tools just because roleplayers might use them. Admins can still
+choose another category during review.
+
 ## Repository evidence
 
 The nightly job now gathers extra category evidence for every pending repository import,
