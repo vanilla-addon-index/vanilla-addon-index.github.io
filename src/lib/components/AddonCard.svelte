@@ -48,27 +48,29 @@
 			{blurb}
 		</span>
 	</span>
-	<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto">
-		{addon.category}
-	</span>
-	<span class="col-span-2 row-start-3 flex min-w-0 items-center sm:col-span-1 sm:row-start-auto">
-		{#if host}
-			<svelte:element
-				this={preview ? 'span' : 'a'}
-				href={preview ? undefined : addon.repo_url}
-				target={preview ? undefined : '_blank'}
-				rel={preview ? undefined : 'noopener nofollow'}
-				class={[
-					'relative shrink-0 border border-border px-1.5 font-sans text-sm leading-tight text-muted',
-					!preview && 'transition-colors duration-100 hover:bg-raised hover:text-fg'
-				]}
-			>
-				<span class="invisible" aria-hidden="true">{WIDEST} ↗</span>
-				<span class="absolute inset-x-1.5 inset-y-0 flex items-center justify-between gap-1">
-					<span class="truncate">{host}</span>
-					<span aria-hidden="true">↗</span>
-				</span>
-			</svelte:element>
-		{:else}<span class="text-sm text-muted">No download links</span>{/if}
+	<span class="contents sm:flex sm:items-center sm:justify-end sm:gap-4">
+		<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
+			{addon.category}
+		</span>
+		<span class="col-span-2 row-start-3 flex min-w-0 items-center sm:col-span-1 sm:row-start-auto sm:justify-end">
+			{#if host}
+				<svelte:element
+					this={preview ? 'span' : 'a'}
+					href={preview ? undefined : addon.repo_url}
+					target={preview ? undefined : '_blank'}
+					rel={preview ? undefined : 'noopener nofollow'}
+					class={[
+						'relative shrink-0 border border-border px-1.5 font-sans text-sm leading-tight text-muted',
+						!preview && 'transition-colors duration-100 hover:bg-raised hover:text-fg'
+					]}
+				>
+					<span class="invisible" aria-hidden="true">{WIDEST} ↗</span>
+					<span class="absolute inset-x-1.5 inset-y-0 flex items-center justify-between gap-1">
+						<span class="truncate">{host}</span>
+						<span aria-hidden="true">↗</span>
+					</span>
+				</svelte:element>
+			{:else}<span class="text-sm text-muted">No download links</span>{/if}
+		</span>
 	</span>
 </div>

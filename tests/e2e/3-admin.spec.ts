@@ -293,7 +293,7 @@ test('the owner makes a member an admin and takes the role away again; an admin 
 	await page.getByRole('button', { name: 'Make admin' }).click();
 	await confirm(page, 'Make admin');
 	await expect(page.getByText('member2 is an admin.')).toBeVisible();
-	await expect(page.getByRole('complementary').getByText('Admin', { exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Admin content', exact: true }).getByRole('complementary').getByText('Admin', { exact: true })).toBeVisible();
 	await page.goto('/admin/log?kind=user');
 	await expect(logLine(page, /owner made an admin of member2/)).toBeVisible();
 
