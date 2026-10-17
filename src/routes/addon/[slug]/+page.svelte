@@ -236,44 +236,26 @@
                                 </dd></div>
                             </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
-                            {#if auth.isAdmin}
-                                <div class="mt-1 flex flex-wrap gap-2">
-                                    <button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
-                                    {#if addon.versions.length > 1}<a class="btn px-2 py-0.5 text-sm" href={resolve('/submit') + '?split=' + addon.id + '&link=' + encodeURIComponent(version.url)}>Separate addon</a>{/if}
-                                </div>
-                            {/if}
                             {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
 					{/each}
 				</ol>
 			</div>
 
-            {#if auth.isAdmin && addon.owner_name}
-                <dl class="panel flex justify-between gap-4 px-3 py-1.5"><dt class="text-muted">Posted by</dt><dd class="truncate"><UserLink name={addon.owner_name} /></dd></dl>
-            {/if}
-
             {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
 			<FavoriteButton addonId={addon.id} />
             {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>{addon.versions.length ? 'Add another link' : 'Add a link'}</a>{/if}
             {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
             {#if auth.session && pending && !auth.isAdmin}<div class="panel px-3 py-2 text-sm"><p>Your edit is waiting for admin review.</p><button class="btn mt-2" onclick={withdraw}>Withdraw proposal</button></div>{/if}
-			{#if canEdit(addon.owner)}
+			{#snippet editControls()}
 				<div class="grid grid-cols-2 gap-2">
 					<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn">Edit</a>
 					<button class="btn btn-danger" onclick={remove}>Delete</button>
 				</div>
+			{/snippet}
+			{#if !auth.isAdmin && canEdit(addon.owner)}
+				{@render editControls()}
 			{/if}
-			{#if auth.isAdmin}
-				<!-- Every change ever made to this entry, each with its way back. -->
-				<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn w-full">History</a>
-				<!-- The addon found here joins this one's group; this one's main version stays main. -->
-				<AddonPicker
-					placeholder="Merge another addon’s links here…"
-					exclude={(other) => other.id === addon.id}
-					onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
-				/>
-			{/if}
-			{#if error}<p class="text-danger">{error}</p>{/if}
 
 			<!-- For anyone who spots a dead link or something harmful. Reporting needs an
 			     account, so a visitor is sent to log in first. -->
@@ -288,6 +270,31 @@
 					{/if}
 				</p>
 			{/if}
+			{#if auth.isAdmin}
+				<section aria-label="Admin controls" class="mt-4 space-y-2 border-t border-border pt-3">
+					<h2 class="label">Admin controls</h2>
+					{#if addon.owner_name}
+						<dl class="flex justify-between gap-4 text-sm"><dt class="text-muted">Posted by</dt><dd class="truncate"><UserLink name={addon.owner_name} /></dd></dl>
+					{/if}
+					{#if canEdit(addon.owner)}{@render editControls()}{/if}
+					<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn w-full">History</a>
+					<AddonPicker
+						placeholder="Merge another addon’s links here…"
+						exclude={(other) => other.id === addon.id}
+						onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
+					/>
+					{#each addon.versions as version (version.url)}
+						<div class="space-y-1 border-t border-border pt-2" data-link-controls>
+							<p class="break-all text-sm text-muted">{version.url}</p>
+							<div class="flex flex-wrap gap-2">
+								<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
+								{#if addon.versions.length > 1}<a class="btn px-2 py-0.5 text-sm" href={resolve('/submit') + '?split=' + addon.id + '&link=' + encodeURIComponent(version.url)}>Separate addon</a>{/if}
+							</div>
+						</div>
+					{/each}
+				</section>
+			{/if}
+			{#if error}<p class="text-danger">{error}</p>{/if}
 		</aside>
 		<ReportDialog bind:this={report} {addon} />
 	</article>
