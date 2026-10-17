@@ -8,6 +8,21 @@ Uncertain imports have a blank category, including no-evidence entries whose exp
 
 Import review evaluates confidence using current rules, independently of the selected category. Evidence remains available in the scoring module for diagnostics; the review UI omits explanations and only shows actionable status messages. Alternative wiki links may inherit a category without their own descriptive evidence; an uncertain review still requires an explicit choice. Deploy refresh writes current guesses, including blanks, into pending queue entries; published categories are not rewritten.
 
+## Loot Distribution
+
+Loot Distribution covers DKP, EPGP and effort-point systems, their companion tools,
+loot councils, soft-reserve allocation, roll management and master-loot distribution.
+Specific allocation phrases and audited addon names outweigh broad raid, guild, chat
+and auction vocabulary. A mention of loot alone does not qualify: loot-table browsers,
+personal notifications, loot-window replacements and raid scheduling remain in their
+existing categories. Master-loot reminders and general loot-history tracking are also
+outside the initial scope.
+
+The category migration moves the 23 audited published entries using explicit slugs
+and their existing Raid & Party or Chat & Social categories. It does not recategorize
+the whole database using keywords. Future import suggestions use the scoring rules,
+and admins can still choose another category.
+
 ## Repository evidence
 
 The nightly job now gathers extra category evidence for every pending repository import,

@@ -4,6 +4,7 @@ type Category = (typeof CATEGORIES)[number];
 const CATEGORY_RULES: [Category, RegExp][] = [
 	['Libraries', /\b[Ll]ib[A-Z]\w+/],
 	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
+	['Loot Distribution', /\b(?:dkp|ep[\s/-]?gp|effort points?|gear points?)\b/i],
 	['Boss Mods', /\b(boss ?mods?|boss(es)?\b|bigwigs|dbm|deadly boss|encounters?\b|raid warnings?\b|loatheb|c'?thun|nefarian|four horsemen|4hm)/i],
 	// Character/inspect panels are interface addons even when they list gear or spells.
 	['UI & Appearance', /\b(character|inspect(?:ion)?)(?:\s+stats?)?\s+(panels?|panes?|windows?|screens?|frames?)\b/i],
@@ -22,7 +23,7 @@ const CATEGORY_RULES: [Category, RegExp][] = [
 	['Professions', /\b(professions?|trade ?skills?|craft(s|ing)?|recipes?|fishing|herbs?|herbalism|minerals?|mining|enchanting|disenchant(s|ing)?|alchemy|cooking)\b/i],
 	['PvP', /\b(pvp|battlegrounds?|battlefield|bgs?|av|ab|wsg|alterac valley|arathi basin|warsong gulch|arena|honor|flags?|enemy players?)\b/i],
 	['Class', /\b(warriors?|paladins?|pally|hunters?|rogues?|priests?|shamans?|mages?|warlocks?|druids?|feral|totems?|pets?|stance|shapeshift(ed|ing)?|shift|talents?|brainwash(er|ing)?|poisons?|shards?|soulstones?|curses?|librams?|combo points?|feign)\b/i],
-	['Raid & Party', /\b(raids?|raider|party|loot(ing)?|rolls?|dkp|epgp|groups?|assignments?|ready check|heal(s|er|ers|ing)?|tanks?)\b/i],
+	['Raid & Party', /\b(raids?|raider|party|loot(ing)?|rolls?|groups?|assignments?|ready check|heal(s|er|ers|ing)?|tanks?)\b/i],
 	['Combat', /\b(combat|damage|dps|threat|aggro|cast(s|ing)? ?bars?|cast(s|ing)?|spells?|swing ?timers?|cooldowns?|meter|crit|attack|interrupts?|procs?|rage|energy|mana|kills?|taunts?)\b/i],
 	// General vocabulary remains evidence, alongside the stronger purpose rules below.
 	['Macros', /\bmacros?\b/i],
@@ -54,6 +55,10 @@ const apart = (name: string) => name.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
 
 // Specific purposes are stronger evidence than broad feature vocabulary.
 const PURPOSES: [Category, RegExp, number?][] = [
+	// Audited allocation tools include companion displays and standby EP management.
+	// Do not infer this category from "loot" alone: loot browsers and notifications differ.
+	['Loot Distribution', /^(?:DKPList|DKPAuctionBidder|WebDKPElysium|DPEPGP|EZ-EPGP|EPGPexport|GuildRoll|TitanGuild|ChaosReserves|ChatLootBidder|EasyLoot|LootRes|RollFor|RoundRobinhood|LootBlare(?:2\.0)?|RaidRollBuddy|RaidRollHelper|SmartRoll|CleanRolls|XckMasterLootAdvanced|AutoMasterLooter|MasterLootByClass)$/i, 14],
+	['Loot Distribution', /\b(?:loot distribution|loot (?:allocation|council|manager|management|assignment)|(?:dkp|ep[\s/-]?gp)\s+(?:manager|management|addon|auctions?|loot system)|(?:effort|gear) points?\s+(?:manager|management|system)|(?:soft reserve|soft-reserve) loot systems?|master[ -]?loot(?:er)?\s+(?:addon|assignment|distribution|automation)|(?:assign(?:ing)?|distribut(?:e|ing))\s+(?:raid\s+)?loot|(?:group loot|raid loot|loot) rolls?)\b/i, 24],
 	['Libraries', /\b(?:library addon|function library|embedded librar(?:y|ies))\b/i, 11],
 	['Class', /\b(?:for\s+(?:warriors?|paladins?|hunters?|rogues?|priests?|shamans?|mages?|warlocks?|druids?)|(?:warrior|paladin|hunter|rogue|priest|shaman|mage|warlock|druid)\s+(?:swing timer|rotation|auto shot))\b/i, 11],
 	['Class', /\b(?:warrior|paladin|hunter|rogue|priest|shaman|mage|warlock|druid)\s+combat addon\b/i, 14],
@@ -74,7 +79,7 @@ const PURPOSES: [Category, RegExp, number?][] = [
 	['Tooltip', /\b(?:tooltip\s+(?:replacement|enhancement|addon)|adds?\s+(?:information|stats?)\s+to\s+(?:item\s+)?tooltips?)\b/i],
 	['Professions', /\b(?:crafting|trade\s*skill|profession)\s+(?:helper|window|addon|manager)|\b(?:profession|recipe)\s+(?:database|tracker|tracking)|\bGUI for (?:the )?\w+ Profession\b/i],
 	['PvP', /\b(?:pvp|battleground|honor)\s+(?:tracker|tracking|helper|addon)|\b(?:tracks?|displays?)\s+(?:your\s+)?honor\b/i],
-	['Raid & Party', /\b(?:loot distribution|loot (?:manager|council)|(?:dkp|epgp)\s+(?:manager|management|addon)|raid assignments?|ready check)\b/i],
+	['Raid & Party', /\b(?:raid assignments?|ready check)\b/i],
 	['Combat', /\b(?:damage meters?|combat (?:logging|log|addon)|cast\s*bar\s+(?:addon|replacement)|threat\s+(?:meter|tracker))\b/i]
 ];
 
