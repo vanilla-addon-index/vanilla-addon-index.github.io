@@ -118,7 +118,7 @@
 			label: 'Fork of', value: forkParent?.name ?? stats!.fork_of!,
 			href: forkParent ? resolve('/addon/[slug]', {slug: forkParent.slug}) : `https://${stats!.fork_of!}`
 		});
-		if (similar) notes.push({ label: 'Similar name', value: similar.name, tone: 'warning', href: resolve('/addon/[slug]', {slug: similar.slug}) });
+		if (similar) notes.push({ label: 'Name variant of', value: similar.name, tone: 'warning', href: resolve('/addon/[slug]', {slug: similar.slug}) });
 		if ((queuedNames.get(name) ?? 0) > 1) notes.push({ label: 'Queue', value: 'Same name twice', tone: 'warning' });
 		if (movedTo) notes.push({ label: 'Moved to', value: movedTo });
 		if (item.parent) notes.push({ label: 'Extends', value: item.parent });

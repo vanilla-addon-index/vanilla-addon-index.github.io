@@ -17,7 +17,7 @@ test('fork grouping follows the published parent link regardless of name',()=>{
  assert.equal(publishedForkParent('github.com/owner/collection',[addon(3,'Folder','https://github.com/owner/collection/tree/main/Folder')]),undefined);
 });
 
-test('similar-name suggestions recognize short addon names at word boundaries',()=>{
+test('variant suggestions require recognized labels around complete addon names',()=>{
  const aux=addon(1,'Aux','https://github.com/a/aux');
  assert.equal(similarAddon('Aux-Revamped-Opaque',[aux]),aux);
  assert.equal(similarAddon('AUX revamped',[aux]),aux);
@@ -28,4 +28,22 @@ test('similar-name suggestions recognize short addon names at word boundaries',(
  assert.equal(similarAddon('Aux-Revamped-Opaque',[aux,longer]),longer);
  assert.equal(similarAddon('Aux-Revamped-Opaque',[aux,{...aux,id:3}]),undefined);
  assert.equal(similarAddon('MyUI addon',[addon(4,'UI','https://github.com/a/ui')]),undefined);
+});
+
+test('port labels support prefixes, suffixes, combinations and punctuation',()=>{
+ const base=addon(1,'BuffBlock','https://github.com/a/BuffBlock');
+ for(const name of ['BuffBlock-TW','BuffBlock TW','BuffBlockTW','BuffBlock-TWoW','BuffBlock Turtle','BuffBlock-for-Turtle-WoW','OctoBuffBlock','BuffBlock_Octo','Vanilla-BuffBlock','BuffBlockVanillaFixed','BuffBlock-ClassicAPI','BuffBlock-1.12','BuffBlock-1.12.1','TW-BuffBlock-fixed','BuffBlock-Revamped-Opaque']) {
+  assert.equal(similarAddon(name,[base]),base,name);
+  assert.equal(similarAddon('BuffBlock',[{...base,name}])?.name,name,name);
+ }
+});
+
+test('shared words and unapproved modifiers do not imply versions',()=>{
+ const combat=addon(1,'Combat','https://github.com/a/Combat');
+ for(const name of ['CombatAlert','CombatLedger','CombatLoggingReminder','CombatPlates','Combat-TW-Alert','CombatPlus','ImprovedCombat','Combat-extra','Combat-Classic','Combat-OC','Combat-Reforged'])
+  assert.equal(similarAddon(name,[combat]),undefined,name);
+ for(const name of ['Twilight','Octopus','Vanillaware'])
+  assert.equal(similarAddon(name,[addon(2,name.slice(2),'https://github.com/a/test')]),undefined,name);
+ const variants=['BuffBlock-TW','BuffBlock-Octo'].map((name,i)=>addon(i,name,'https://github.com/a/test'));
+ assert.equal(similarAddon('BuffBlock-Vanilla',variants),undefined);
 });

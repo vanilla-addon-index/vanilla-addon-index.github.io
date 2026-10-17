@@ -25,18 +25,37 @@ export function publishedForkParent(parent: string | null | undefined, addons: A
  return matches.length === 1 ? matches[0] : undefined;
 }
 
-/** Suggest whole-name extensions, including short names such as Aux, without
- * treating letters inside an unrelated word (Auxiliary) as a name match. */
+// Only explicit port and variant labels may surround a complete addon name.
+const VARIANT_LABELS = ['tw', 'twow', 't wo w', 't wow', 'turtle', 'turtle wow', 'turtle wo w', 'for turtle wow', 'for turtle wo w', 'octo',
+ 'vanilla', 'vanilla port', 'classic api', '1 12', '1 12 1', 'fixed', 'revamped', 'opaque'];
+
+function nameForms(name: string): Set<string> {
+ const words = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+  .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2').toLowerCase().match(/[a-z0-9]+/g) ?? [];
+ const forms = new Set<string>();
+ const visit = (parts: string[]) => {
+  const key = parts.join('');
+  if (key.length < 3 || forms.has(key)) return;
+  forms.add(key);
+  for (const label of VARIANT_LABELS) {
+   const tokens = label.split(' ');
+   if (tokens.length >= parts.length) continue;
+   if (tokens.every((word, i) => parts[i] === word)) visit(parts.slice(tokens.length));
+   if (tokens.every((word, i) => parts[parts.length - tokens.length + i] === word)) visit(parts.slice(0, -tokens.length));
+  }
+ };
+ visit(words);
+ return forms;
+}
+
+/** Match complete names after removing known port labels; ambiguous matches stay manual. */
 export function similarAddon(name: string, addons: Addon[]): Addon | undefined {
- const words = (value: string) => value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().match(/[a-z0-9]+/g) ?? [];
- const wanted = words(name);
+ const wanted = nameForms(name);
+ const plain = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
  const candidates = addons.flatMap(addon => {
-  const other = words(addon.name);
-  const [short, long] = wanted.length <= other.length ? [wanted, other] : [other, wanted];
-  const length = short.join('').length;
-  if (length < 3 || wanted.join('') === other.join('')) return [];
-  const contains = long.some((_, start) => short.every((word, i) => long[start + i] === word));
-  return contains ? [{addon, length}] : [];
+  if (plain(name) === plain(addon.name)) return [];
+  const shared = [...nameForms(addon.name)].filter(form => wanted.has(form));
+  return shared.length ? [{addon, length: Math.max(...shared.map(form => form.length))}] : [];
  }).sort((a,b) => b.length - a.length);
  return candidates.length && candidates[0].length !== candidates[1]?.length ? candidates[0].addon : undefined;
 }
