@@ -66,8 +66,18 @@ guaranteed deletion or publication deadline.
 
 [Nightly](../.github/workflows/nightly.yml) reads the Turtle WoW wiki into a pending
 queue for admin review. It then checks every supported published and pending
-repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old, inactive and
-previously missing repositories keep the same daily coverage.
+repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old and inactive
+repositories keep the same daily coverage while published or pending.
+
+After saving successful checks, Nightly files confirmed missing repositories under
+**Decided → Dead links**. These are not admin rejections and require no decision.
+Only explicit missing answers from the current run qualify for live removal; timeouts,
+rate limits, unsupported hosts and other unanswered checks preserve existing entries.
+Archived repositories remain available and are not removed. Dead links are removed
+individually from multi-link addons; only an addon with no remaining links leaves the
+live list. Each removed link retains a full addon snapshot in the private queue, and
+deleted addons also enter the normal trash. Filed dead links are not automatically
+republished or rechecked once they are no longer published or pending.
 
 Category suggestions use [weighted evidence and confidence](category-matching.md)
 from the addon name and description. Import review only shows actionable status messages.

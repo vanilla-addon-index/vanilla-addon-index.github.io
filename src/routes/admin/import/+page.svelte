@@ -16,14 +16,13 @@
 		all: 'All',
 		fine: 'Looks fine',
 		duplicate: 'Possible versions',
-		wiki: 'Wiki pages',
-		dead: 'Dead links'
+		wiki: 'Wiki pages'
 	} as const;
-	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete' | 'problem';
+	type Verdict = Exclude<keyof typeof FILTERS, 'all'> | 'incomplete' | 'problem' | 'dead';
 	// Review buckets are exclusive: missing details and repository issues need review
 	// before an entry can be treated as fine or as a possible version.
-	// "rejected" is not a filter on the queue but a second list: what was turned down.
-	type View = keyof typeof FILTERS | 'incomplete' | 'rejected';
+	// Decided lists are separate: manual rejections and automatically filed dead links.
+	type View = keyof typeof FILTERS | 'incomplete' | 'rejected' | 'dead';
 
 	// The interface number a 1.12 addon declares in its .toc file.
 	const VANILLA_INTERFACE = 11200;
@@ -135,7 +134,9 @@
 		return { verdict: 'fine', advice: 'Ready', notes };
 	}
 
-	const reviewed = $derived(imports.items.map((item) => ({ item, ...review(item) })));
+	const pendingDead = $derived(imports.items.filter(item => imports.stats[item.key]?.missing));
+	const deadEntries = $derived([...new Map([...pendingDead, ...imports.dead].map(item => [item.id, item])).values()].sort((a, b) => a.name.localeCompare(b.name)));
+	const reviewed = $derived(imports.items.filter(item => !imports.stats[item.key]?.missing).map((item) => ({ item, ...review(item) })));
 	const totals = $derived(Object.groupBy(reviewed, (r) => r.verdict));
 
 	const matches = (item: QueueItem) => {
@@ -150,11 +151,12 @@
 				(view === 'all' || verdict === view) && matches(item)
 		)
 	);
-	const visibleRejected = $derived(imports.rejected.filter(matches));
-	const total = $derived(view === 'rejected' ? visibleRejected.length : visible.length);
+	const decided = $derived(view === 'dead' ? deadEntries : imports.rejected);
+	const visibleRejected = $derived(decided.filter(matches));
+	const total = $derived(view === 'rejected' || view === 'dead' ? visibleRejected.length : visible.length);
 	const page = $derived(visible.slice(0, shown));
 	const pageRejected = $derived(visibleRejected.slice(0, shown));
-	const onPage = $derived(view === 'rejected' ? pageRejected.length : page.length);
+	const onPage = $derived(view === 'rejected' || view === 'dead' ? pageRejected.length : page.length);
 
 	function show(next: View) {
 		view = next;
@@ -197,6 +199,7 @@
 		const key = event.key.toLowerCase();
 		if (key === 'j' || key === 'arrowdown') move(1);
 		else if (key === 'k' || key === 'arrowup') move(-1);
+		else if (view === 'dead') return;
 		else if (view === 'rejected') {
 			const item = pageRejected[current];
 			if (!item || key !== 'u') return;
@@ -265,7 +268,7 @@
 					<p class="text-muted">From the {WIKI_NAME}</p>
 				</div>
 				<dl>
-					{#each [['Waiting', imports.counts.pending], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected]] as [label, value] (label)}
+					{#each [['Waiting', imports.counts.pending - pendingDead.length], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected], ['Dead links', deadEntries.length]] as [label, value] (label)}
 						<div class="flex justify-between border-b border-border px-3 py-1.5 last:border-b-0">
 							<dt class="text-muted">{label}</dt>
 							<dd>{value}</dd>
@@ -300,12 +303,15 @@
 				{@render choice('incomplete', 'Needs review', incomplete)}
 				<h2 class="label mt-2 border-t border-border px-3 pt-3">Decided</h2>
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
+				{@render choice('dead', 'Dead links', deadEntries.length)}
 			</div>
 
 			<div class="panel px-3 py-2 text-sm text-muted">
 				<h2 class="label">Keys</h2>
 				<p>J / K or ↓ / ↑ to move</p>
-				{#if view === 'rejected'}
+				{#if view === 'dead'}
+					<p>Dead repositories are filed automatically.</p>
+				{:else if view === 'rejected'}
 					<p>U to put back in the queue</p>
 				{:else}
 					<p>A approve · E edit the name</p>
@@ -319,7 +325,7 @@
 			<input
 				class="input"
 				type="search"
-				placeholder={view === 'rejected' ? 'Search the rejected entries' : 'Search the queue'}
+				placeholder={view === 'dead' ? 'Search dead links' : view === 'rejected' ? 'Search the rejected entries' : 'Search the queue'}
 				aria-label="Search"
 				bind:value={query}
 				oninput={() => {
@@ -335,18 +341,22 @@
 			</div>
 
 			<div class="panel mt-2">
-				{#if view === 'rejected'}
-					{#if !imports.rejectedLoaded}
-						<p class="px-3 py-8 text-center text-muted">Loading the rejected entries…</p>
+				{#if view === 'rejected' || view === 'dead'}
+					{#if view === 'dead' ? !imports.loaded : !imports.rejectedLoaded}
+						<p class="px-3 py-8 text-center text-muted">{view === 'dead' ? 'Loading dead links…' : 'Loading the rejected entries…'}</p>
 					{:else if !pageRejected.length}
 						<p class="px-3 py-8 text-center text-muted">
-							{imports.rejected.length ? 'No rejected entry matches.' : 'Nothing has been rejected.'}
+							{view === 'dead' ? (deadEntries.length ? 'No dead link matches.' : 'No dead links.') : (imports.rejected.length ? 'No rejected entry matches.' : 'Nothing has been rejected.')}
 						</p>
 					{:else}
 						{#each pageRejected as item, index (item.id)}
 							{#snippet body()}
 								<div class="mt-1.5">
-									<button class="btn py-1" onclick={() => restoreOne(item)}>Put back in the queue</button>
+									{#if view === 'dead'}
+										<p class="text-sm text-muted">Repository no longer available · filed automatically</p>
+									{:else}
+										<button class="btn py-1" onclick={() => restoreOne(item)}>Put back in the queue</button>
+									{/if}
 								</div>
 							{/snippet}
 							{@render entry(item, index, body)}
