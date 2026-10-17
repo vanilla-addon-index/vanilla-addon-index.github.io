@@ -47,7 +47,7 @@ test('import review keeps letter-key choices after closing and publishes that ca
 	await page.keyboard.press('o');
 	await expect(category).toHaveValue('Combat');
 	await page.keyboard.press('ArrowDown');
-	await expect(category).toHaveValue('Libraries');
+	await expect(category).toHaveValue('Hardcore');
 	await page.keyboard.press('ArrowUp');
 	await expect(category).toHaveValue('Combat');
 	await entry.getByLabel('Description',{exact:true}).click();

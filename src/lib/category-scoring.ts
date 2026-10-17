@@ -6,6 +6,7 @@ const CATEGORY_RULES: [Category, RegExp][] = [
 	['Libraries', /\b(library|libraries|ace2|ace ?addon|embedded)\b/i],
 	['Loot Distribution', /\b(?:dkp|ep[\s/-]?gp|effort points?|gear points?)\b/i],
 	['Roleplay', /\b(?:role[ -]?play(?:ing)?|rp)\b/i],
+	['Hardcore', /\bhard[ -]?core\b/i],
 	['Boss Mods', /\b(boss ?mods?|boss(es)?\b|bigwigs|dbm|deadly boss|encounters?\b|raid warnings?\b|loatheb|c'?thun|nefarian|four horsemen|4hm)/i],
 	// Character/inspect panels are interface addons even when they list gear or spells.
 	['UI & Appearance', /\b(character|inspect(?:ion)?)(?:\s+stats?)?\s+(panels?|panes?|windows?|screens?|frames?)\b/i],
@@ -56,6 +57,10 @@ const apart = (name: string) => name.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
 
 // Specific purposes are stronger evidence than broad feature vocabulary.
 const PURPOSES: [Category, RegExp, number?][] = [
+	// Audited Hardcore tools, including the agreed self-found and trading companions.
+	// Never infer Hardcore from "HC", generic death logging, or PvP warnings alone.
+	['Hardcore', /^(?:CliffTells|Deathlog|HardcoreAlarms|HardcoreDeath|HCDeaths|HCFilter|HCRank|HCWarn|HC-TradeBoard|RipMap|SelfFound|TurtleChatColors|TurtleHardcoreChatTamer)$/i, 14],
+	['Hardcore', /\b(?:hard[ -]?core (?:deaths?|chat|guild|alarms?|warnings?|challenge)|(?:for|aimed at|designed for|primarily for) (?:turtle(?: wow)?(?:'s)? )?hard[ -]?core (?:players?|characters?))\b/i, 24],
 	// Dedicated RP tools, not general emotes, player notes or immersive quest panels.
 	['Roleplay', /^(?:TurtleRP|Erea-RP|RoleplayingHelper|Journal)$/i, 14],
 	['Roleplay', /\b(?:role[ -]?play(?:ing)?|rp)\s+(?:addons?|players?|items?|profiles?|characters?|events?|tools?)\b/i, 24],

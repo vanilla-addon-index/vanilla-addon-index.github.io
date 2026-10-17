@@ -150,3 +150,37 @@ test('every category receives the same bonus for name evidence', () => {
   assert.equal(suggest(name, 'Supports unit frames and action bars.').category, category, name);
  }
 });
+
+
+test('Hardcore tools outrank their incidental map, chat, tooltip and trading features', () => {
+	for (const [name, description] of [
+		['CliffTells', 'Announces guild deaths, levels and Inferno milestones'],
+		['Deathlog', 'Death heatmap overlay for the world map with danger indicator'],
+		['HardcoreAlarms', 'Configurable alarms for low HP and dangerous quests'],
+		['HardcoreDeath', 'Announces how you died in the hardcore challenge'],
+		['HCDeaths', 'Displays and logs hardcore deaths on Turtle WoW'],
+		['HCFilter', 'Filter the HC channel messages'],
+		['HCRank', 'Adds death information to tooltips for mobs and players'],
+		['HCWarn', 'Helps prevent accidental PvP flagging and warns when flagged'],
+		['HC-TradeBoard', 'Lightweight peer-synced market board'],
+		['RipMap', 'Displays hardcore deaths heatmap on maps'],
+		['SelfFound', 'Prevents trading, using the Auction House and mailing'],
+		['TurtleChatColors', 'Cleans up the Still Alive guild chat feed'],
+		['TurtleHardcoreChatTamer', 'Controls the global Hardcore chat channel'],
+		['NewSafetyTool', 'Configurable danger warnings for hardcore characters']
+	]) {
+		const result = suggest(name, description);
+		assert.equal(result.category, 'Hardcore', name);
+		assert.equal(result.confidence, 'Strong match', name);
+	}
+	for (const [name, description] of [
+		['HCSpy', 'Find out who is using HealComm'],
+		['AtlasLootZHCN', 'Chinese localization for AtlasLoot'],
+		['GrimReaper', 'Shows the last three hits whenever a player dies'],
+		['swapondeath', 'Re-equip a trinket after death'],
+		['BossDeathTimer', 'Countdown timer for boss kills'],
+		['MarketBoard', 'Peer-synced market board'],
+		['PvPWarning', 'Warns when PvP flagged'],
+		['TurtleTranslator', 'Translates chat messages across languages']
+	]) assert.notEqual(suggest(name, description).category, 'Hardcore', name);
+});
