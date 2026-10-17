@@ -16,10 +16,15 @@
 	];
 	const selected = $derived(tabs.some(tab => tab.id === page.url.hash.slice(1)) ? page.url.hash.slice(1) : 'about');
 	let content = $state<HTMLDivElement>();
-	$effect(() => {
-		void selected;
-		content?.scrollTo(0, 0);
-	});
+	function jump(id: string, scrollPage = true) {
+		const target = content?.querySelector<HTMLElement>(`#${id}`);
+		if (!content || !target) return;
+		if (getComputedStyle(content).overflowY === 'auto') {
+			content.scrollTo({ top: target.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop });
+		} else if (scrollPage) target.scrollIntoView({ block: 'start' });
+	}
+	$effect(() => jump(selected, Boolean(page.url.hash)));
+
 </script>
 
 <svelte:head>
@@ -50,11 +55,10 @@
 				{#each tabs as tab (tab.id)}
 					<a
 						href={resolve('/about') + (tab.id === 'about' ? '' : `#${tab.id}`)}
-						aria-current={selected === tab.id ? 'page' : undefined}
-						class={['min-w-0 px-2 py-0.5 text-center text-sm font-bold hover:bg-raised hover:text-accent sm:flex-1', selected === tab.id ? 'text-accent' : 'text-muted']}
+						class="min-w-0 px-2 py-0.5 text-center text-sm font-bold text-muted hover:bg-raised hover:text-accent sm:flex-1"
 						onclick={(event) => {
 							event.preventDefault();
-							goto(event.currentTarget.href, { reset: false });
+							goto(event.currentTarget.href, { reset: false }).then(() => jump(tab.id));
 						}}
 					>{tab.label}</a>
 				{/each}
@@ -62,8 +66,8 @@
 		</div>
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div class="min-w-0 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={content} role="region" aria-label="About content" tabindex="0">
-		<article class="about-copy leading-relaxed">
-	<section class="panel p-4" hidden={selected !== 'about'}>
+		<article class="about-copy space-y-4 leading-relaxed">
+	<section class="panel p-4" id="about">
 		<h2 class="section-title">About the index</h2>
 		<p class="mt-3">
 			{SITE_NAME} is a community list of addons for the 1.12.1 client of World of Warcraft. It
@@ -82,7 +86,7 @@
 		</p>
 	</section>
 
-	<section class="panel p-4" id="privacy" hidden={selected !== 'privacy'}>
+	<section class="panel p-4" id="privacy">
 		<h2 class="section-title">Privacy</h2>
 		<p class="mt-3">
 			Browsing needs no account, and the site uses no analytics, no ads and no tracking cookies.
@@ -169,7 +173,7 @@
 		</p>
 	</section>
 
-	<section class="panel p-4" id="rules" hidden={selected !== 'rules'}>
+	<section class="panel p-4" id="rules">
 		<h2 class="section-title">Rules for posting</h2>
 		<p class="mt-3">Anyone with an account can post, and nobody reviews an entry first. So:</p>
 		<ul class="mt-1 list-disc space-y-1 pl-5">
@@ -205,7 +209,7 @@
 		</p>
 	</section>
 
-	<section class="panel p-4" id="contact" hidden={selected !== 'contact'}>
+	<section class="panel p-4" id="contact">
 		<h2 class="section-title">Contact</h2>
 		<p class="mt-3">
 			For questions, mistakes in the list or anything about this page,
