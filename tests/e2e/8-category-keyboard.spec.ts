@@ -29,7 +29,7 @@ test('import review keeps letter-key choices after closing and publishes that ca
 	await page.route('**/rest/v1/import_queue?*', async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
-		await route.fulfill({response,json:[{...rows[0],name:'UnknownWidget',description:'Does useful things',category:'',category_context:{}}]});
+		await route.fulfill({response,json:[{...rows[0],name:'UnknownWidget',description:'Does useful things',category:''}]});
 	});
 	await page.route('**/rest/v1/rpc/publish_import', route => route.fulfill({json:null}));
 	await page.goto('/admin/import');

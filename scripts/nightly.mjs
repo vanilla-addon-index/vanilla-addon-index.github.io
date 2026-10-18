@@ -17,7 +17,6 @@
 // The job signs in like any visitor. The token is what lets it do these few things and
 // nothing else; see the nightly token migration, and `npm run nightly:token` to make one.
 import { appendFileSync } from 'node:fs';
-import { readmeCategoryText, tocCategoryText } from '../src/lib/category-context.ts';
 import { MAX_IMAGES, SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { githubCodeQuery, githubCodeUpdate } from '../src/lib/code-updates.ts';
 import { forgeHostPath, askForge, forgePlace, forgeRepositoryEndpoint } from '../src/lib/forges.ts';
@@ -170,18 +169,6 @@ const savePictures = (key, images) => {
 	if (!incompletePictures.has(key)) pictures.push({ key, images });
 };
 const links = await db('nightly_links');
-const categoryContexts = [];
-const categoryTargets = new Map(links.filter((l) => l.category_item)
-	.map((l) => [l.key, l.category_item.category_context ?? {}]));
-function saveContext(key, source, text) {
-	if (!categoryTargets.has(key)) return;
-	const context = categoryTargets.get(key);
-	if (context[source] === text) return;
-	context[source] = text;
-	const pending = categoryContexts.find(item => item.key === key);
-	if (pending) pending.context[source] = text;
-	else categoryContexts.push({ key, context: { [source]: text } });
-}
 
 // Cache pruning is independent of repository checks and successful result saves.
 try {
@@ -263,7 +250,6 @@ function saveProgress() {
 }
 async function flushProgress() {
 	for (const [name, field, pending, count] of [
-		['store_category_context', 'items', categoryContexts, 'context'],
 		['store_repo_stats', 'stats', pendingStats, 'stats'],
 		['store_code_updates', 'updates', codeUpdates, 'dates'],
 		['store_queue_images', 'items', pictures, 'pictures'],
@@ -300,7 +286,7 @@ async function flushProgress() {
 await saveProgress();
 
 const withToc = [];
-// Queued entries whose README is needed for screenshots or category evidence.
+// Queued entries whose README is needed for screenshots.
 const withReadme = [];
 let unanswered = 0;
 const cacheHit = (kind) => { metrics.count('cache_hits'); metrics.count(`${kind}_cache_hits`); };
@@ -331,11 +317,9 @@ function applyGithubDetails(r, repo, errors, alias, history, tree) {
 		r.state.tree = { oid: repo.top?.oid ?? null, entries: selection.entries };
 	}
 	if (!paths.length) {
-		saveContext(r.key, 'toc', '');
 		r.row.interface_checked = true;
-		if (r.state) r.state.toc = { signature: '[]', interface: null, files: [], notes: '' };
-	} else if ((!categoryTargets.has(r.key) || typeof r.state?.toc?.notes === 'string') && signature && r.state?.toc?.signature === signature) {
-		saveContext(r.key, 'toc', r.state.toc.notes ?? '');
+		if (r.state) r.state.toc = { signature: '[]', interface: null, files: [] };
+	} else if (signature && r.state?.toc?.signature === signature) {
 		r.row.interface = r.state.toc.interface;
 		r.row.interface_checked = true;
 		cacheHit('github_toc');
@@ -343,14 +327,12 @@ function applyGithubDetails(r, repo, errors, alias, history, tree) {
 		// An unread or incomplete .toc must not clear the previously known version.
 		withToc.push({ ...r, paths, signature, source: r });
 	}
-	if (r.readme || categoryTargets.has(r.key)) {
+	if (r.readme) {
 		const file = readme ? `${r.path ? r.path + '/' : ''}${readme.name}` : null;
 		if (!file) {
 			if (r.readme) savePictures(r.key, r.wiki);
-			saveContext(r.key, 'readme', '');
 		}
-		else if ((!categoryTargets.has(r.key) || typeof r.state?.readme?.text === 'string') && gitOid(readme.oid) && r.state?.readme?.file === file && r.state.readme.oid === readme.oid) {
-			saveContext(r.key, 'readme', r.state.readme.text ?? '');
+		else if (gitOid(readme.oid) && r.state?.readme?.file === file && r.state.readme.oid === readme.oid) {
 			if (r.readme) savePictures(r.key, [...new Set([...r.wiki, ...r.state.readme.images])].slice(0, MAX_IMAGES));
 			cacheHit('github_readme');
 		} else withReadme.push({ ...r, full: repo.nameWithOwner, file, fileOid: readme.oid, source: r });
@@ -370,7 +352,7 @@ async function checkGithub() {
 		const answer = await sharedGithubChecks(batch, githubRepositoryKey, (members) => {
 			const refs = [...new Set(members.map((r) => r.ref))];
 			for (const r of members) r.headField = refs.indexOf(r.ref) ? `head${refs.indexOf(r.ref)}` : 'head';
-			return `id description nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${refs.map((ref, n) => `${n ? `head${n}` : 'head'}: object(expression: ${JSON.stringify(ref)}) { ... on Commit { oid } }`).join(' ')}`;
+			return `id nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${refs.map((ref, n) => `${n ? `head${n}` : 'head'}: object(expression: ${JSON.stringify(ref)}) { ... on Commit { oid } }`).join(' ')}`;
 		}, (query) => github(query, 'GitHub metadata'), (saved) => metrics.count('github_metadata_fields_shared', saved));
 		if (!answer) {
 			unanswered += batch.length;
@@ -386,7 +368,6 @@ async function checkGithub() {
 			const repo = data[alias];
 			if (!repo && !gone.has(alias)) { metrics.count('github_metadata_checks_failed'); return unanswered++; }
 			if (repo) {
-				if (!fieldFailed(errors, [alias, 'description']) && 'description' in repo) saveContext(r.key, 'repository', (repo.description ?? '').slice(0, 2000));
 				r.state = !fieldFailed(errors, [alias, r.headField]) ? advanceGithubCache(r.previous, r.scope, repo.id, repo.nameWithOwner, repo[r.headField]?.oid) : undefined;
 				r.readRef = r.state?.head ?? r.ref;
 			}
@@ -467,7 +448,6 @@ async function checkGithub() {
 				metrics.count('github_toc_checks_failed');
 				return;
 			}
-			saveContext(r.key, 'toc', r.paths.map((_, f) => tocCategoryText(data[`r${n}`]?.[`f${f}`]?.text ?? '')).join(' ').slice(0, 2000));
 			const found = r.paths
 				.map((_, f) => /^##\s*Interface:\s*(\d+)/im.exec(data[`r${n}`]?.[`f${f}`]?.text ?? '')?.[1])
 				.filter(Boolean)
@@ -476,7 +456,6 @@ async function checkGithub() {
 			if (found.length) r.row.interface = found.includes(11200) ? 11200 : found[0];
 			if (r.state && r.signature) {
 				r.state.toc = { signature: r.signature, interface: r.row.interface,
-					notes: r.paths.map((_, f) => tocCategoryText(data[`r${n}`]?.[`f${f}`]?.text ?? '')).join(' ').slice(0, 2000),
 					files: r.paths.map((path, f) => ({ path, oid: data[`r${n}`]?.[`f${f}`]?.oid ?? null })) };
 				queueCache(r.source);
 			}
@@ -489,7 +468,7 @@ async function checkGithub() {
 	}
 	finishedToc();
 
-	// Third pass: queued READMEs supply category prose and, when requested, screenshots. Kept to the sites a screenshot may be on, like any other. An entry GitHub gave
+	// Third pass: queued READMEs supply screenshots. Kept to the sites a screenshot may be on, like any other. An entry GitHub gave
 	// no answer about is left for the next run.
 	const finishedReadme = metrics.start('GitHub README');
 	const readmeKey = (r) => JSON.stringify([githubRepositoryKey(r), r.readRef, r.file]);
@@ -515,12 +494,11 @@ async function checkGithub() {
 				metrics.count('github_readme_checks_failed');
 				return;
 			}
-			saveContext(r.key, 'readme', readmeCategoryText(repo.readme?.text ?? ''));
 			// Where the README is served from, so that a picture kept next to it resolves.
 			const base = `https://raw.githubusercontent.com/${r.full}/${r.ref}/${r.file}`;
 			const found = imagesIn(repo.readme?.text ?? '', base).filter((image) => hostAllowed(image, 'image'));
 			if (r.state && gitOid(r.fileOid)) {
-				r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, MAX_IMAGES), text: readmeCategoryText(repo.readme?.text ?? '') };
+				r.state.readme = { file: r.file, oid: r.fileOid, images: found.slice(0, MAX_IMAGES) };
 				queueCache(r.source);
 			}
 			// The wiki's first, since someone chose those; then the README's, each picture once.
@@ -550,7 +528,7 @@ async function checkOtherHosts() {
 		runWorkers(elsewhere.filter((r) => r.place.host === host), host === 'octowow.st' ? 1 : FORGE_WORKERS, async ({ key, url, place, readme, wiki, cache }) => {
 			try {
 				let branchState;
-				const facts = await askForge(place, forgeRequests.ask, readme || categoryTargets.has(key), {
+				const facts = await askForge(place, forgeRequests.ask, readme, {
 					previous: cache, save: (state) => { branchState = state; }, hit: cacheHit
 				});
 				const http = forgeRequests.metadata(forgeRepositoryEndpoint(place));
@@ -563,9 +541,6 @@ async function checkOtherHosts() {
 					metrics.count('other_host_metadata_checks_failed');
 					return silent++;
 				}
-				saveContext(key, 'repository', facts.description ?? '');
-				if (facts.interface_checked) saveContext(key, 'toc', facts.notes ?? '');
-				if (facts.readme_checked) saveContext(key, 'readme', readmeCategoryText(facts.readme?.text ?? ''));
 				if (!facts.code_update) metrics.count('other_host_history_checks_without_result');
 				if (!facts.interface_checked) metrics.count('other_host_toc_checks_failed');
 				if (readme && !facts.readme_checked) metrics.count('other_host_readme_checks_failed');

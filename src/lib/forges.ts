@@ -3,7 +3,6 @@
 // Nothing here fetches by itself: whoever calls hands in the function that does, so the
 // job decides about timeouts and manners, and a test can answer in a site's place.
 
-import { tocCategoryText } from './category-context.ts';
 import type { CodeUpdate } from './types.ts';
 import { CHECK_CACHE_VERSION, forgeCache, gitOid, githubFiles, type ForgeCacheControl, type ForgeCheckCache } from './nightly-cache.ts';
 
@@ -32,8 +31,6 @@ export interface ForgePlace {
 export type Ask = (url: string, as: 'json' | 'text') => Promise<{ status: number; body?: unknown } | null>;
 
 export interface ForgeFacts {
-	description?: string;
-	notes?: string;
 	/** The repository's current "owner/repo": another one than asked for after a rename. */
 	project: string;
 	stars: number;
@@ -123,7 +120,6 @@ const SITES = {
 	gitlab: {
 		repo: (p: ForgePlace) => `https://${p.host}/api/v4/projects/${encodeURIComponent(p.project)}`,
 		read: (r: Record<string, any>) => ({
-			description: typeof r.description === 'string' ? r.description.slice(0, 2000) : '',
 			id: String(r.id ?? ''),
 			project: String(r.path_with_namespace ?? ''),
 			stars: Number(r.star_count ?? 0),
@@ -147,7 +143,6 @@ const SITES = {
 	gitea: {
 		repo: (p: ForgePlace) => `https://${forgeHostPath(p.host)}/api/v1/repos/${encodePath(p.project)}`,
 		read: (r: Record<string, any>) => ({
-			description: typeof r.description === 'string' ? r.description.slice(0, 2000) : '',
 			id: String(r.id ?? ''),
 			project: String(r.full_name ?? ''),
 			stars: Number(r.stars_count ?? 0),
@@ -192,8 +187,6 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 	const api = place.kind === 'gitlab' ? `https://${place.host}/api/v4/projects/${repo.id}` : `https://${forgeHostPath(place.host)}/api/v1/repos/${encodePath(repo.project)}`;
 	const facts: ForgeFacts = {
 		project: repo.project,
-		description: repo.description,
-		notes: '',
 		stars: repo.stars,
 		pushed_at: repo.active,
 		code_update: null,
@@ -242,8 +235,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 			if (state) state.history = { date: last };
 		}
 	}
-	if (same && previous?.toc && typeof previous.toc.notes === 'string') {
-		facts.notes = previous.toc.notes;
+	if (same && previous?.toc) {
 		facts.interface = previous.toc.interface;
 		facts.interface_checked = true;
 		state!.toc = previous.toc;
@@ -270,8 +262,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 	// folder of the same name.
 	const selected = githubFiles(entries.map((e) => ({ name: e.name, type: e.folder ? 'tree' : 'blob', oid: e.oid })), place.path, TOC_PATHS);
 	if (!facts.interface_checked) {
-		if (state && selected.signature !== null && selected.signature === previous?.toc?.signature && typeof previous.toc.notes === 'string') {
-			facts.notes = previous.toc.notes;
+		if (state && selected.signature !== null && selected.signature === previous?.toc?.signature) {
 			facts.interface = previous.toc.interface;
 			facts.interface_checked = true;
 			state.toc = previous.toc;
@@ -282,12 +273,11 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 			for (const path of selected.paths) {
 				const content = await text(path);
 				if (content === null) facts.interface_checked = false;
-				facts.notes = ((facts.notes ?? '') + ' ' + tocCategoryText(content ?? '')).trim().slice(0, 2000);
 				const number = /^##\s*Interface:\s*(\d+)/im.exec(content ?? '')?.[1];
 				if (number) found.push(Number(number));
 			}
 			if (facts.interface_checked && found.length) facts.interface = found.includes(VANILLA_INTERFACE) ? VANILLA_INTERFACE : found[0];
-			if (state && facts.interface_checked) state.toc = { signature: selected.signature, interface: facts.interface, notes: facts.notes };
+			if (state && facts.interface_checked) state.toc = { signature: selected.signature, interface: facts.interface };
 		}
 	}
 

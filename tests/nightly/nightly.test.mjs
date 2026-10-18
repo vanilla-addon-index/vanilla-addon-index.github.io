@@ -29,7 +29,7 @@ globalThis.fetch = async (url, init = {}) => {
    {key:'github.com/a/addon', url:'https://github.com/a/addon/tree/other', readme:false}
   ]);
   if (name === 'nightly_links' && ['forge-batched', 'forge-late-stop'].includes(scenario)) return json(Array.from({length:9}, (_, i) => ({key:'codeberg.org/a/addon'+i, url:'https://codeberg.org/a/addon'+i, readme:true, images:[]})));
-  if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', category_item: scenario.startsWith('category-') ? {name:'ChatThing', description:'Chat addon', category_context:{}} : undefined, readme: !['already-checked', 'category-all'].includes(scenario), images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
+  if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', readme: !['already-checked', 'category-all'].includes(scenario), images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
   if (name === 'nightly_waiting') return json({reports:0, suggestions:0});
   if (name === 'retire_dead_links') return json({queued:0,links_removed:0,addons_removed:0});
   return json(0);
@@ -285,23 +285,8 @@ test('Nightly prepares the schema first and only reuses preparation after it suc
 });
 
 
-test('every queued import gets category evidence even with an existing guess and completed screenshots', () => {
+test('completed screenshot checks do not fetch README text for category suggestions', () => {
  const calls = run('category-all');
- const stored = calls.filter(c => c.name === 'store_category_context').flatMap(c => c.args.items);
- const context = Object.assign({}, ...stored.map(i => i.context));
- assert.equal(context.repository, 'A damage meter');
- assert.match(context.toc, /Tracks damage/);
- assert.match(context.readme, /No screenshots/);
- assert.ok(calls.some(c => c.name === 'github' && c.phase === 'readme'));
- assert.ok(!calls.some(c => c.name === 'store_queue_images'));
-});
-
-
-test('failed category file checks do not replace stored evidence with empty text', () => {
- for (const [scenario, source] of [['category-toc-failure', 'toc'], ['category-readme-failure', 'readme']]) {
-  const calls = run(scenario);
-  const stored = calls.filter(c => c.name === 'store_category_context').flatMap(c => c.args.items);
-  assert.ok(stored.length > 0);
-  assert.ok(stored.every(item => !(source in item.context)), scenario);
- }
+ assert.ok(!calls.some(c => c.name === 'store_category_context'));
+ assert.ok(!calls.some(c => c.name === 'github' && c.phase === 'readme'));
 });

@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
-	import { categoryDescription } from '#lib/category-context.ts';
-	import { suggestCategory } from '#lib/category-scoring.ts';
 	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
@@ -26,12 +24,11 @@
 		run: (action: () => Promise<string>) => Promise<void>;
 	};
 	let { item, index, selected, verdict, advice, notes, match, forkMatch, onselect, run }: Props = $props();
-	const categorySuggestion = $derived(suggestCategory(item.name, categoryDescription(item)));
 
-	// What approving publishes when nothing is touched, the same as the database would.
+	// New pages always start without a category, including older queued guesses.
 	const original = $derived({
 		name: item.name.slice(0, 60),
-		category: categorySuggestion.confidence === 'Uncertain' ? '' : categorySuggestion.category,
+		category: '',
 		author: linkAuthor(item.url),
 		description: item.description,
 		images: item.images.slice(0, MAX_IMAGES)

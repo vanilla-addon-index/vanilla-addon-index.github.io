@@ -4,19 +4,12 @@ import { MAX_IMAGES } from './config.ts';
 import { uncamo } from './github.ts';
 import { linkKey } from './links.ts';
 import { request, type RequestMetrics } from './request.ts';
-import { suggestCategory } from './category-scoring.ts';
 
 export const WIKI = 'https://turtle-wow.fandom.com';
 export const WIKI_PAGE = 'Addons';
 export const WIKI_NAME = 'Turtle WoW Wiki';
 
-const importCategory = (name: string, description: string) => {
-	const suggestion = suggestCategory(name, description);
-	return suggestion.confidence === 'Uncertain' ? '' : suggestion.category;
-};
-
 export interface Candidate {
- category_context?: Record<string, string>;
 	key: string;
 	name: string;
 	url: string;
@@ -122,7 +115,7 @@ function parseBullet(line: string): Parsed {
 			// proxy, which stops working; the address behind it does not.
 			images: httpsOnly(images.map(uncamo)).slice(0, MAX_IMAGES),
 			alts: httpsOnly(alts),
-			category: importCategory(name, description),
+			category: '',
 			obsolete,
 			parent: null,
 			group_key: null,
@@ -190,7 +183,7 @@ export function parseWiki(wikitext: string): Omit<WikiRead, 'revision'> {
 				description,
 				images: [],
 				alts: [],
-				category: importCategory(name, description),
+				category: '',
 				obsolete: false,
 				parent: null,
 				group_key: null
@@ -220,7 +213,7 @@ export function parseWiki(wikitext: string): Omit<WikiRead, 'revision'> {
 		}
 	}
 
-	// Classify the readable wiki title first, then normalize display names across
+	// Normalize display names across
 	// bullets, tables, alternative versions and parent references alike.
 	const candidates = [...byKey.values()].map((entry) => ({
 		...entry,

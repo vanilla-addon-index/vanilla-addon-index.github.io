@@ -4,7 +4,7 @@ import { createDb, NIGHTLY_TOKEN } from '../helpers/db.mjs';
 import { refreshImports } from '../../scripts/refresh-imports.mjs';
 import { parseWiki } from '../../src/lib/wiki.ts';
 
-test('lightweight refresh corrects pending categories without replacing reviewed details, facts or screenshots', async () => {
+test('lightweight refresh clears pending category guesses without replacing reviewed details, facts or screenshots', async () => {
 	const db = await createDb(), fetcher = globalThis.fetch;
 	const url = 'https://github.com/Cernie/CerniesWonderfulFunctions';
 	try {
@@ -24,12 +24,12 @@ test('lightweight refresh corrects pending categories without replacing reviewed
 		};
 		await refreshImports(NIGHTLY_TOKEN);
 		const after = (await db.sql('select * from public.import_queue'))[0];
-		assert.deepEqual(after, {...before, category:'Macros'});
+		assert.deepEqual(after, {...before, category:''});
 		assert.deepEqual(await db.sql('select * from public.repo_stats'), facts);
 	} finally { globalThis.fetch = fetcher; await db.close(); }
 });
 
-test('uncertain imports stay uncategorized and cannot publish a new page without a reviewed category', async () => {
+test('new imports stay uncategorized and cannot publish a new page without a reviewed category', async () => {
 	const db = await createDb();
 	try {
 		const admin = await db.addUser('admin', 'admin');

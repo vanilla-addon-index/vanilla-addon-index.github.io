@@ -8,7 +8,7 @@ afterEach(() => { globalThis.fetch = original; });
 const wiki = '===Full Addons List===\n* [https://github.com/a/Panel Better Character Panel] Improves the character and inspect panel\n* [https://github.com/Cernie/CerniesWonderfulFunctions CerniesWonderfulFunctions] Script methods for using specific items and helping players create simple(er) macros\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections==';
 const json = (value, status = 200) => new Response(JSON.stringify(value), {status, headers:{'content-type':'application/json'}});
 
-test('Deploy refresh reparses current rules and only writes queue candidates, with no repository or screenshot work', async () => {
+test('Deploy refresh leaves categories for manual selection and only writes queue candidates, with no repository or screenshot work', async () => {
 	const calls = [];
 	globalThis.fetch = async (url, init) => {
 		calls.push(url);
@@ -17,8 +17,8 @@ test('Deploy refresh reparses current rules and only writes queue candidates, wi
 		const { token, items } = JSON.parse(init.body);
 		assert.equal(token, 'test-token');
 		assert.equal(items[0].name, 'BetterCharacterPanel');
-		assert.equal(items[0].category, 'UI & Appearance');
-		assert.equal(items[1].category, 'Macros');
+		assert.equal(items[0].category, '');
+		assert.equal(items[1].category, '');
 		return json(0);
 	};
 	for (let i = 0; i < 2; i++) assert.match(await refreshImports('test-token'), /revision 123: refreshed 2.*0 new/);
