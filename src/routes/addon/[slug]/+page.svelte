@@ -230,7 +230,7 @@
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
                             <dl class="mt-2 space-y-1 text-sm">
                                 <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Author</dt><dd class="min-w-0 break-words text-right">{(!addon.shared ? addon.author : '') || linkAuthor(version.url) || 'Unknown'}</dd></div>
-                                <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Last code update</dt><dd>
+                                <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Last update</dt><dd>
                                     {#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history"><time datetime={update.date}>{date(update.date)}</time></a>
                                     {:else}<span class="text-muted">Unknown</span>{/if}
                                 </dd></div>

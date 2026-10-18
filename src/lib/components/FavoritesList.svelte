@@ -32,20 +32,20 @@
 			<p class="px-3 py-3 text-danger" role="alert">Could not load favorites: {error}</p>
 			<button class="btn m-3 mt-0" onclick={() => retry++}>Try again</button>
 		{:else if loading || !store.loaded}
-			<p class="px-3 py-6 text-center text-muted">Loading favorites…</p>
+			<p class="px-3 py-2 text-center text-muted">Loading favorites…</p>
 		{:else}
 			<ul>
 				{#each matching as addon (addon.id)}
 					<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 py-2 last:border-b-0">
 						<a class="font-bold hover:text-accent" href={resolve('/addon/[slug]', {slug: addon.slug})}>{addon.name}</a>
-						<span class="text-sm text-muted">Last code update:
+						<span class="text-sm text-muted">Last update:
 							{#if addon.code_update}
 								<time class="text-fg" datetime={addon.code_update.date}>{date(addon.code_update.date)}</time>
 							{:else}Unknown{/if}
 						</span>
 					</li>
 				{:else}
-					<li class="px-3 py-6 text-center text-muted">{favorites.length ? 'No favorites match your search.' : 'No favorites yet. Open an addon and choose “Add to favorites.”'}</li>
+					<li class="px-3 py-2 text-center text-muted">{favorites.length ? 'No favorites match your search.' : 'No favorites yet. Open an addon and choose “Add to favorites.”'}</li>
 				{/each}
 			</ul>
 		{/if}

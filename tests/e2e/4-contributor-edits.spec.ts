@@ -50,7 +50,7 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await page.getByLabel('Link to the addon').fill('');
  await page.getByRole('button',{name:'Save changes'}).click();
  await expect(page.getByText('No download links currently listed.')).toBeVisible();
- await expect(page.getByText('Last code update',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Last update',{exact:true})).toHaveCount(0);
  await switchUser(page,'member2');
  await page.goto(address);
  await expect(page.getByText('No download links currently listed.')).toBeVisible();

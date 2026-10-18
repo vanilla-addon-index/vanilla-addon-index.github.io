@@ -13,7 +13,7 @@ test('favorites persist on the account with visible code dates and can be remove
 	await page.goto('/account');
 	const favorites = page.getByRole('region', {name:'Your favorites'});
 	await expect(favorites.getByRole('link', {name:'RaidHelper', exact:true})).toBeVisible();
-	await expect(favorites.getByText('Last code update:')).toBeVisible();
+	await expect(favorites.getByText('Last update:')).toBeVisible();
 	await expect(favorites.locator('time')).toHaveAttribute('datetime', '2024-06-14T14:00:48+00:00');
 	await page.reload();
 	await favorites.getByRole('link', {name:'RaidHelper', exact:true}).click();
