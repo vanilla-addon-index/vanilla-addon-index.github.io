@@ -72,6 +72,10 @@ repositories keep the same daily coverage while published or pending.
 When an admin opens the import queue, pending wiki articles are read in the background
 for repository links in download/source sections. Successful reads replace the waiting
 article with ordinary repository import entries, retaining the article as provenance.
+Standalone and bold-wrapped links are accepted; installation sections are a fallback
+when no curated source links exist. The wiki API resolves redirects. When a redirect
+changes the addon name, new entries use the destination article title and introduction
+instead of inheriting the old listing label and description.
 Admins approve and group these with the normal controls. Wiki recommendations are
 pinned on approval, including when that link is approved after other versions. Existing
 queue decisions are preserved. Failed or empty reads leave the article waiting, with

@@ -31,5 +31,10 @@ test('wiki articles expand to normal entries and ordinary approval groups and pi
   const invalid=await queue('Invalid');
   await assert.rejects(()=>call('select public.expand_wiki_article($1,$2::jsonb)',[invalid,JSON.stringify([links[0],{url:'https://evil.test/download'}])]),/Invalid repository/);
   assert.equal((await db.sql('select status from public.import_queue where id=$1',[invalid]))[0].status,'pending');
+  const redirected=await queue('BigTimer');
+  await call('select public.expand_wiki_article($1,$2::jsonb,$3,$4)',[redirected,JSON.stringify([{url:'https://github.com/prodigeomix/BigWigs',recommended:true}]),'BigWigs','Boss encounter timers and alerts.']);
+  const [child]=await db.sql("select name,description,wiki_source from public.import_queue where key='github.com/prodigeomix/bigwigs'");
+  assert.equal(child.name,'BigWigs');assert.equal(child.description,'Boss encounter timers and alerts.');
+  assert.ok(child.wiki_source.endsWith('/BigTimer'));
  } finally { await db.close(); }
 });

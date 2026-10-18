@@ -111,9 +111,14 @@ export async function expandArticle(item: QueueItem, pasted?: ArticleLink[]) {
 	imports.wikiReading[item.id] = true;
 	imports.wikiErrors[item.id] = '';
 	try {
-		const links = pasted ?? (await readArticle(item.url)).links;
+		const article = pasted ? null : await readArticle(item.url);
+		const links = pasted ?? article!.links;
 		if (!links.length) throw new Error('No download links found. Paste repository links below or open the wiki article to check.');
-		await call('expand_wiki_article', { queue_id: item.id, links });
+		const nameKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+		const changedTitle = article?.redirected && article.title && nameKey(article.title) !== nameKey(item.name);
+		await call('expand_wiki_article', { queue_id: item.id, links,
+			article_name: changedTitle ? article.title : null,
+			article_description: changedTitle ? article.description : null });
 		await loadQueue();
 	} catch(e) { imports.wikiErrors[item.id] = (e as Error).message; }
 	finally { imports.wikiReading[item.id] = false; }
