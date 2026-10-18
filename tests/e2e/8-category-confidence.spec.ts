@@ -1,6 +1,38 @@
 import {expect, test} from './test.ts';
 import {loginAs} from './helpers.ts';
 
+test('same-name imports inherit the existing category and keyboard approval needs no selection', async ({page}) => {
+	await loginAs(page, 'admin');
+	await page.route('**/rest/v1/addons?*', async route => {
+		const response = await route.fetch(), rows = await response.json();
+		await route.fulfill({response, json:rows.map(row => row.id === 1 ? {...row, name:'OpaqueWidget', category:'Professions'} : row)});
+	});
+	await page.route('**/rest/v1/import_queue?*', async route => {
+		if (route.request().method() !== 'GET') return route.continue();
+		const response = await route.fetch(), rows = await response.json();
+		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/opaquewidget', url:'https://github.com/a/OpaqueWidget', name:'OpaqueWidget', category:'', description:'', category_context:{}}]});
+	});
+	await page.route('**/rest/v1/rpc/publish_import', route => route.fulfill({json:null}));
+	await page.goto('/admin/import');
+	const entry = page.locator('[data-entry]').first();
+	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Professions');
+	await expect(entry.getByLabel('Category', {exact:true})).toBeDisabled();
+	await expect(entry.getByText('Choose a category', {exact:true})).toHaveCount(0);
+	await expect(entry.getByRole('button', {name:'Add link to OpaqueWidget', exact:true})).toBeEnabled();
+	await entry.getByLabel('Name', {exact:true}).fill('OtherOpaqueWidget');
+	await expect(entry.getByLabel('Category', {exact:true})).toBeEnabled();
+	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('');
+	await expect(entry.getByRole('button', {name:'Approve', exact:true})).toBeDisabled();
+	await entry.getByLabel('Name', {exact:true}).fill('OpaqueWidget');
+	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Professions');
+	const request = page.waitForRequest('**/rest/v1/rpc/publish_import');
+	await page.getByRole('region', {name:'Import entries', exact:true}).focus();
+	await page.keyboard.press('a');
+	const payload = (await request).postDataJSON();
+	expect(payload.destination).toBe(1);
+	expect(payload.input.category).toBe('Professions');
+});
+
 test('repository evidence corrects an existing guess and approval sends the displayed category', async ({page}) => {
 	await loginAs(page, 'admin');
 	await page.route('**/rest/v1/import_queue?*', async route => {
@@ -51,7 +83,7 @@ test('uncertain imports have a blank category and cannot be approved until an ad
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
-		await route.fulfill({response, json:[{...rows[0], name:'UnknownWidget', category:'Miscellaneous', description:'Includes a button.'}]});
+		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/unknownwidget', url:'https://github.com/a/UnknownWidget', name:'UnknownWidget', category:'Miscellaneous', description:'Includes a button.', category_context:{}}]});
 	});
 	await page.goto('/admin/import');
 	const entry = page.locator('[data-entry]').first();
