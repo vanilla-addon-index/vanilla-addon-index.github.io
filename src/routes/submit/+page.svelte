@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
+	import { wikiThanks } from '#lib/wiki-submission.svelte.ts';
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -235,6 +236,7 @@
 		if (!matched && !input.category) return (error = 'Pick a category.');
 		if (!editing && !slugify(input.name)) return (error = 'The name needs at least one letter or digit.');
 		saving = true;
+		const showWikiHelper = !editing && !matched && !splitting;
 		try {
 			if (proposing && editing && proposalBase) {
 				await proposeEdit(editing.id, input, proposalBase);
@@ -245,6 +247,7 @@
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
 			await goto(resolve('/addon/[slug]', { slug: addon.slug }));
+			if (showWikiHelper) wikiThanks.addon = $state.snapshot(input);
 		} catch (e) {
 			error = (e as Error).message;
 			saving = false;

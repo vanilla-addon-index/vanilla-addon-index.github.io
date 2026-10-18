@@ -1,0 +1,36 @@
+import { test, expect } from './test';
+import { loginAs, unique } from './helpers';
+
+test('successful posts offer a copyable wiki entry and editor link on desktop and mobile', async ({ page, context }) => {
+	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+	await loginAs(page, 'member');
+	const name = unique('Browser Wiki Helper');
+	await page.goto('/submit');
+	await page.getByLabel('Name', { exact: true }).fill(name);
+	await page.getByLabel('Link to the addon').fill(`https://gitlab.com/e2e/${name.replace(/\W+/g, '-')}`);
+	await page.getByLabel('Category', { exact: true }).selectOption('Combat');
+	await page.getByLabel('Description', { exact: true }).fill('Shows your total block value.');
+	await page.getByRole('button', { name: 'Post addon', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'Addon submitted successfully!' });
+	await expect(dialog).toBeVisible();
+	await expect(page).toHaveURL(/\/addon\//);
+	await expect(dialog.getByRole('link', { name: 'Open wiki editor' })).toHaveAttribute('href', 'https://turtle-wow.fandom.com/wiki/Addons?veaction=edit');
+	await expect(dialog.locator('.wiki-preview')).toContainText(`${name} - Shows your total block value.`);
+	await dialog.getByRole('button', { name: 'Copy wiki entry', exact: true }).click();
+	await expect(dialog.getByRole('button', { name: 'Copied!', exact: true })).toBeVisible();
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await dialog.getByLabel('Wiki entry').inputValue());
+	await page.screenshot({ path: 'test-results/wiki-helper-desktop.png' });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(dialog.getByRole('button', { name: 'Close wiki helper' })).toBeInViewport();
+	expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+	await page.screenshot({ path: 'test-results/wiki-helper-mobile.png' });
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeVisible();
+	await dialog.click({ position: { x: 5, y: 5 } });
+	await expect(dialog).toBeVisible();
+	await page.mouse.click(2, 2);
+	await expect(dialog).not.toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+	await page.reload();
+	await expect(dialog).not.toBeVisible();
+});

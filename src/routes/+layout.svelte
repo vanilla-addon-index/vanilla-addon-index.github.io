@@ -7,6 +7,7 @@
 	import { loadAddons, readCache, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
+	import WikiSubmissionDialog from '#lib/components/WikiSubmissionDialog.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
 	import { countEditReviews, editReviews } from '#lib/edit-reviews.svelte.ts';
 	import { countReports, reports } from '#lib/reports.svelte.ts';
@@ -152,4 +153,5 @@
 </div>
 
 <ConfirmDialog />
+<WikiSubmissionDialog />
 {/if}
