@@ -69,6 +69,15 @@ queue for admin review. It then checks every supported published and pending
 repository link on GitHub, GitLab, Codeberg, gitea.com and OctoWoW. Old and inactive
 repositories keep the same daily coverage while published or pending.
 
+When an admin opens the import queue, pending wiki articles are read in the background
+for repository links in download/source sections. Successful reads replace the waiting
+article with ordinary repository import entries, retaining the article as provenance.
+Admins approve and group these with the normal controls. Wiki recommendations are
+pinned on approval, including when that link is approved after other versions. Existing
+queue decisions are preserved. Failed or empty reads leave the article waiting, with
+retry and manual paste controls. Expanded source records do not count as published
+addons. Resolved articles are not automatically monitored for subsequent changes.
+
 After saving successful checks, Nightly files confirmed missing repositories under
 **Decided → Dead links**. These are not admin rejections and require no decision.
 Only explicit missing answers from the current run qualify for live removal; timeouts,
