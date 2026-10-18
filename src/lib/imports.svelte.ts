@@ -1,10 +1,12 @@
 import { loadAddons } from './addons.svelte';
 import { supabase } from './supabase';
+import { auth } from './auth.svelte';
 import type { Addon, AddonInput } from './types';
 import type { Candidate } from './wiki';
 
 export interface QueueItem extends Candidate {
 	id: number;
+	rejected_by_owner: boolean;
 	status: 'pending' | 'approved' | 'rejected' | 'submitted' | 'dead';
 	// Why the last approval attempt failed, if it did.
 	problem: string | null;
@@ -129,7 +131,7 @@ export async function reject(ids: number[]) {
 	const undo = settle(ids, 'rejected');
 	try {
 		await call<number>('decide_imports', { ids, decision: 'rejected' });
-		if (imports.rejectedLoaded) imports.rejected = [...imports.rejected, ...turnedDown].sort(byName);
+		if (imports.rejectedLoaded) imports.rejected = [...imports.rejected, ...turnedDown.map(item => ({ ...item, status: 'rejected' as const, rejected_by_owner: auth.isOwner }))].sort(byName);
 	} catch (e) {
 		await loadQueue().catch(undo);
 		throw e;
@@ -141,7 +143,7 @@ export async function restore(ids: number[]) {
 	const back = imports.rejected.filter((item) => ids.includes(item.id));
 	await call<number>('decide_imports', { ids, decision: 'pending' });
 	imports.rejected = imports.rejected.filter((item) => !ids.includes(item.id));
-	imports.items = [...imports.items, ...back.map((item) => ({ ...item, status: 'pending' as const }))].sort(byName);
+	imports.items = [...imports.items, ...back.map((item) => ({ ...item, status: 'pending' as const, rejected_by_owner: false }))].sort(byName);
 	imports.counts.rejected -= back.length;
 	imports.counts.pending += back.length;
 }

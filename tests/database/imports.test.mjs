@@ -254,6 +254,26 @@ describe('import queue', () => {
 		assert.deepEqual(await logged(), ['import.reject', 'import.requeue']);
 	});
 
+	test('only the owner can restore owner rejections, including in mixed batches', async () => {
+		await queue([candidate('OwnerRejected'), candidate('AdminRejected')]);
+		const rows = await db.sql('select id, name from public.import_queue');
+		const ids = Object.fromEntries(rows.map(r => [r.name, r.id]));
+		await call(owner, "select public.decide_imports($1, 'rejected')", [[ids.OwnerRejected]]);
+		await call(admin, "select public.decide_imports($1, 'rejected')", [[ids.AdminRejected]]);
+		assert.deepEqual(await db.sql('select rejected_by_owner from public.import_queue where id = $1', [ids.OwnerRejected]), [{rejected_by_owner:true}]);
+		for (const user of [admin, admin2]) {
+			await refused(() => call(user, "select public.decide_imports($1, 'pending')", [[ids.OwnerRejected]]), /Only the owner/);
+		}
+		await refused(() => call(admin2, "select public.decide_imports($1, 'pending')", [[ids.AdminRejected, ids.OwnerRejected]]), /Only the owner/);
+		assert.deepEqual(await waiting(), []);
+		await call(admin2, "select public.decide_imports($1, 'pending')", [[ids.AdminRejected]]);
+		await call(owner, "select public.decide_imports($1, 'pending')", [[ids.OwnerRejected]]);
+		assert.deepEqual(await waiting(), ['AdminRejected', 'OwnerRejected']);
+		assert.ok((await db.sql('select rejected_by_owner from public.import_queue')).every(r => !r.rejected_by_owner));
+		await call(admin, "select public.decide_imports($1, 'rejected')", [[ids.OwnerRejected]]);
+		await call(admin2, "select public.decide_imports($1, 'pending')", [[ids.OwnerRejected]]);
+	});
+
 	test('the nightly job gets the repositories to check and stores what GitHub said about them', async () => {
 		await post(db, alice, addon('Atlas', 'https://github.com/wiki/Atlas'));
 		await queue([candidate('Bagnon')]);

@@ -179,8 +179,10 @@
 		}
 	}
 
+	const canRestore = (item: QueueItem) => auth.isOwner || !item.rejected_by_owner;
 	const restoreOne = (item: QueueItem) =>
 		run(async () => {
+			if (!canRestore(item)) throw new Error('Only the owner can restore this rejection.');
 			await restore([item.id]);
 			return '';
 		});
@@ -364,7 +366,8 @@
 									{#if view === 'dead'}
 										<p class="text-sm text-muted">Repository no longer available · filed automatically</p>
 									{:else}
-										<button class="btn py-1" onclick={() => restoreOne(item)}>Put back in the queue</button>
+										<button class="btn py-1" disabled={!canRestore(item)} onclick={() => restoreOne(item)}>Put back in the queue</button>
+									{#if item.rejected_by_owner}<p class="mt-1 text-sm text-muted">Rejected by owner · Only the owner can put this back in the queue.</p>{/if}
 									{/if}
 								</div>
 							{/snippet}
