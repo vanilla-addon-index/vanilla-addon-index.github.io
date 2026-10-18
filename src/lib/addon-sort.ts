@@ -1,6 +1,6 @@
 import type { Addon } from './types';
 
-export const SORTS = { name: 'Name', code: 'Last code update' } as const;
+export const SORTS = { name: 'Name', code: 'Last update' } as const;
 export type Sort = keyof typeof SORTS;
 
 export function readSort(value: string | null): Sort {

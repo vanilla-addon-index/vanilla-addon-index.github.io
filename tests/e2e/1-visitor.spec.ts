@@ -33,7 +33,7 @@ test('the list loads, and search and categories narrow it', async ({ page }) => 
 test('date sorting follows last code update and accepts old sort links', async ({ page }) => {
 	await page.goto('/');
 	const sort = page.getByRole('combobox', { name: 'Sort by' });
-	await expect(sort.locator('option')).toHaveText(['Name', 'Last code update']);
+	await expect(sort.locator('option')).toHaveText(['Name', 'Last update']);
 	await sort.selectOption('code');
 	await expect(page).toHaveURL(/sort=code/);
 	// RaidHelper has a known code date; recently added entries without one go below it.
@@ -122,7 +122,7 @@ test('an addon page shows its shared links and no admin controls', async ({ page
 	await expect(page.getByText('Posted by')).toHaveCount(0);
 	const facts = page.locator('dl').filter({ hasText: 'Author' });
 	await expect(facts).toHaveCount(3);
-	await expect(facts.getByText('Last code update')).toHaveCount(3);
+	await expect(facts.getByText('Last update')).toHaveCount(3);
 	await expect(facts.getByText('Unknown', { exact: true })).toHaveCount(2);
 	for (const link of await page.locator('aside ol > li').all()) {
 		await expect(link.getByText('Author', { exact: true })).toBeVisible();
