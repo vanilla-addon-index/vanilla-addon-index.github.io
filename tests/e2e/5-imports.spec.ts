@@ -90,7 +90,7 @@ test('renamed forks suggest their published parent and keep separate approval ex
   const response=await route.fetch();const rows=await response.json();
   if(Array.isArray(rows)){
    candidateId??=rows.find(row=>row.status==='pending')?.id;
-   for(const row of rows) if(row.id===candidateId) row.name=forkName;
+   for(const row of rows) if(row.id===candidateId) {row.name=forkName;row.description='';row.category_context={};}
   }
   await route.fulfill({response,json:rows});
  });
@@ -111,7 +111,9 @@ test('renamed forks suggest their published parent and keep separate approval ex
  await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeVisible();
  await expect(entry.getByRole('button',{name:'Approve separately',exact:true})).toBeVisible();
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toHaveCount(0);
- await chooseImportCategory(entry);
+ await expect(entry.getByLabel('Category',{exact:true})).toHaveValue('');
+ await expect(entry.getByRole('button',{name:'Approve separately',exact:true})).toBeDisabled();
+ await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeEnabled();
  await entry.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
  await expect(entry).toHaveCount(0);
  await page.goto(address);
@@ -130,7 +132,7 @@ for (const group of [false,true]) {
    const response=await route.fetch();const rows=await response.json();
    if(Array.isArray(rows)){
     candidateId??=rows.find(row=>row.status==='pending')?.id;
-    for(const row of rows) if(row.id===candidateId) {row.name=version;row.description='A separately named version with its own description.';}
+    for(const row of rows) if(row.id===candidateId) {row.name=version;row.description='A separately named version with its own description.';row.category_context={};}
    }
    await route.fulfill({response,json:rows});
   });
@@ -147,7 +149,8 @@ for (const group of [false,true]) {
   await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeVisible();
   // Persist the preview's reviewed title through the edited-import path.
   await entry.getByLabel('Name',{exact:true}).fill(`${version} `);
-  await chooseImportCategory(entry);
+  await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeEnabled();
+  if(!group) await chooseImportCategory(entry);
   await entry.getByRole('button',{name:group?`Add link to ${name}`:'Approve',exact:true}).click();
   await expect(entry).toHaveCount(0);
   if(group){

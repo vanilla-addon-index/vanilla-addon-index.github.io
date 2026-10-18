@@ -52,7 +52,8 @@
 		const messages: string[] = [];
 		// Relationships are already shown with the facts and approval actions.
 		if (!['Ready', 'Incomplete', 'Add to existing page', 'Fork · existing page', 'Similar name · check match', 'Possible version'].includes(advice)) messages.push(advice);
-		if (!categoryChosen) messages.push('Choose a category');
+		if (!destination && !categoryChosen) messages.push(match ? 'Choose a category to approve separately' : 'Choose a category');
+		if (forkMatch && !nameMatch) messages.push(`Uses ${forkMatch.category} when added to ${forkMatch.name}`);
 		for (const note of notes.filter(note => statusLabels.has(note.label))) {
 			const value = note.label === 'Missing' ? note.value.split(', ').filter(value =>
 				value === 'description' ? !draft.description.trim() : value === 'author' ? !draft.author.trim() : value !== 'category'
@@ -73,7 +74,10 @@
 		}
 	});
 	const name = field('name');
-	const category = field('category');
+	const category = {
+		get value() { return nameMatch?.category ?? draft.category; },
+		set value(next: string) { edits.category = next; }
+	};
 	const author = field('author');
 	const description = field('description');
 
@@ -81,8 +85,8 @@
 	// once. An edited one is posted the way the submit form does, then marked as imported.
 	const publish = (into?: Addon | null) =>
 		run(async () => {
-			if (!categoryChosen) throw new Error('Choose a category before approving this import.');
 			into = into === undefined ? destination : into;
+			if (!into && !categoryChosen) throw new Error('Choose a category before approving this import.');
 			if (edited || destination || draft.category !== item.category) {
 				saving = true;
 				try {
@@ -91,7 +95,7 @@
 						{
 							name: draft.name.trim(),
 							description: draft.description.trim(),
-							category: draft.category,
+							category: into?.category ?? draft.category,
 							author: draft.author.trim(),
 							versions: [{ url: item.url, note: '' }],
 							images: draft.images
@@ -147,8 +151,8 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select use:commitCategoryOnFocus class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch && !!original.category} bind:value={category.value}>
-			<option value="" disabled>Choose a category…</option>
+		<select use:commitCategoryOnFocus class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch} bind:value={category.value}>
+			<option value="" disabled>{forkMatch ? 'Category if separate…' : 'Choose a category…'}</option>
 			{#each CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
 			{/each}
@@ -222,11 +226,11 @@
 			{/each}
 		</dl>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
-			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || !categoryChosen} onclick={() => publish()}>
+			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || (!destination && !categoryChosen)} onclick={() => publish()}>
 				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>
 			{#if match && !destination}
-				<button data-act="version" class="btn py-1" disabled={saving || !categoryChosen} onclick={() => publish(match)}>
+				<button data-act="version" class="btn py-1" disabled={saving} onclick={() => publish(match)}>
 					Add link to {match.name}
 				</button>
 			{/if}
