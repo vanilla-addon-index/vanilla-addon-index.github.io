@@ -39,6 +39,7 @@ export async function postAddon(page: Page, name: string, extra: { category?: st
 	await page.getByLabel('Description', { exact: true }).fill(extra.description ?? `${name} was posted by a browser test.`);
 	await page.getByRole('button', { name: 'Post addon' }).click();
 	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+	await page.getByRole('button', { name: 'Close wiki helper', exact: true }).click();
 	return new URL(page.url()).pathname;
 }
 
