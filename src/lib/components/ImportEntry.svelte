@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
+	import WikiArticleFallback from './WikiArticleFallback.svelte';
 	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
@@ -82,6 +83,7 @@
 	// once. An edited one is posted the way the submit form does, then marked as imported.
 	const publish = (into?: Addon | null) =>
 		run(async () => {
+			if (verdict === 'wiki') throw new Error('Find the download links before approving this wiki article.');
 			into = into === undefined ? destination : into;
 			if (!into && !categoryChosen) throw new Error('Choose a category before approving this import.');
 			if (edited || destination || draft.category !== item.category) {
@@ -172,6 +174,9 @@
 	></textarea>
 
 	<div class="px-1.5">
+		{#if item.wiki_source}
+			<p class="text-sm text-muted"><a href={item.wiki_source} target="_blank" rel="noopener noreferrer" class="underline">Wiki source</a>{item.wiki_recommended ? ' · Wiki recommended · pins on approval' : ''}</p>
+		{/if}
 		<a
 			href={item.url}
 			target="_blank"
@@ -223,6 +228,7 @@
 			{/each}
 		</dl>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
+			{#if verdict !== 'wiki'}
 			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || (!destination && !categoryChosen)} onclick={() => publish()}>
 				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>
@@ -234,6 +240,7 @@
 			{#if forkMatch && !nameMatch}
 				<button class="btn py-1" disabled={saving || !categoryChosen} onclick={() => publish(null)}>Approve separately</button>
 			{/if}
+			{/if}
 			<button data-act="reject" class="btn btn-danger py-1" disabled={saving} onclick={turnDown}>Reject</button>
 			{#if edited}
 				<button class="cursor-pointer text-sm text-muted hover:text-accent" onclick={() => (edits = {})}>
@@ -241,5 +248,6 @@
 				</button>
 			{/if}
 		</div>
+		{#if verdict === 'wiki'}<WikiArticleFallback {item} />{/if}
 	</footer>
 </div>

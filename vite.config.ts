@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
 						// Screenshots are loaded from wherever the poster keeps them.
 						'img-src': ['self', 'https:', 'data:'],
 						// The database and login service, and the README the submit form reads.
-						'connect-src': ['self', database, 'https://api.github.com'],
+						'connect-src': ['self', database, 'https://api.github.com', 'https://turtle-wow.fandom.com'],
 						'object-src': ['none'],
 						'base-uri': ['self'],
 						'form-action': ['self']

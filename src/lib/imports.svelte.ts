@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 import { auth } from './auth.svelte';
 import type { Addon, AddonInput } from './types';
 import type { Candidate } from './wiki';
+import { readArticle, type ArticleLink } from './wiki-article.ts';
+import { isWikiPage } from './import-review.ts';
 
 export interface QueueItem extends Candidate {
 	id: number;
@@ -10,6 +12,8 @@ export interface QueueItem extends Candidate {
 	status: 'pending' | 'approved' | 'rejected' | 'submitted' | 'dead';
 	// Why the last approval attempt failed, if it did.
 	problem: string | null;
+	wiki_source?: string | null;
+	wiki_recommended?: boolean;
 }
 
 
@@ -35,7 +39,9 @@ export const imports = $state({
 	// Entries an admin turned down. Fetched only when that list is opened.
 	rejected: [] as QueueItem[],
 	rejectedLoaded: false,
-	dead: [] as QueueItem[]
+	dead: [] as QueueItem[],
+	wikiReading: {} as Record<number, boolean>,
+	wikiErrors: {} as Record<number, string>
 });
 
 const PAGE = 1000;
@@ -59,10 +65,12 @@ async function all<T>(table: string, filter?: [string, string]): Promise<T[]> {
 }
 
 async function count(status: QueueItem['status']) {
-	const { count: n, error } = await client()
+	let query = client()
 		.from('import_queue')
 		.select('id', { count: 'exact', head: true })
 		.eq('status', status);
+	if (status === 'approved') query = query.eq('wiki_expanded', false);
+	const { count: n, error } = await query;
 	if (error) throw new Error(error.message);
 	return n ?? 0;
 }
@@ -82,6 +90,33 @@ export async function loadQueue() {
 	imports.dead = dead.sort(byName);
 	imports.counts = { pending, approved, rejected, submitted, dead: dead.length };
 	imports.loaded = true;
+	void expandWaitingArticles();
+}
+
+const attemptedArticles = new Set<number>();
+let expanding = false;
+async function expandWaitingArticles() {
+	if (expanding || !auth.isAdmin) return;
+	expanding = true;
+	try {
+		const articles = imports.items.filter(item => isWikiPage(item.url) && !attemptedArticles.has(item.id));
+		for (let i = 0; i < articles.length; i += 3) {
+			await Promise.all(articles.slice(i, i + 3).map(item => expandArticle(item)));
+		}
+	} finally { expanding = false; }
+}
+
+export async function expandArticle(item: QueueItem, pasted?: ArticleLink[]) {
+	attemptedArticles.add(item.id);
+	imports.wikiReading[item.id] = true;
+	imports.wikiErrors[item.id] = '';
+	try {
+		const links = pasted ?? (await readArticle(item.url)).links;
+		if (!links.length) throw new Error('No download links found. Paste repository links below or open the wiki article to check.');
+		await call('expand_wiki_article', { queue_id: item.id, links });
+		await loadQueue();
+	} catch(e) { imports.wikiErrors[item.id] = (e as Error).message; }
+	finally { imports.wikiReading[item.id] = false; }
 }
 
 const byName = (a: QueueItem, b: QueueItem) => a.name.localeCompare(b.name);
