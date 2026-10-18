@@ -1,6 +1,6 @@
 // What search engines and link previews are told about each page. The build writes it into
 // the page (see src/hooks.server.ts); the pages use the same titles once they are running.
-import { SITE_NAME, SITE_TAGLINE } from './config';
+import { SITE_NAME } from './config';
 import type { Addon } from './types';
 
 // Search results cut a description off at about this length.
@@ -12,7 +12,8 @@ function clip(text: string) {
 }
 
 export const HOME_TITLE = `${SITE_NAME} – addons for WoW 1.12.1 (Vanilla)`;
-export const HOME_DESCRIPTION = `${SITE_TAGLINE} Browse and search community addons for World of Warcraft 1.12.1 (Vanilla), each with a link to its source.`;
+export const HOME_DESCRIPTION = 'Browse community addons by category, find your favourites, and follow links to their sources.';
+export const HOME_PREVIEW_TITLE = 'Addons for WoW 1.12.1 (Vanilla)';
 
 export const ABOUT_TITLE = `About and privacy · ${SITE_NAME}`;
 export const ABOUT_DESCRIPTION = `What ${SITE_NAME} is, who runs it, and what it stores about visitors and accounts.`;

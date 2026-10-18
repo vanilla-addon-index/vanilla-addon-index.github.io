@@ -1,6 +1,6 @@
 import type { Handle } from '@sveltejs/kit/hooks';
 import { SITE_NAME, SITE_URL } from '#lib/config.ts';
-import { ABOUT_DESCRIPTION, ABOUT_TITLE, HOME_DESCRIPTION, HOME_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
+import { ABOUT_DESCRIPTION, ABOUT_TITLE, HOME_DESCRIPTION, HOME_TITLE, HOME_PREVIEW_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
 import { readSnapshot } from '#lib/snapshot.server.ts';
 import type { Addon } from '#lib/types.ts';
 
@@ -19,23 +19,33 @@ const PRIVATE = /^\/(admin|login|account|submit)(\/|$)/;
 const esc = (text: string) =>
 	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-type Meta = { title: string; description: string; path: string; image?: string };
+type Meta = { title: string; description: string; path: string; previewTitle?: string };
 
 // The title and description for search results, and the og: tags that chat apps read to
 // show a preview of a pasted link.
-function head({ title, description, path, image }: Meta) {
+function head({ title, description, path, previewTitle = title }: Meta) {
 	const url = SITE_URL + path;
+	// A consistent, compact site mark for every shared page, never addon screenshots.
+	const image = `${SITE_URL}/apple-touch-icon.png`;
 	return [
 		`<title>${esc(title)}</title>`,
 		`<meta name="description" content="${esc(description)}">`,
 		`<link rel="canonical" href="${esc(url)}">`,
 		`<meta property="og:site_name" content="${esc(SITE_NAME)}">`,
 		`<meta property="og:type" content="website">`,
-		`<meta property="og:title" content="${esc(title)}">`,
+		`<meta property="og:title" content="${esc(previewTitle)}">`,
 		`<meta property="og:description" content="${esc(description)}">`,
 		`<meta property="og:url" content="${esc(url)}">`,
-		image ? `<meta property="og:image" content="${esc(image)}">` : '',
-		`<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">`
+		`<meta property="og:image" content="${esc(image)}">`,
+		`<meta property="og:image:type" content="image/png">`,
+		`<meta property="og:image:width" content="180">`,
+		`<meta property="og:image:height" content="180">`,
+		`<meta property="og:image:alt" content="${esc(SITE_NAME)} logo">`,
+		`<meta name="twitter:title" content="${esc(previewTitle)}">`,
+		`<meta name="twitter:description" content="${esc(description)}">`,
+		`<meta name="twitter:image" content="${esc(image)}">`,
+		`<meta name="twitter:image:alt" content="${esc(SITE_NAME)} logo">`,
+		`<meta name="twitter:card" content="summary">`
 	].join('');
 }
 
@@ -51,7 +61,7 @@ function addonPage(addon: Addon) {
 			title: addonTitle(addon),
 			description: addonDescription(addon),
 			path: `/addon/${addon.slug}`,
-			image: addon.images[0]
+			previewTitle: `${addon.name} – WoW 1.12.1 addon`
 		}),
 		body: noscript(
 			`<h1>${esc(addon.name)}</h1>` +
@@ -68,7 +78,7 @@ function homePage() {
 		.map((a) => `<li><a href="/addon/${esc(a.slug)}">${esc(a.name)}</a></li>`)
 		.join('');
 	return {
-		head: head({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: '/' }),
+		head: head({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: '/', previewTitle: HOME_PREVIEW_TITLE }),
 		body: noscript(`<h1>${esc(SITE_NAME)}</h1><p>${esc(HOME_DESCRIPTION)}</p><ul>${list}</ul>`)
 	};
 }
