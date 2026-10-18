@@ -79,6 +79,10 @@ live list. Each removed link retains a full addon snapshot in the private queue,
 deleted addons also enter the normal trash. Filed dead links are not automatically
 republished or rechecked once they are no longer published or pending.
 
+Owner rejections can only be returned to the import queue by the owner. Admins can
+restore rejections made by other admins. The database enforces this for both individual
+and batch actions, and the review page disables the restore action for owner rejections.
+
 Import categories are selected manually by an admin or the owner before publishing a new
 addon page. New and existing queued imports start with no category selected. Links added
 to an existing page inherit that page’s category. Buttons and keyboard shortcuts require
