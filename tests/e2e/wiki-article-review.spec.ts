@@ -4,8 +4,8 @@ import { loginAs, unique } from './helpers';
 
 test('wiki download links appear as ordinary import cards and group through normal approvals', async ({ page }) => {
 	const name=unique('WikiLinks').replace(/\W/g,'');
-	execFileSync('docker',['exec','-i','supabase_db_vanilla-addon-index','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:`insert into public.import_queue(key,url,name,description) values('turtle-wow.fandom.com/wiki/${name.toLowerCase()}','https://turtle-wow.fandom.com/wiki/${name}','${name}','Automates repetitive interactions.');`,encoding:'utf8'});
-	await page.route('https://turtle-wow.fandom.com/api.php?*',route=>route.fulfill({json:{parse:{revid:123,wikitext:`== Git links ==\n*[https://github.com/wiki-first/${name} First]\n*[https://github.com/wiki-second/${name} Second]\n*[https://github.com/wiki-recommended/${name} Third] - Recommended`}}}));
+	execFileSync('docker',['exec','-i','supabase_db_vanilla-addon-index','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:`insert into public.import_queue(key,url,name,description) values('turtle-wow.fandom.com/wiki/${name.toLowerCase()}','https://turtle-wow.fandom.com/wiki/${name}','Old${name}','Old listing description.');`,encoding:'utf8'});
+	await page.route('https://turtle-wow.fandom.com/api.php?*',route=>route.fulfill({json:{parse:{title:name,redirects:[{from:'Old'+name,to:name}],revid:123,wikitext:`Automates repetitive interactions.\n\n== Git links ==\n[https://github.com/wiki-first/${name} First]\n'''[https://github.com/wiki-second/${name} Second]'''\n*[https://github.com/wiki-recommended/${name} Third] - Recommended`}}}));
 	await loginAs(page,'admin');
 	await page.goto('/admin/import');
 	await page.getByLabel('Search',{exact:true}).fill(name);
