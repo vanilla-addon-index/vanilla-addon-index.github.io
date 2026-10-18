@@ -25,8 +25,8 @@ type Meta = { title: string; description: string; path: string; previewTitle?: s
 // show a preview of a pasted link.
 function head({ title, description, path, previewTitle = title }: Meta) {
 	const url = SITE_URL + path;
-	// A consistent, compact site mark for every shared page, never addon screenshots.
-	const image = `${SITE_URL}/apple-touch-icon.png`;
+	// A wide sharing image keeps the site mark inside both landscape and square crops.
+	const image = `${SITE_URL}/share-logo.png`;
 	return [
 		`<title>${esc(title)}</title>`,
 		`<meta name="description" content="${esc(description)}">`,
@@ -38,8 +38,8 @@ function head({ title, description, path, previewTitle = title }: Meta) {
 		`<meta property="og:url" content="${esc(url)}">`,
 		`<meta property="og:image" content="${esc(image)}">`,
 		`<meta property="og:image:type" content="image/png">`,
-		`<meta property="og:image:width" content="180">`,
-		`<meta property="og:image:height" content="180">`,
+		`<meta property="og:image:width" content="1730">`,
+		`<meta property="og:image:height" content="909">`,
 		`<meta property="og:image:alt" content="${esc(SITE_NAME)} logo">`,
 		`<meta name="twitter:title" content="${esc(previewTitle)}">`,
 		`<meta name="twitter:description" content="${esc(description)}">`,
