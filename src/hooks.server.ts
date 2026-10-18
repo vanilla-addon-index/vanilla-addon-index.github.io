@@ -26,7 +26,7 @@ type Meta = { title: string; description: string; path: string; previewTitle?: s
 function head({ title, description, path, previewTitle = title }: Meta) {
 	const url = SITE_URL + path;
 	// A wide sharing image keeps the site mark inside both landscape and square crops.
-	const image = `${SITE_URL}/share-logo.png`;
+	const image = `${SITE_URL}/share-logo-v2.png`;
 	return [
 		`<title>${esc(title)}</title>`,
 		`<meta name="description" content="${esc(description)}">`,
