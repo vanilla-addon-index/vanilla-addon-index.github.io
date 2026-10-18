@@ -46,11 +46,7 @@ Nothing was written to the database.
 |---|---|
 ${table(count(candidates, (e) => e.key.split('/')[0]).slice(0, 12))}
 
-## Guessed categories
-
-| Category | Candidates |
-|---|---|
-${table(count(candidates, (e) => e.category))}
+Categories are selected manually during admin review.
 
 ## Names used by more than one candidate
 
@@ -61,7 +57,7 @@ ${sameName.map(([name, n]) => `- ${name} (${n}): ${candidates.filter((e) => e.na
 ${sample(candidates, 25)
 	.map(
 		(e) =>
-			`- **${e.name}** [${e.category}]${e.obsolete ? ' (obsolete)' : ''}${e.parent ? ` (extension of ${e.parent})` : ''}\n  - ${e.url}\n  - ${e.description || '(no description)'}\n  - screenshots: ${e.images.length}, other versions: ${e.alts.length}`
+			`- **${e.name}**${e.obsolete ? ' (obsolete)' : ''}${e.parent ? ` (extension of ${e.parent})` : ''}\n  - ${e.url}\n  - ${e.description || '(no description)'}\n  - screenshots: ${e.images.length}, other versions: ${e.alts.length}`
 	)
 	.join('\n')}
 

@@ -9,9 +9,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { CATEGORIES } from '../../src/lib/config.ts';
 import { parseWiki } from '../../src/lib/wiki.ts';
-import { suggestCategory } from '../../src/lib/category-scoring.ts';
 
 // What the saved page gives. See the last group of tests.
 const TOTALS = {
@@ -27,30 +25,6 @@ const TOTALS = {
 	wikiPages: 38,
 	withoutDescription: 34,
 	foldersOfCollections: 5
-};
-const CATEGORY_TOTALS = {
-	"Action Bars": 25,
-	"Auction & Economy": 39,
-	"Bags & Inventory": 30,
-	"Boss Mods": 19,
-	"Buffs & Debuffs": 45,
-	"Chat & Social": 69,
-	"Class": 92,
-	"Combat": 109,
-	"Hardcore": 13,
-	"Libraries": 4,
-	"Loot Distribution": 25,
-	"Macros": 12,
-	"Map & Minimap": 28,
-	"Professions": 26,
-	"PvP": 22,
-	"Quests & Leveling": 59,
-	"Raid & Party": 76,
-	"Roleplay": 7,
-	"Tooltip": 16,
-	"UI & Appearance": 45,
-	"Unit Frames": 49,
-	"Miscellaneous": 0
 };
 
 // The page is found by its headings; everything between them is the test's own.
@@ -169,7 +143,7 @@ describe('versions and repeats', () => {
 		}));
 		assert.deepEqual(candidates.map((c) => c.name), ['BetterCharacterPanel', 'ChildAddon', 'TableAddon', 'OtherAddon', 'BetterCharacterPanel']);
 		assert.equal(candidates[1].parent, 'BetterCharacterPanel');
-		assert.equal(candidates[0].category, 'UI & Appearance');
+		assert.equal(candidates[0].category, '');
 		assert.equal(candidates[0].description, 'Improves the character and inspect panel');
 		assert.equal(candidates[0].url, 'https://github.com/a/BetterCharacterPanel');
 	});
@@ -178,9 +152,9 @@ describe('versions and repeats', () => {
 		assert.deepEqual(
 			candidates.map((c) => [c.key, c.name, c.description, c.category, c.group_key]),
 			[
-				['github.com/a/bagnon', 'Bagnon', 'one big bag', 'Bags & Inventory', null],
-				['github.com/b/bagnon', 'Bagnon', '', 'Bags & Inventory', 'github.com/a/bagnon'],
-				['gitlab.com/c/bagnon', 'Bagnon', '', 'Bags & Inventory', 'github.com/a/bagnon']
+				['github.com/a/bagnon', 'Bagnon', 'one big bag', '', null],
+				['github.com/b/bagnon', 'Bagnon', '', '', 'github.com/a/bagnon'],
+				['gitlab.com/c/bagnon', 'Bagnon', '', '', 'github.com/a/bagnon']
 			]
 		);
 		assert.deepEqual(candidates[0].alts, ['https://github.com/b/Bagnon', 'https://gitlab.com/c/bagnon']);
@@ -228,115 +202,6 @@ test('a page that has lost one of its headings is refused, not half read', () =>
 	assert.throws(() => parseWiki('===Full Addons List===\n* [https://github.com/a/b Name] thing'), /no longer has the section/);
 });
 
-describe('the category is guessed from the name and the description', () => {
-	const guess = (name, description = '') => suggestCategory(name, description).category;
-
-	test('one addon for each category', () => {
-		const cases = [
-			['LibStub', '', 'Libraries'],
-			['BigWigs', 'Boss encounter warnings', 'Boss Mods'],
-			['LunaUnitFrames', 'unit frames', 'Unit Frames'],
-			['Bartender', 'replaces the action bars', 'Action Bars'],
-			['Bagnon', 'all your bags in one window', 'Bags & Inventory'],
-			['Auctionator', 'A lightweight addon designed to help manage auctions.', 'Auction & Economy'],
-			['SexyMap', 'A prettier minimap', 'Map & Minimap'],
-			['pfQuest', 'quest helper and database', 'Quests & Leveling'],
-			['BuffWatch', 'shows what is on your group', 'Buffs & Debuffs'],
-			['WIM', 'brings an instant messenger feel to communication in game', 'Chat & Social'],
-			['TinyTip', 'changes the look of your GameTooltip', 'Tooltip'],
-			['Artisan', 'Compact professions window', 'Professions'],
-			['BGFlag', 'status of the Alliance and Horde flags', 'PvP'],
-			['Quiver', 'Hunter auto shot timer, castbar, and more', 'Class'],
-			['RollFor', 'An automated item roller for raids', 'Loot Distribution'],
-			['RaidHelper', 'Raid assignments and ready checks', 'Raid & Party'],
-			['TurtleRP', 'An RP addon custom-made for turtle', 'Roleplay'],
-			['KillTrack', 'Tracks any and all mob kills for you.', 'Combat'],
-			['HardcoreAlarms', 'Danger warnings for hardcore characters', 'Hardcore'],
-			['SpartanUI', 'moves the interface elements to the bottom', 'UI & Appearance'],
-			['CleverMacro', 'Adds extra slash commands for use in macros', 'Macros'],
-			['MoveAnything', 'Lets you move, scale, and hide anything at all', 'Miscellaneous']
-		];
-		for (const [name, description, expected] of cases) assert.equal(guess(name, description), expected, name);
-		// Every category has a case, so a rule cannot be lost without a test noticing.
-		assert.deepEqual([...new Set(cases.map((c) => c[2]))].sort(), [...CATEGORIES].sort());
-	});
-
-	test('visual addons fit UI & Appearance while functional categories keep priority', () => {
-		for (const [name, description] of [
-			["Beardley's Diablo Orbs", 'is a backported Diablo like UI'],
-			['SimpleSkin', 'A new skin for the interface'],
-			['DarkTheme', 'Darker textures and decorative elements'],
-			['pfUI', 'A full UI replacement']
-		]) assert.equal(guess(name, description), 'UI & Appearance', name);
-		assert.equal(guess('PrettyBars', 'A themed action bar replacement'), 'Action Bars');
-		assert.equal(guess('PrettyTooltip', 'A new tooltip skin'), 'Tooltip');
-		assert.equal(guess('PrettyMinimap', 'A minimap theme'), 'Map & Minimap');
-	});
-
-	test('words joined up in a name count as words', () => {
-		assert.equal(guess('AdvancedTradeSkillWindow2', 'Improved window'), 'Professions');
-		assert.equal(guess('RaidSummon', 'small frame'), 'Raid & Party');
-		assert.equal(guess('TurtlePvp', 'Broadcasts your location'), 'PvP');
-	});
-
-	test('character and inspect panels are UI addons even when they describe equipment or spells', () => {
-		for (const [name, description] of [
-			['Better Character Panel', 'Improves the default character and inspect panel by adding enchants effects and more! Made for TWoW'],
-			['BetterCharacterPanel', 'Improved equipment and spell statistics'],
-			['BetterCharacterStats', 'Backports the TBC character stats panel, collecting primary and secondary stats like spellpower, hit, crit'],
-			['InspectPlus', 'Overhauls the inspection pane for raid gear checks'],
-			['PaperDoll', 'Improves the character window'],
-			['InspectFrame', 'Adds equipment statistics']
-		]) assert.equal(guess(name, description), 'UI & Appearance', name);
-		assert.equal(guess('GearCheck', 'Inspect equipment for raids'), 'Bags & Inventory');
-		assert.equal(guess('PanelHelper', 'Improves a panel'), 'Miscellaneous');
-	});
-
-	test('plurals count too', () => {
-		assert.equal(guess('CThunWarner', "Provides information for C'Thun raids"), 'Boss Mods');
-		assert.equal(guess('Crusader', 'Sphere addon for Paladins'), 'Class');
-		assert.equal(guess('AuctionAltBuy', 'Alt-Click auctions to buy and cancel instantly'), 'Auction & Economy');
-	});
-
-	test('macro utilities get their own category while incidental macros keep functional categories', () => {
-		for (const [name, description] of [
-			['CerniesWonderfulFunctions', 'Script methods for using specific items and helping players create simple(er) macros'],
-			['CleverMacro', 'Adds extra slash commands for use in macros'],
-			['CleveRoidMacros', 'More advanced and modern style macros'],
-			['PlayerStates', 'Macro Helper addon'],
-			['Iconic', 'Improves the default macro icon selection system by adding a search bar'],
-			['MacroTT-V', 'Create tooltips for your macros'],
-			['MacroDebug', 'A macro debugger'],
-			['UltimaMacros', 'A lightweight, self-contained macro system']
-		]) assert.equal(guess(name, description), 'Macros', name);
-		assert.equal(guess('TotemBar', 'Shaman totem bar usable from a single macro or keybind'), 'Class');
-		assert.equal(guess('LibramSwap', 'Adds automatic smart libram swapping for paladins - no macros required.'), 'Class');
-		assert.equal(guess('Flyout', 'Using a macro creates a flyout action button for spells'), 'Action Bars');
-	});
-
-	test('battleground names and abbreviations identify PvP addons', () => {
-		assert.equal(guess('Avbars', 'Graphical Timers for Events in AV and AB'), 'PvP');
-		for (const battleground of ['AV', 'AB', 'WSG', 'Alterac Valley', 'Arathi Basin', 'Warsong Gulch', 'BGs']) {
-			assert.equal(guess('EventTimers', `Timers for ${battleground}`), 'PvP', battleground);
-			assert.equal(guess('EventTimers', `Timers for ${battleground.toLowerCase()}`), 'PvP', battleground);
-		}
-	});
-
-	test('class descriptions are considered alongside higher-priority name clues', () => {
-		assert.equal(guess('SP_SwingTimer', 'Warrior Swing Timer'), 'Combat');
-		assert.equal(guess('AutoLock', 'Priority-based spell rotation addon for Warlocks.'), 'Class');
-		assert.equal(guess('LibramSwap', 'Adds automatic smart libram swapping for paladins - no macros required.'), 'Class');
-	});
-
-	test('a word that only looks like a rule does not decide', () => {
-		assert.equal(guess('AvailableTabs', 'Available tabs for the interface'), 'Miscellaneous');
-		assert.equal(guess('MouseLookLock', 'sets up a simple perma-mouselook.'), 'Miscellaneous');
-		assert.equal(guess('BetterBabelFish', 'Better babel talk between factions'), 'Miscellaneous');
-		assert.equal(guess('HideErrorFrame', 'Removes the error messages that spam your screen'), 'Miscellaneous');
-		assert.equal(guess('RosterFilter', 'a guild frame based on aux'), 'Chat & Social');
-	});
-});
-
 describe('the whole page, as it was at revision 23801', () => {
 	const { candidates, problems, fromTables, repeated } = parseWiki(
 		readFileSync(new URL('../fixtures/wiki-addons.wikitext', import.meta.url), 'utf8')
@@ -371,15 +236,12 @@ describe('the whole page, as it was at revision 23801', () => {
 			assert.match(c.url, /^https:\/\/\S+$/, c.name);
 			assert.notEqual(c.name, '', c.url);
 		assert.doesNotMatch(c.name, /\s/, c.url);
-			assert.ok(c.category === '' || CATEGORIES.includes(c.category), c.name);
+			assert.equal(c.category, '', c.name);
 			assert.ok(c.images.length <= 5, c.name);
 		}
 	});
 
-	test('only confident suggestions preselect a category; uncertain entries need a manual choice', () => {
-		assert.equal(candidates.find((c) => c.key === 'github.com/topfreestyle/avbars')?.category, 'PvP');
-		const per = Object.fromEntries(CATEGORIES.map((category) => [category, count((c) => c.category === category)]));
-		assert.deepEqual(per, CATEGORY_TOTALS);
-		assert.equal(count(c => c.category === ''), 272);
+	test('every import requires a manual category choice', () => {
+		assert.ok(candidates.every(c => c.category === ''));
 	});
 });

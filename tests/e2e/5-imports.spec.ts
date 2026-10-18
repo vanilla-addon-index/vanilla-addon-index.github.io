@@ -90,7 +90,7 @@ test('renamed forks suggest their published parent and keep separate approval ex
   const response=await route.fetch();const rows=await response.json();
   if(Array.isArray(rows)){
    candidateId??=rows.find(row=>row.status==='pending')?.id;
-   for(const row of rows) if(row.id===candidateId) {row.name=forkName;row.description='';row.category_context={};}
+   for(const row of rows) if(row.id===candidateId) {row.name=forkName;row.description='';}
   }
   await route.fulfill({response,json:rows});
  });
@@ -132,7 +132,7 @@ for (const group of [false,true]) {
    const response=await route.fetch();const rows=await response.json();
    if(Array.isArray(rows)){
     candidateId??=rows.find(row=>row.status==='pending')?.id;
-    for(const row of rows) if(row.id===candidateId) {row.name=version;row.description='A separately named version with its own description.';row.category_context={};}
+    for(const row of rows) if(row.id===candidateId) {row.name=version;row.description='A separately named version with its own description.';}
    }
    await route.fulfill({response,json:rows});
   });

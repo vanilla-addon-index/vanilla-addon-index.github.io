@@ -10,7 +10,7 @@ test('same-name imports inherit the existing category and keyboard approval need
 	await page.route('**/rest/v1/import_queue?*', async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
-		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/opaquewidget', url:'https://github.com/a/OpaqueWidget', name:'OpaqueWidget', category:'', description:'', category_context:{}}]});
+		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/opaquewidget', url:'https://github.com/a/OpaqueWidget', name:'OpaqueWidget', category:'', description:''}]});
 	});
 	await page.route('**/rest/v1/rpc/publish_import', route => route.fulfill({json:null}));
 	await page.goto('/admin/import');
@@ -33,7 +33,7 @@ test('same-name imports inherit the existing category and keyboard approval need
 	expect(payload.input.category).toBe('Professions');
 });
 
-test('repository evidence corrects an existing guess and approval sends the displayed category', async ({page}) => {
+test('repository evidence and old guesses do not preselect a category', async ({page}) => {
 	await loginAs(page, 'admin');
 	await page.route('**/rest/v1/import_queue?*', async route => {
 		if (route.request().method() !== 'GET') return route.continue();
@@ -44,7 +44,9 @@ test('repository evidence corrects an existing guess and approval sends the disp
 	await page.route('**/rest/v1/rpc/publish_import', route => route.fulfill({json:null}));
 	await page.goto('/admin/import');
 	const entry = page.locator('[data-entry]').first();
-	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Combat');
+	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('');
+	await expect(entry.locator('[data-act="approve"]')).toBeDisabled();
+	await entry.getByLabel('Category', {exact:true}).selectOption('Combat');
 	const request = page.waitForRequest('**/rest/v1/rpc/publish_import');
 	await entry.locator('[data-act="approve"]').click();
 	expect((await request).postDataJSON().input.category).toBe('Combat');
@@ -66,24 +68,24 @@ test('old archived imports stay quiet, omit the obsolete filter and preserve adm
 	const entry = page.locator('[data-entry]').first();
 	await expect(page.getByRole('button', {name:'Obsolete or dead', exact:false})).toHaveCount(0);
 	await expect(entry.getByText('2010', {exact:true})).toBeVisible();
-	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Chat & Social');
+	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('');
 	await expect(entry.getByText(/Category suggestion:/)).toHaveCount(0);
 	await expect(entry.getByText('Ready', {exact:true})).toHaveCount(0);
-	await expect(entry.getByRole('note', {name:'Import status'})).toHaveCount(0);
-	await page.getByRole('button', {name:/^Looks fine/}).click();
+	await expect(entry.getByRole('note', {name:'Import status'})).toContainText('Choose a category');
+	await page.getByRole('button', {name:/^Needs review/}).click();
 	await expect(entry).toHaveCount(1);
 	await entry.getByLabel('Category', {exact:true}).selectOption('Miscellaneous');
 	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Miscellaneous');
 	await expect(entry.getByRole('button', {name:'Undo my changes'})).toBeVisible();
 });
 
-test('uncertain imports have a blank category and cannot be approved until an admin chooses', async ({page}) => {
+test('new imports have a blank category and cannot be approved until an admin chooses', async ({page}) => {
 	await loginAs(page, 'admin');
 	await page.route('**/rest/v1/import_queue?*', async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
-		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/unknownwidget', url:'https://github.com/a/UnknownWidget', name:'UnknownWidget', category:'Miscellaneous', description:'Includes a button.', category_context:{}}]});
+		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/unknownwidget', url:'https://github.com/a/UnknownWidget', name:'UnknownWidget', category:'Miscellaneous', description:'Includes a button.'}]});
 	});
 	await page.goto('/admin/import');
 	const entry = page.locator('[data-entry]').first();

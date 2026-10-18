@@ -79,11 +79,10 @@ live list. Each removed link retains a full addon snapshot in the private queue,
 deleted addons also enter the normal trash. Filed dead links are not automatically
 republished or rechecked once they are no longer published or pending.
 
-Category suggestions use [weighted evidence and confidence](category-matching.md)
-from the addon name and description. Import review only shows actionable status messages.
-Uncertain imports have no selected category: an admin must choose one before
-approving, including when adding a version. Buttons and keyboard shortcuts enforce
-this; the database also rejects new published entries with an empty category.
+Import categories are selected manually by an admin or the owner before publishing a new
+addon page. New and existing queued imports start with no category selected. Links added
+to an existing page inherit that page’s category. Buttons and keyboard shortcuts require
+a category for new pages; the database also rejects an empty published category.
 
 When a submitted link matches a pending import's normalized key, the database
 resolves that candidate as `submitted` and records its live addon and submitting
@@ -101,7 +100,7 @@ Checks use shared requests, sequential GitHub batches and two workers per other
 host. Completed file and history results are reused only after validating the
 branch commit or file identifiers. REST metadata can use server-validated ETags
 or Last-Modified responses. Incomplete checks remain retryable; confirmed absence
-can clear a detail. Wiki content is parsed each run, so parser and category fixes
+can clear a detail. Wiki content is parsed each run, so parser fixes
 apply even when its revision has not changed.
 
 ## Private maintenance data

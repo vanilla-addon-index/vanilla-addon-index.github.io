@@ -11,8 +11,6 @@
 	import { linkAuthor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
-	import { categoryDescription } from '#lib/category-context.ts';
-	import { suggestCategory } from '#lib/category-scoring.ts';
 
 	const FILTERS = {
 		all: 'All',
@@ -76,8 +74,7 @@
 
 	// The author is the one the link names, which is what approving publishes.
 	function gaps(item: QueueItem) {
-		const missing: string[] = [];
-		if (suggestCategory(item.name, categoryDescription(item)).confidence === 'Uncertain') missing.push('category');
+		const missing: string[] = ['category'];
 		if (!linkAuthor(item.url)) missing.push('author');
 		if (!item.description.trim()) missing.push('description');
 		if (!item.url.trim()) missing.push('link');
@@ -88,7 +85,7 @@
 		const forkMatch = publishedForkParent(imports.stats[item.key]?.fork_of, store.addons);
 		const judged = judge(item);
 		const existing = liveByName.has(plain(item.name)) || forkMatch;
-		const missing = gaps(item).filter(field => !existing || field === 'category');
+		const missing = existing ? [] : gaps(item);
 		if (isWikiPage(item.url)) return { ...judged, forkMatch, missing, verdict: 'wiki' };
 		if (judged.verdict === 'dead') return { ...judged, forkMatch, missing };
 		return { ...judged, forkMatch, missing, verdict: missing.length || judged.verdict === 'problem' ? 'incomplete' : judged.verdict };
