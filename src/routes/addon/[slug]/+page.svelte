@@ -158,9 +158,9 @@
 {#if addon}
 	<a href={resolve('/')} class="text-muted hover:text-accent">← All addons</a>
 
-	<article class="mt-3 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
-		<div class="panel p-4">
-			<h1 class="text-3xl font-bold">{addon.name}</h1>
+	<article class="mt-3 grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+		<div class="panel min-w-0 p-4">
+			<h1 class="text-3xl font-bold [overflow-wrap:anywhere]">{addon.name}</h1>
 
 			<div class="mt-3 flex flex-wrap gap-1.5">
 				<a href={resolve(`/?cat=${encodeURIComponent(addon.category)}`)} class="chip">
@@ -211,7 +211,7 @@
 			{/if}
 		</dialog>
 
-		<aside class="space-y-2">
+		<aside class="min-w-0 space-y-2">
 			<div class="panel">
 				<!-- Pinned link first, otherwise newest known code update. -->
 				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
