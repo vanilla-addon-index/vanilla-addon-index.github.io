@@ -30,7 +30,7 @@ globalThis.fetch = async (url, init = {}) => {
   ]);
   if (name === 'nightly_links' && ['forge-batched', 'forge-late-stop'].includes(scenario)) return json(Array.from({length:9}, (_, i) => ({key:'codeberg.org/a/addon'+i, url:'https://codeberg.org/a/addon'+i, readme:true, images:[]})));
   if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', readme: !['already-checked', 'category-all'].includes(scenario), images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
-  if (name === 'nightly_waiting') return json({reports:0, suggestions:0});
+  if (name === 'nightly_waiting') return json({ reports: 0, suggestions: 0, imports: 0 });
   if (name === 'retire_dead_links') return json({queued:0,links_removed:0,addons_removed:0});
   return json(0);
  }

@@ -20,7 +20,7 @@ globalThis.fetch = async (url, init = {}) => {
 		const name = url.split('/').at(-1);
 		const {token, ...args} = JSON.parse(init.body);
 		if (name === 'nightly_links') return json(links);
-		if (name === 'nightly_waiting') return json({reports:0, suggestions:0});
+		if (name === 'nightly_waiting') return json({ reports: 0, suggestions: 0, imports: 0 });
 		calls.push({name, args});
 		if (name.startsWith('store_')) {
 			maximumWrites = Math.max(maximumWrites, ++activeWrites);

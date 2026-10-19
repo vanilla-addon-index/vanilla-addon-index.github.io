@@ -68,18 +68,20 @@ describe('reports', () => {
 
 	test('the nightly job is told how much is waiting for an admin, and nothing more', async () => {
 		const waiting = async (token = NIGHTLY_TOKEN) => (await db.asVisitor((q) => q('select public.nightly_waiting($1) as w', [token])))[0].w;
-		assert.deepEqual(await waiting(), { reports: 0, suggestions: 0 });
+		assert.deepEqual(await waiting(), { reports: 0, suggestions: 0, imports: 0 });
 		const atlas = await post(db, bob, addon('Atlas'));
-		assert.deepEqual(await waiting(), { reports: 0, suggestions: 0 });
+		assert.deepEqual(await waiting(), { reports: 0, suggestions: 0, imports: 0 });
 		await report(alice, atlas);
 		await report(bob, atlas, 'harmful');
 		const mine = await post(db, alice, addon('Fork'));
 		await call(alice, 'select public.suggest_group($1, $2)', [mine.id, atlas.id]);
-		assert.deepEqual(await waiting(), { reports: 2, suggestions: 1 });
+		assert.deepEqual(await waiting(), { reports: 2, suggestions: 1, imports: 0 });
 		// A new addon is nothing an admin has to act on, and a closed report no longer waits.
 		const [{ id }] = await db.sql('select id from public.reports order by id limit 1');
 		await call(admin, `select public.decide_report($1, 'dismissed')`, [id]);
-		assert.deepEqual(await waiting(), { reports: 1, suggestions: 1 });
+		assert.deepEqual(await waiting(), { reports: 1, suggestions: 1, imports: 0 });
+		await db.sql("insert into public.import_queue(key,url,name,status) values ('github.com/a/new','https://github.com/a/new','New','pending'),('github.com/a/dead','https://github.com/a/dead','Dead','dead'),('github.com/a/rejected','https://github.com/a/rejected','Rejected','rejected')");
+		assert.deepEqual(await waiting(), { reports: 1, suggestions: 1, imports: 1 });
 		await refused(() => waiting('a guess'), /Only the nightly job/);
 		await refused(() => call(admin, 'select public.nightly_waiting($1)', [NIGHTLY_TOKEN]), /permission denied/);
 	});

@@ -1,16 +1,18 @@
 // Nightly import job, run by .github/workflows/nightly.yml.
 //   1. Reads the wiki and queues addons that are neither live nor already reviewed.
 //   2. Trims the log and the trash of what is older than 90 days.
-//   3. Counts the reports and suggestions waiting for an admin, for the workflow to tell
+//   3. Counts reports, suggestions and imports waiting for an admin after repository checks, for the workflow to tell
 //      them about.
-//   4. Asks GitHub, GitLab, Codeberg, gitea.com and OctoWoW about every queued and live repository
+//   3. Asks GitHub, GitLab, Codeberg, gitea.com and OctoWoW about every queued and live repository
 //      kept there (stars, last update, archived, fork parent, current address, and the
 //      game version its .toc file declares) and stores the answers for the review page.
 //      GitHub is asked with the workflow's own token; the others need none.
 //      Confirmed missing links are filed separately from rejections and removed from
 //      published entries; a page stays live as long as it has another link.
-//   5. Looks at the screenshots of each queued entry, once: keeps the wiki's that still
+//   4. Looks at the screenshots of each queued entry, once: keeps the wiki's that still
 //      load, adds the ones in the repository's README, and stores them for the review.
+//
+//   5. Counts reports, suggestions and imports still waiting after checks, for GitHub notices.
 //
 // Needs NIGHTLY_TOKEN and GITHUB_TOKEN. Missing configuration fails before any work.
 //
@@ -107,19 +109,6 @@ try {
 	console.log(`Tidied up: ${trimmed} old log line${trimmed === 1 ? '' : 's'} trimmed.`);
 } catch (error) {
 	console.error(`Could not tidy up: ${error.message}`);
-	process.exitCode = 1;
-}
-
-// 3. What is waiting for an admin: handed to the workflow, which tells them on GitHub.
-// Only the two numbers leave the database.
-try {
-	const { reports, suggestions } = await db('nightly_waiting');
-	console.log(`Waiting for an admin: ${reports} reports, ${suggestions} suggestions.`);
-	if (process.env.GITHUB_OUTPUT) {
-		appendFileSync(process.env.GITHUB_OUTPUT, `reports=${reports}\nsuggestions=${suggestions}\n`);
-	}
-} catch (error) {
-	console.error(`Could not ask what is waiting: ${error.message}`);
 	process.exitCode = 1;
 }
 
@@ -607,3 +596,16 @@ console.log(
 		`${stats.filter((s) => s.interface !== null).length} have a readable .toc.` +
 		(unanswered ? ` GitHub gave no answer about ${unanswered}; what was known about those is kept.` : '')
 );
+
+// What is waiting after repository checks: handed to the workflow for GitHub notices.
+// Only the counts leave the database.
+try {
+	const { reports, suggestions, imports } = await db('nightly_waiting');
+	console.log(`Waiting for an admin: ${reports} reports, ${suggestions} suggestions, ${imports} imports.`);
+	if (process.env.GITHUB_OUTPUT) {
+		appendFileSync(process.env.GITHUB_OUTPUT, `reports=${reports}\nsuggestions=${suggestions}\nimports=${imports}\n`);
+	}
+} catch (error) {
+	console.error(`Could not ask what is waiting: ${error.message}`);
+	process.exitCode = 1;
+}
