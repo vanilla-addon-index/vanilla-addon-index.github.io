@@ -74,9 +74,11 @@ When changing repository file parsing or selection, bump `CHECK_CACHE_VERSION` i
 up changed rules. Cache records are private, bounded to 64 KiB and maintained only
 through Nightly-token functions. Long other-host README text is not cached.
 
-Reports and member suggestions trigger a public “Waiting for an admin” issue with
-counts only. `TELL` and `ADMIN_PAGE` in Nightly configure recipients and the admin
-link. Ordinary wiki candidates do not trigger that issue.
+Reports, member suggestions and pending wiki imports trigger a public “Waiting for
+an admin” issue with counts and admin links only. `TELL` in Nightly configures the
+recipient. Counts are collected after dead-link filing. The issue updates as counts
+change, comments when any category increases, stays quiet when unchanged, and closes
+when all three counts reach zero. No addon names or report contents are published.
 
 Contributor edit proposals count as suggestions in that notification. The admin
 header and **Edit reviews** tab show the number waiting. Review current and proposed
