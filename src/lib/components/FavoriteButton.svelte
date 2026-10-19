@@ -6,8 +6,9 @@
 	let { addonId }: { addonId: number } = $props();
 	let saved = $state(false), loading = $state(true), busy = $state(false), error = $state('');
 	let loadFailed = $state(false), retry = $state(0);
+	const userId = $derived(auth.session?.user.id);
 	$effect(() => {
-		const user = auth.session?.user.id, id = addonId;
+		const user = userId, id = addonId;
 		void retry;
 		let active = true;
 		saved = false; loading = true; error = ''; busy = false; loadFailed = false;
@@ -38,11 +39,15 @@
 	}
 </script>
 
-{#if auth.ready}
+{#if !auth.ready || (auth.session && loading)}
+	<button class="btn w-full" disabled aria-label="Loading favorite…" aria-busy="true">
+		<span class="invisible" aria-hidden="true">☆ Add to favorites</span>
+	</button>
+{:else}
 	{#if auth.session}
-		<button class="btn w-full" aria-label={loading ? 'Loading favorite…' : saved ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={saved} disabled={loading || busy || loadFailed} onclick={toggle}>
+		<button class="btn w-full" aria-label={saved ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={saved} disabled={busy || loadFailed} onclick={toggle}>
 			<span aria-hidden="true">{saved ? '★' : '☆'}</span>
-			{loading ? 'Loading favorite…' : saved ? 'Favorited' : 'Add to favorites'}
+			{saved ? 'Favorited' : 'Add to favorites'}
 		</button>
 		{#if error}<p class="mt-1 text-sm text-danger" role="alert">{error}</p>{/if}
 		{#if loadFailed}<button class="btn mt-1" onclick={() => retry++}>Try again</button>{/if}

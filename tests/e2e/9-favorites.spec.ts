@@ -29,3 +29,26 @@ test('signed-out visitors are offered login on the addon page', async ({ page })
 	await page.goto('/addon/raidhelper');
 	await expect(page.getByRole('link', {name:'Log in to favorite', exact:true})).toHaveAttribute('href', /next=%2Faddon%2Fraidhelper/);
 });
+
+test('loading a favorite reserves the final button space without flashing an empty star or loading text', async ({ page }) => {
+	await loginAs(page, 'member');
+	let release!: () => void;
+	const gate = new Promise<void>(resolve => { release = resolve; });
+	await page.route('**/rest/v1/addon_favorites?*', async route => {
+		if (route.request().method() !== 'GET') return route.continue();
+		await gate;
+		await route.fulfill({ json: [{ addon_id: 1 }] });
+	});
+	await page.goto('/addon/raidhelper');
+	const loading = page.getByRole('button', { name: 'Loading favorite…', exact: true });
+	await expect(loading).toBeVisible();
+	await expect(loading).toBeDisabled();
+	await expect(loading.locator('span')).toHaveCSS('visibility', 'hidden');
+	const before = await loading.boundingBox();
+	release();
+	const saved = page.getByRole('button', { name: 'Remove from favorites', exact: true });
+	await expect(saved).toBeEnabled();
+	const after = await saved.boundingBox();
+	expect(after?.height).toBe(before?.height);
+	expect(after?.y).toBe(before?.y);
+});
