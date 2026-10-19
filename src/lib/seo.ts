@@ -12,7 +12,7 @@ function clip(text: string) {
 }
 
 export const HOME_TITLE = `${SITE_NAME} – addons for WoW 1.12.1 (Vanilla)`;
-export const HOME_DESCRIPTION = 'Browse community addons by category, find your favourites, and follow links to their sources.';
+export const HOME_DESCRIPTION = 'Powered by the Turtle WoW Wiki addon list · Refreshed daily.';
 export const HOME_PREVIEW_TITLE = 'Addons for WoW 1.12.1 (Vanilla)';
 
 export const ABOUT_TITLE = `About and privacy · ${SITE_NAME}`;
