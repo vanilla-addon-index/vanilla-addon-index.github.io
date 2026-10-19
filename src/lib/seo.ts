@@ -21,8 +21,9 @@ export const ABOUT_DESCRIPTION = `What ${SITE_NAME} is, who runs it, and what it
 // The words people search with: the addon's name, the game and its version.
 export const addonTitle = (addon: Pick<Addon, 'name'>) => `${addon.name} – WoW 1.12.1 addon · ${SITE_NAME}`;
 
-export function addonDescription(addon: Pick<Addon, 'name' | 'description' | 'author'>) {
+export function addonDescription(addon: Pick<Addon, 'name' | 'description' | 'author' | 'shared'>) {
 	const blurb = addon.description.trim().split('\n')[0].replace(/[.\s]+$/, '');
-	const what = `Addon for World of Warcraft 1.12.1 (Vanilla)${addon.author ? ` by ${addon.author}` : ''}.`;
-	return clip(blurb ? `${blurb}. ${what}` : `${addon.name}: ${what}`);
+	const description = blurb ? `${blurb}${/[!?]$/.test(blurb) ? '' : '.'}` : `${addon.name}.`;
+	const author = addon.shared ? '' : addon.author.trim().replace(/\.+$/, '');
+	return clip(`${description}${author ? ` By ${author}.` : ''}`);
 }
