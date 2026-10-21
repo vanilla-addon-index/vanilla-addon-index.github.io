@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isOlderAddon } from '#lib/addon-age.ts';
-	import { preferences, loadPreferences, saveSort } from '#lib/preferences.svelte.ts';
+	import { preferences, loadPreferences } from '#lib/preferences.svelte.ts';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { store } from '#lib/addons.svelte.ts';
@@ -18,18 +18,27 @@
 	let sort = $state<Sort>('name');
 	onMount(() => {
 		loadPreferences();
-		readUrl(page.url.searchParams);
 	});
 	const visibleAddons = $derived(store.addons.filter((a) => !preferences.hideOlder || !isOlderAddon(a.code_update?.date)));
 
 	function readUrl(params: Pick<URLSearchParams, 'get'>) {
 		query = params.get('q') ?? '';
 		category = params.get('cat') ?? '';
-		sort = params.get('sort') === null ? preferences.sort : readSort(params.get('sort'));
+		sort = readSort(params.get('sort'));
 	}
-	readUrl(page.url.searchParams);
+	readUrl((page.shallow?.url ?? page.url).searchParams);
 	// Links back to this page (logo, tag chips) do not remount it.
-	afterNavigate(({ to }) => to && readUrl(to.url.searchParams));
+	afterNavigate(({ type }) => {
+		const url = new URL(location.href);
+		// A refresh starts a fresh list; opening a shared search link still honours it.
+		if (type === 'enter' && (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload') {
+			url.searchParams.delete('q');
+			url.searchParams.delete('sort');
+		}
+		// Shallow URL updates live in page.shallow, while page.url can still be the
+		// original address. The browser address also covers restored history entries.
+		readUrl(url.searchParams);
+	});
 
 	// One block per addon, or per group of versions. A group shows when any of its versions
 	// matches, and is placed in the list by its main version.
@@ -140,7 +149,7 @@
 		const next = new URLSearchParams();
 		if (query) next.set('q', query);
 		if (category) next.set('cat', category);
-		if (sort !== 'name' || preferences.sort !== 'name') next.set('sort', sort);
+		if (sort !== 'name') next.set('sort', sort);
 		const search = next.size ? `?${next}` : '';
 		if (search !== location.search) {
 			goto(`${location.pathname}${search}`, { replace: true, shallow: true });
@@ -200,7 +209,7 @@
 						<option value={c}>{c} ({counts[c]?.length ?? 0})</option>
 					{/each}
 				</select>
-				<select class="input min-w-0 w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort} onchange={() => saveSort(sort)}>
+				<select class="input min-w-0 w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort}>
 					{#each Object.entries(SORTS) as [value, label] (value)}
 						<option {value}>{label}</option>
 					{/each}

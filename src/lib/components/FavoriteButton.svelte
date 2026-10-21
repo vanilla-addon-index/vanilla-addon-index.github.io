@@ -39,19 +39,25 @@
 	}
 </script>
 
-{#if !auth.ready || (auth.session && loading)}
-	<button class="btn w-full" disabled aria-label="Loading favorite…" aria-busy="true">
-		<span class="invisible" aria-hidden="true">☆ Add to favorites</span>
-	</button>
-{:else}
-	{#if auth.session}
-		<button class="btn w-full" aria-label={saved ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={saved} disabled={busy || loadFailed} onclick={toggle}>
-			<span aria-hidden="true">{saved ? '★' : '☆'}</span>
-			{saved ? 'Favorited' : 'Add to favorites'}
+<!-- A block container keeps the sidebar spacing independent of the inline button's
+     text baseline, authentication state, and any error or retry controls. -->
+<div>
+	{#if !auth.ready || (auth.session && loading)}
+		<button class="btn flex w-full" disabled aria-label="Loading favorite…" aria-busy="true">
+			<span class="invisible" aria-hidden="true">☆</span>
+			<span class="invisible" aria-hidden="true">Add to favorites</span>
 		</button>
-		{#if error}<p class="mt-1 text-sm text-danger" role="alert">{error}</p>{/if}
-		{#if loadFailed}<button class="btn mt-1" onclick={() => retry++}>Try again</button>{/if}
 	{:else}
-		<a class="btn w-full" href={loginHref(page.url)}>Log in to favorite</a>
+		{#if auth.session}
+			<button class="btn flex w-full" aria-label={saved ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={saved} disabled={busy || loadFailed} onclick={toggle}>
+				<span aria-hidden="true">{saved ? '★' : '☆'}</span>
+				<span>{saved ? 'Favorited' : 'Add to favorites'}</span>
+			</button>
+			{#if error}<p class="mt-1 text-sm text-danger" role="alert">{error}</p>{/if}
+			{#if loadFailed}<button class="btn mt-1" onclick={() => retry++}>Try again</button>{/if}
+		{:else}
+			<a class="btn flex w-full" href={loginHref(page.url)}>Log in to favorite</a>
+		{/if}
 	{/if}
-{/if}
+
+</div>
