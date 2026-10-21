@@ -81,30 +81,47 @@ test('a large catalogue reuses rows when sorting and keeps groups searchable', a
 	await expect(rows).toHaveText([/^MSample0400/, /^ZSample0800/]);
 });
 
-test('sort choice survives addon navigation, browser back and reload while explicit sort links win', async ({ page }) => {
+test('Back restores search and sorting, while refresh and the logo reset them', async ({ page }) => {
+	// This navigation check needs no database or account state.
+	const addons = ['RaidHelper', 'Member Map'].map((name, index) => ({
+		id: index + 1, name, slug: name.toLowerCase().replaceAll(' ', '-'),
+		description: 'Navigation sample', category: 'Combat', author: '',
+		repo_url: 'https://example.com/addon', versions: [{ url: 'https://example.com/addon', note: '' }],
+		images: [], group_id: null, is_main: false, code_update: null
+	}));
+	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: addons }));
 	await page.goto('/');
+	const search = page.getByLabel('Search addons');
 	const sort = page.getByRole('combobox', { name: 'Sort by' });
+	await search.fill('raidhelper');
 	await sort.selectOption('code');
-	await expect(page).toHaveURL(/sort=code/);
-	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
-	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper', exact: true })).toBeVisible();
-	await page.getByRole('link', { name: '← All addons' }).click();
-	await expect(sort).toHaveValue('code');
-	await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
+	await expect(page).toHaveURL('/?q=raidhelper&sort=code');
 	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
 	await expect(page).toHaveURL('/addon/raidhelper');
-	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper', exact: true })).toBeVisible();
 	await page.goBack();
-	await expect(page).toHaveURL('/?sort=code');
+	await expect(search).toHaveValue('raidhelper');
 	await expect(sort).toHaveValue('code');
+	await expect(page.getByRole('link', { name: /^Member Map/ })).toHaveCount(0);
 	await page.reload();
-	await expect(sort).toHaveValue('code');
-	await page.goto('/?sort=name');
+	await expect(search).toHaveValue('');
 	await expect(sort).toHaveValue('name');
-	await page.goto('/');
+	await expect(page).toHaveURL('/');
+	await expect(page.getByRole('link', { name: /^Member Map/ })).toBeVisible();
+
+	// Direct shared links still work, but the logo always starts a fresh list.
+	await page.goto('/?q=raidhelper&sort=code');
+	await expect(search).toHaveValue('raidhelper');
 	await expect(sort).toHaveValue('code');
-	await sort.selectOption('name');
-	await page.reload();
+	await page.locator('header a').filter({ has: page.locator('img') }).click();
+	await expect(search).toHaveValue('');
+	await expect(sort).toHaveValue('name');
+	await expect(page).toHaveURL('/');
+	await search.fill('raidhelper');
+	await sort.selectOption('code');
+	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
+	await expect(page).toHaveURL('/addon/raidhelper');
+	await page.locator('header a').filter({ has: page.locator('img') }).click();
+	await expect(search).toHaveValue('');
 	await expect(sort).toHaveValue('name');
 });
 
