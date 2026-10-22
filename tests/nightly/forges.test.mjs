@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { askForge, forgePlace } from '../../src/lib/forges.ts';
+import { imagesIn } from '../../src/lib/github.ts';
+import { hostAllowed } from '../../src/lib/hosts.ts';
 
 // Answers by address. An address that is not listed gets no answer at all.
 const site = (answers) => {
@@ -225,6 +227,18 @@ test('OctoWoW retains /git for renamed repositories, history and README image ba
 	assert.equal(facts.stars,2);
 	assert.equal(facts.code_update.url,'https://octowow.st/git/Ade/AdeAlts/commits/branch/main');
 	assert.equal(facts.readme.base,'https://octowow.st/git/Ade/AdeAlts/raw/branch/main/README.md');
+	assert.deepEqual(imagesIn(facts.readme.text, facts.readme.base).filter(image => hostAllowed(image, 'image')),
+		['https://octowow.st/git/Ade/AdeAlts/raw/branch/main/preview.png']);
 	assert.equal(asked.length,5);
 	assert.ok(asked.every((url) => url.startsWith(`${api}/`)));
+});
+
+test('AnySCT relative screenshots and OctoWoW media URLs pass the import screenshot filter', () => {
+	const base = 'https://octowow.st/git/ShempError/AnySCT/raw/branch/main/README.md';
+	const media = 'https://octowow.st/git/ShempError/AnySCT/media/branch/main/screenshots/hero-miss-resist-wait.png';
+	const images = imagesIn(`<img src="screenshots/hero-miss-resist-wait.png" width="100%">\n![Screenshot](${media})`, base)
+		.filter(image => hostAllowed(image, 'image'));
+	assert.deepEqual(images, [base.replace('README.md', 'screenshots/hero-miss-resist-wait.png'), media]);
+	assert.equal(hostAllowed('https://octowow.st/forum/image.png', 'image'), false);
+	assert.equal(hostAllowed('https://octowow.st/git/../forum/image.png', 'image'), false);
 });

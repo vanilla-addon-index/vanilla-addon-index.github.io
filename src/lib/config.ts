@@ -67,7 +67,7 @@ export const LINK_HOSTS = [
 	'gitea.com',
 	'octowow.st/git'
 ];
-export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co'];
+export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co', 'octowow.st/git'];
 
 // Must match the check on addons.images in the schema migration.
 export const MAX_IMAGES = 6;
