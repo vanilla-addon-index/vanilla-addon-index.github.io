@@ -12,8 +12,16 @@ and narrow database functions enforce access.
 Visitors can browse. Members can post addons and edit or delete their own entries
 directly until they become shared pages. Original owners and contributors can
 propose edits to shared pages for admin review and immediately remove only their
-own submitted links. A matching name adds a repository link immediately,
-without approval or changes to the existing description, images, author or category.
+own submitted links. Members suggest additional repository links using an inline
+form on the addon page. Suggestions, including matching-name submissions through
+the full form, wait in Edit reviews until an admin approves or rejects them.
+Approval appends only the link and preserves the existing content. Admins can add
+links directly; direct member updates cannot bypass link review.
+
+Link suggestions are private to the proposer and admins. Members can see and
+withdraw their pending suggestions; each member can suggest at most 20 links a day.
+Approved links retain their proposer as contributor and remain covered by account
+rollback. The admin badge and nightly review counts include pending links.
 Admins review wiki imports, handle reports and manage content. The owner appoints
 or removes admins and has the final account-management permissions. These rules
 are tested against the actual [database migrations](../supabase/migrations).

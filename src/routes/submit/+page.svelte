@@ -10,6 +10,7 @@
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
 	import { hostAllowed, hostNames } from '#lib/hosts.ts';
+	import { linkError } from '#lib/link-validation.ts';
 	import { linkKey } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
@@ -210,9 +211,20 @@
 		return '';
 	});
 
+	let linkErrors = $state<Record<number, string>>({});
+	function validateLink(index: number, value = form.versions[index]?.url ?? '') {
+		linkErrors[index] = !value.trim() && (index > 0 || editing?.shared) ? '' :
+			linkError(value) || (!mayUse(value.trim(), 'link') ? `Use a repository link from ${hostNames('link')}.` : '');
+		return !linkErrors[index];
+	}
+
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
+		for (let index = 0; index < form.versions.length; index++) {
+			if (matched && index > 0) continue;
+			if (!validateLink(index)) { document.getElementById(index ? `repo-${index}` : 'repo')?.focus(); return; }
+		}
 		// A pasted screenshot link that was never added with the button is added now.
 		// It stays in the field when it is rejected, and the note under it says why.
 		if (!matched && imageLink.trim() && form.images.length < MAX_IMAGES) {
@@ -315,7 +327,7 @@
                     <button type="button" class="btn mt-2" onclick={withdraw}>Withdraw proposal</button>
                 </div>
             {/if}
-			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. Only your link will be added; edits to the shared page are reviewed by admins.</p>{/if}
+			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. {auth.isAdmin ? 'Only your link will be added.' : 'Your link will be submitted for admin review.'}</p>{/if}
 			<h2 id="required-details" class="section-title text-accent">Required</h2>
 			<p class="mb-2 text-muted">{matched ? 'Add a repository link to the existing page.' : 'The four things every entry needs.'}</p>
 			<div class="panel space-y-4 border-accent/30 p-4">
@@ -337,14 +349,19 @@
 						<input
 							id="repo"
 							readonly={!!splitting}
-							class="input"
+							class={['input', linkErrors[0] && 'border-danger']}
 							type="url"
 							required={!editing?.shared}
 							pattern="https://.*"
 							placeholder="https://github.com/author/addon"
 							bind:value={form.versions[0].url}
 							onchange={fetchReadmeImages}
+							aria-invalid={!!linkErrors[0]} aria-describedby={linkErrors[0] ? 'repo-error' : undefined}
+							oninvalid={(event) => { event.preventDefault(); validateLink(0); event.currentTarget.focus(); }}
+							onblur={() => { if (form.versions[0].url.trim()) validateLink(0); }}
+							oninput={(event) => { if (linkErrors[0]) validateLink(0, event.currentTarget.value); }}
 						/>
+						{#if linkErrors[0]}<p id="repo-error" class="mt-1 text-sm text-danger" role="alert">{linkErrors[0]}</p>{/if}
 					</div>
 					<div>
 						<label class="field-label" for="category">Category</label>
@@ -421,13 +438,19 @@
 						{#if index > 0}
 							<div class="mb-2 flex flex-wrap gap-2">
 								<input
-									class="input min-w-48 flex-[2]"
+									class={['input min-w-48 flex-[2]', linkErrors[index] && 'border-danger']}
+									id={`repo-${index}`}
+									aria-invalid={!!linkErrors[index]} aria-describedby={linkErrors[index] ? `repo-error-${index}` : undefined}
+									oninvalid={(event) => { event.preventDefault(); validateLink(index); event.currentTarget.focus(); }}
+									onblur={() => { if (form.versions[index].url.trim()) validateLink(index); }}
+									oninput={(event) => { if (linkErrors[index]) validateLink(index, event.currentTarget.value); }}
 									type="url"
 									pattern="https://.*"
 									placeholder="https://gitlab.com/author/addon"
 									aria-label="Mirror link {index}"
 									bind:value={form.versions[index].url}
 								/>
+								{#if linkErrors[index]}<p id={`repo-error-${index}`} class="w-full text-sm text-danger" role="alert">{linkErrors[index]}</p>{/if}
 								<input
 									class="input min-w-32 flex-1"
 									maxlength="80"
@@ -534,7 +557,7 @@
 				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
 			<div class="flex gap-2">
 				<button class="btn btn-primary" disabled={saving}>
-					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? 'Add link' : splitting ? 'Separate addon' : 'Post addon'}
+					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? (auth.isAdmin ? 'Add link' : 'Submit for review') : splitting ? 'Separate addon' : 'Post addon'}
 				</button>
 				<a href={editing ? resolve('/addon/[slug]', { slug: editing.slug }) : resolve('/')} class="btn">
 					Cancel

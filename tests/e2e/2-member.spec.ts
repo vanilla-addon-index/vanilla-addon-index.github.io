@@ -153,7 +153,7 @@ test('a member deletes their own account, and what they posted stays in the list
 });
 
 
-test('a matching name accepts only a link and never grants control of the shared page', async ({page}) => {
+test('a matching name submits a link for review and never grants control of the shared page', async ({page}) => {
  await loginAs(page,'member');
  await page.goto('/submit');
  await page.getByLabel('Name',{exact:true}).fill('raidhelper');
@@ -162,9 +162,10 @@ test('a matching name accepts only a link and never grants control of the shared
  await expect(page.getByLabel('Addon author',{exact:true})).toBeDisabled();
  const url='https://gitlab.com/e2e/shared-fork';
  await page.getByLabel('Link to the addon').fill(url);
- await page.getByRole('button',{name:'Add link',exact:true}).click();
+ await page.getByRole('button',{name:'Submit for review',exact:true}).click();
  await expect(page.getByRole('heading',{level:1,name:'RaidHelper'})).toBeVisible();
- await expect(page.getByRole('link',{name:url,exact:true})).toBeVisible();
+ await expect(page.getByRole('link',{name:url,exact:true})).toHaveCount(0);
+ await expect(page.getByText('Your link is waiting for admin review.').first()).toBeVisible();
  await expect(page.getByRole('link',{name:'Edit',exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Delete',exact:true})).toHaveCount(0);
 });

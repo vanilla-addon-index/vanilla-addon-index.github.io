@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {addon, createDb, post, NIGHTLY_TOKEN} from '../helpers/db.mjs';
+import {addon, createDb, approveLinkSuggestions, post, NIGHTLY_TOKEN} from '../helpers/db.mjs';
 
 test('upgrade consolidates old groups and duplicate names, keeping canonical content and recovery copies', async () => {
  const db=await createDb({beforeSharedMigration:async raw => {
@@ -31,6 +31,7 @@ test('same-name submissions add only links, remove ownership, and rollback only 
   const b = 'https://github.com/bob/BigWigs', c = 'https://github.com/carol/BigWigs';
   assert.equal((await submit(bob, b))[0].id, original.id);
   await submit(carol, c);
+  await approveLinkSuggestions(db, admin);
   const [shared] = await db.sql('select * from public.addons');
   assert.equal(shared.description, original.description);
   assert.equal(shared.category, original.category);
@@ -57,6 +58,7 @@ test('newest code link leads automatically; a pin controls both the link and hea
   const a = await post(db, alice, addon('Atlas'));
   const b = 'https://github.com/bob/Atlas';
   await db.as(bob, q => q('select public.submit_addon($1::jsonb)', [JSON.stringify({name:'Atlas', versions:[{url:b}]})]));
+ await approveLinkSuggestions(db, admin);
   const dates = [{url:a.repo_url,date:'2020-01-01T00:00:00Z',history_url:a.repo_url+'/commits/HEAD'},{url:b,date:'2026-01-01T00:00:00Z',history_url:b+'/commits/HEAD'}];
   const history = await db.sql('select count(*) as n from public.activity_log');
   await db.asVisitor(q => q('select public.store_code_updates($1,$2::jsonb)', [NIGHTLY_TOKEN,JSON.stringify(dates)]));

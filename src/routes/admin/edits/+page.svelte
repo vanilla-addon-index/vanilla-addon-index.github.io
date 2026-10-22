@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LinkReviews from '#lib/components/LinkReviews.svelte';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
@@ -10,6 +11,7 @@
  let selected=$state<Record<number,EditField[]>>({});
  let loaded=$state(false), busy=$state<number>(), error=$state('');
  let query=$state('');
+ let linkCount=$state(0);
  const matching=$derived(requests.filter(r=>[store.addons.find(a=>a.id===r.addon_id)?.name,r.proposer?.username,...Object.keys(r.changes).map(key=>FIELD_LABELS[key as EditField])].join(' ').toLowerCase().includes(query.trim().toLowerCase())));
  loadEditReviews().then(rows=>{requests=rows; for(const r of rows) selected[r.id]=Object.keys(r.changes) as EditField[]; loaded=true;}).catch(e=>error=e.message);
  const current=(r:EditRequest,key:EditField)=>store.addons.find(a=>a.id===r.addon_id)?.[key];
@@ -26,14 +28,15 @@
  <AdminNavigation />
 </AdminToolbar>
 <AdminSidebarContent>
-	<div class="panel p-3"><h1 class="text-2xl font-bold">Edit reviews</h1><p class="text-muted">Review contributor proposals.</p></div>
-	<dl class="panel p-3"><div class="flex justify-between gap-2"><dt class="text-muted">Waiting</dt><dd>{loaded ? requests.length : '…'}</dd></div></dl>
+	<div class="panel p-3"><h1 class="text-2xl font-bold">Edit reviews</h1><p class="text-muted">Review link suggestions and contributor proposals.</p></div>
+	<dl class="panel p-3"><div class="flex justify-between gap-2"><dt class="text-muted">Waiting</dt><dd>{loaded ? requests.length + linkCount : '…'}</dd></div></dl>
 	<p class="panel p-3 text-sm text-muted">Select the fields to accept. Conflicting fields need a revised proposal; accepting other fields preserves the current page.</p>
 </AdminSidebarContent>
+<LinkReviews {query} oncount={(count) => linkCount = count} />
 {#if error}<p class="mb-3 text-danger" role="alert">{error}</p>{/if}
 {#if !loaded}<p>Loading edit proposals…</p>
-{:else if !requests.length}<p class="panel p-4 text-muted">No edits are waiting for review.</p>
-{:else if !matching.length}<p class="panel p-4 text-muted">No edit reviews match your search.</p>
+{:else if !requests.length && !linkCount}<p class="panel p-4 text-muted">No edits are waiting for review.</p>
+{:else if !matching.length && !linkCount}<p class="panel p-4 text-muted">No edit reviews match your search.</p>
 {:else}
  {#each matching as request(request.id)}
   {@const addon=store.addons.find(a=>a.id===request.addon_id)}

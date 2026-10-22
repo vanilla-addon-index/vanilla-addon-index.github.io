@@ -1,0 +1,77 @@
+import { expect, test } from './test.ts';
+import { loginAs, postAddon, unique } from './helpers.ts';
+
+test('link fields explain invalid URLs inline and clear the error after correction', async ({ page }) => {
+	await loginAs(page, 'member');
+	await postAddon(page, unique('Link validation'));
+	await page.getByRole('button', { name: 'Add another link', exact: true }).click();
+	const input = page.getByLabel('Repository link', { exact: true });
+	await input.fill('test');
+	await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+	await expect(input).toHaveAttribute('aria-invalid', 'true');
+	await expect(page.getByRole('alert')).toContainText('Enter a complete link, for example https://github.com/author/addon.');
+	await input.fill('http://github.com/author/addon');
+	await expect(page.getByRole('alert')).toContainText('starting with https://');
+	await input.fill('https://example.com/author/addon');
+	await expect(page.getByRole('alert')).toContainText('Use a repository link from');
+	await input.fill('https://gitlab.com/author/addon');
+	await expect(input).toHaveAttribute('aria-invalid', 'false');
+	await expect(page.getByRole('alert')).toHaveCount(0);
+	await page.goto('/submit');
+	await page.getByLabel('Name', { exact: true }).fill(unique('Invalid link'));
+	await page.getByLabel('Category', { exact: true }).selectOption('Combat');
+	await page.getByLabel('Description', { exact: true }).fill('A description long enough for submission.');
+	const main = page.getByLabel('Link to the addon', { exact: true });
+	await main.fill('test');
+	await page.getByRole('button', { name: 'Post addon', exact: true }).click();
+	await expect(main).toHaveAttribute('aria-invalid', 'true');
+	await expect(page.getByRole('alert')).toContainText('Enter a complete link');
+	await main.fill('https://gitlab.com/author/addon');
+	await expect(main).toHaveAttribute('aria-invalid', 'false');
+	await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('additional links stay on the addon page and require approval before publication', async ({ page }) => {
+	await loginAs(page, 'member');
+	const name = unique('Inline link');
+	const address = await postAddon(page, name);
+	const url = 'https://octowow.st/git/e2e/' + name.replace(/\W+/g, '-');
+	await page.getByRole('button', { name: 'Add another link', exact: true }).click();
+	await expect(page).toHaveURL(address);
+	const input = page.getByLabel('Repository link', { exact: true });
+	await expect(input).toBeFocused();
+	await input.fill(url);
+	await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(input).toHaveCount(0);
+	await page.getByRole('button', { name: 'Add another link', exact: true }).click();
+	await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+	await expect(page.getByText('Your link is waiting for admin review.', { exact: true })).toBeVisible();
+	await expect(page.getByRole('link', { name: url, exact: true })).toHaveCount(0);
+	await page.reload();
+	await expect(page.getByText('Your link is waiting for admin review.', { exact: true })).toBeVisible();
+	await page.goto('/account');
+	await page.getByRole('button', { name: 'Log out', exact: true }).click();
+	await expect(page.getByRole('link', { name: 'Log in', exact: true })).toBeVisible();
+	await loginAs(page, 'admin');
+	await page.goto('/admin/edits');
+	const request = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'New link for ' + name, exact: true }) });
+	await expect(request.getByRole('link', { name: url, exact: true })).toBeVisible();
+	await request.getByRole('button', { name: 'Approve link', exact: true }).click();
+	await expect(request).toHaveCount(0);
+	await page.goto(address);
+	await expect(page.getByRole('link', { name: url, exact: true })).toBeVisible();
+});
+
+test('a member can withdraw a link suggestion without changing the published links', async ({ page }) => {
+	await loginAs(page, 'member');
+	const name = unique('Withdraw link');
+	const address = await postAddon(page, name);
+	const url = 'https://gitlab.com/e2e/' + name.replace(/\W+/g, '-') + '-fork';
+	await page.getByRole('button', { name: 'Add another link', exact: true }).click();
+	await page.getByLabel('Repository link').fill(url);
+	await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+	await page.getByRole('button', { name: 'Withdraw link', exact: true }).click();
+	await expect(page.getByText('Your link is waiting for admin review.', { exact: true })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: url, exact: true })).toHaveCount(0);
+	await expect(page).toHaveURL(address);
+});
