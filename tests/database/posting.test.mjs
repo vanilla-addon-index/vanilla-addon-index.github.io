@@ -322,6 +322,9 @@ describe('links and versions', () => {
  await call(admin,'update public.addons set versions = $1 where id = $2',[JSON.stringify(links),row.id]);
  assert.deepEqual(await call(alice,'update public.addons set author = $1 where id = $2 returning id',['wrong',row.id]),[]);
  await call(bob,'select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Mine',versions:[{url:'https://github.com/bob/Mine'}]})]);
+ assert.equal((await db.sql('select jsonb_array_length(versions) as n from public.addons'))[0].n,2);
+ const [request] = await db.sql("select id from public.addon_link_requests where status='pending'");
+ await call(admin,'select public.decide_addon_link($1,true)',[request.id]);
  assert.equal((await db.sql('select jsonb_array_length(versions) as n from public.addons'))[0].n,3);
  });
 

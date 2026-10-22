@@ -11,7 +11,8 @@ const entry = (page: Page, name: string) => page.locator('[data-entry]').filter(
 test('the report a member sent shows up, with a count on the Admin button, and can be dismissed', async ({ page }) => {
 	await loginAs(page, 'admin');
 	const admin = page.getByRole('navigation').getByRole('link', { name: /^Admin/ });
-	await expect(admin).toContainText('1');
+	// The member tests leave one report and one link suggestion for review.
+	await expect(admin).toHaveText('Admin 2');
 	await admin.click();
 	await expect(page).toHaveURL(/\/admin\/reports/);
 
@@ -20,7 +21,8 @@ test('the report a member sent shows up, with a count on the Admin button, and c
 	await expect(report.getByText('Reported by a browser test.')).toBeVisible();
 	await report.getByRole('button', { name: 'Dismiss' }).click();
 	await expect(page.getByText('No reports are waiting.')).toBeVisible();
-	await expect(admin).not.toContainText('1');
+	await expect(admin).toHaveText('Admin 1');
+	await expect(admin).toHaveAttribute('href', '/admin/edits');
 });
 
 test('waiting filters partition every entry and review issues stay out of Looks fine', async ({ page }) => {

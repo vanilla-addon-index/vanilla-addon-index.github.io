@@ -165,3 +165,9 @@ export async function post(db, user, fields) {
 	);
 	return row;
 }
+
+/** Establish approved contributions for tests of shared-page behavior. */
+export async function approveLinkSuggestions(db, admin) {
+	const requests = await db.sql("select id from public.addon_link_requests where status = 'pending' order by id");
+	for (const request of requests) await db.as(admin, q => q('select public.decide_addon_link($1,true)', [request.id]));
+}

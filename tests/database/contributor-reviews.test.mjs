@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {addon, createDb, post} from '../helpers/db.mjs';
+import {addon, createDb, approveLinkSuggestions, post} from '../helpers/db.mjs';
 
 async function scene(work) {
  const db=await createDb();
@@ -10,6 +10,7 @@ async function scene(work) {
   const url='https://gitlab.com/bob/Atlas';
   const call=(user,sql,params=[])=>db.as(user,q=>q(sql,params));
   await call(bob,'select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Atlas',versions:[{url}]})]);
+ await approveLinkSuggestions(db, admin);
   const current=async()=> (await db.sql('select * from public.addons where id=$1',[a.id]))[0];
   const propose=async(user,changes,base)=>(await call(user,'select public.propose_addon_edit($1,$2::jsonb,$3::jsonb) as id',[a.id,JSON.stringify(changes),JSON.stringify(base??await current())]))[0].id;
   await work({db,alice,bob,other,admin,a,url,call,current,propose});
@@ -29,6 +30,7 @@ test('contributors remove only their own links; zero links and rollback retain s
  const [log]=await db.sql("select id from public.activity_log where action='addon.update' and actor=$1 order by id desc limit 1",[bob.id]);
  const later='https://gitlab.com/other/Atlas';
  await call(other,'select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Atlas',versions:[{url:later}]})]);
+ await approveLinkSuggestions(db, admin);
  await call(admin,'select public.revert_addon($1)',[log.id]);
  assert.equal((await current()).shared,true);assert.equal((await current()).owner,null);
  assert.deepEqual((await current()).versions.map(v=>v.url).sort(),[url,later].sort());

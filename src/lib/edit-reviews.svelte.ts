@@ -41,8 +41,8 @@ export async function removeOwnLink(id: number,link: string) {
 }
 export async function countEditReviews() {
  if(!supabase) return;
- const {count}=await supabase.from('addon_edit_requests').select('id',{count:'exact',head:true}).eq('status','pending');
- editReviews.pending=count??0;
+ const [edits, links]=await Promise.all(['addon_edit_requests','addon_link_requests'].map(table => supabase!.from(table).select('id',{count:'exact',head:true}).eq('status','pending')));
+ editReviews.pending=(edits.count??0)+(links.count??0);
 }
 export async function loadEditReviews() {
  const {data,error}=await client().from('addon_edit_requests').select('*, proposer:profiles!addon_edit_requests_proposed_by_fkey(username)').eq('status','pending').order('id').limit(1000);

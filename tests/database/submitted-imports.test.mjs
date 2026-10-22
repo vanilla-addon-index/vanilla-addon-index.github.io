@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { addon, createDb, post } from '../helpers/db.mjs';
+import { addon, createDb, approveLinkSuggestions, post } from '../helpers/db.mjs';
 
 async function scene(work) {
  const db = await createDb();
@@ -36,8 +36,10 @@ test('links added to shared pages resolve imports; rejected decisions and failed
  const url='https://gitlab.com/bob/Atlas';
  const q=await queue(url);
  await call(bob,'select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Atlas',versions:[{url}]})]);
+ assert.equal((await current(q.id)).status,'pending');
+ await approveLinkSuggestions(db, admin);
  assert.equal((await current(q.id)).status,'submitted'); assert.equal((await current(q.id)).addon_id,a.id);
- assert.equal((await current(q.id)).decided_by,bob.id);
+ assert.equal((await current(q.id)).decided_by,admin.id);
  const rejected=await queue('https://github.com/someone/Rejected','Rejected','rejected');
  await post(db,bob,addon('Rejected'));
  assert.equal((await current(rejected.id)).status,'rejected');

@@ -10,6 +10,7 @@
 	} from '#lib/addons.svelte.ts';
 	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
+	import AddAddonLink from '#lib/components/AddAddonLink.svelte';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import FavoriteButton from '#lib/components/FavoriteButton.svelte';
 	import ReportDialog from '#lib/components/ReportDialog.svelte';
@@ -244,7 +245,7 @@
 
             {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
 			<FavoriteButton addonId={addon.id} />
-            {#if auth.session && !auth.banned}<a class="btn w-full" href={resolve('/submit') + '?name=' + encodeURIComponent(addon.name)}>{addon.versions.length ? 'Add another link' : 'Add a link'}</a>{/if}
+            {#if auth.session && !auth.banned}{#key addon.id + ':' + auth.session.user.id}<AddAddonLink addonId={addon.id} hasLinks={addon.versions.length > 0} />{/key}{/if}
             {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
             {#if auth.session && pending && !auth.isAdmin}<div class="panel px-3 py-2 text-sm"><p>Your edit is waiting for admin review.</p><button class="btn mt-2" onclick={withdraw}>Withdraw proposal</button></div>{/if}
 			{#snippet editControls()}
