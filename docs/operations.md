@@ -165,3 +165,18 @@ the original workflow commit before restoring them. Update the public
 configuration and deployment secrets for the replacement project before resuming
 imports and deployments. Encrypted backups cannot be recovered without their
 passphrase.
+
+## OctoWoW discovery
+
+Nightly and Deploy import refreshes discover public repositories from
+https://octowow.st/git/explore/repos through the paginated Gitea search API.
+Candidates enter the existing admin import queue without a category; admins check
+addon suitability and compatibility before approving or merging them. Existing
+links and previous review decisions are preserved. Newly published pages credit
+OctoWoW; wiki imports keep their existing credit.
+
+Run `node scripts/octowow-import.mjs` to preview candidates locally without database
+writes. Apply the new database migration before running discovery against a database.
+Invalid responses (including browser verification pages) and incomplete pagination
+fail discovery before any OctoWoW candidates are queued. The nightly job continues
+checking existing repositories and reports the source failure.

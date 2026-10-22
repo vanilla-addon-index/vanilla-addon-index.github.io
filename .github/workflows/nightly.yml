@@ -52,7 +52,7 @@ jobs:
     needs: prepare
     # From main only: a run started by hand on another branch would otherwise write to the
     # hosted database with that branch's script, which nobody has merged.
-    name: Import from the wiki
+    name: Import from the wiki and OctoWoW
     if: github.ref == 'refs/heads/main'
     # The token is kept in this environment, which only main may use.
     environment: database
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Import from the wiki
+      - name: Import from the wiki and OctoWoW
         id: nightly
         # Missing tokens fail before the import starts; `npm run nightly:token` makes
         # the narrow database token used by the nightly RPCs.

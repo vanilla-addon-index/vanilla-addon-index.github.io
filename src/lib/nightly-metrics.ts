@@ -1,7 +1,7 @@
 import type { RequestMetrics } from './request.ts';
 
 export const NIGHTLY_PHASES = [
-	'Wiki', 'Screenshots', 'GitHub metadata', 'GitHub history + files', 'GitHub .toc', 'GitHub README',
+	'Wiki', 'OctoWoW discovery', 'Screenshots', 'GitHub metadata', 'GitHub history + files', 'GitHub .toc', 'GitHub README',
 	'Other hosts', 'GitLab', 'Codeberg', 'Gitea', 'Database reads', 'Database writes'
 ] as const;
 export type NightlyPhase = typeof NIGHTLY_PHASES[number];

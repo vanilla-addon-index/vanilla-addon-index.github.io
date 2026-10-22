@@ -243,7 +243,7 @@
 			<span class="font-bold">{item.name}</span>
 			<span class="text-sm text-muted">{item.category}</span>
 		</div>
-		<p class="break-words text-muted">{item.description || 'No description on the wiki.'}</p>
+		<p class="break-words text-muted">{item.description || 'No description from the source.'}</p>
 		<a
 			href={item.url}
 			target="_blank"
@@ -270,7 +270,7 @@
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="text-2xl leading-tight font-bold">Import</h1>
-					<p class="text-muted">From the {WIKI_NAME}</p>
+					<p class="text-muted">Sources: {WIKI_NAME} and OctoWoW</p>
 				</div>
 				<dl>
 					{#each [['Waiting', imports.counts.pending - pendingDead.length], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected], ['Dead links', deadEntries.length]] as [label, value] (label)}
@@ -380,7 +380,7 @@
 					<p class="px-3 py-8 text-center text-muted">
 						{imports.items.length
 							? 'Nothing in the queue matches.'
-							: 'The queue is empty. New addons on the wiki are added every night.'}
+							: 'The queue is empty. New candidates from the wiki and OctoWoW are added every night.'}
 					</p>
 				{:else}
 					{#each page as { item, verdict, advice, notes, match, forkMatch }, index (item.id)}

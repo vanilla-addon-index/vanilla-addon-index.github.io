@@ -15,6 +15,7 @@ const links = [
 	...hosts.flatMap((host) => Array.from({length:4}, (_, i) => ({key:`${host}/a/addon${i}`, url:`https://${host}/a/addon${i}`, readme:true})))
 ];
 globalThis.fetch = async (url, init = {}) => {
+	if (url.includes('octowow.st/git/api/v1/repos/search')) return json({ok:true,data:[]});
 	if (url.includes('turtle-wow.fandom.com/api.php')) return json({parse:{revid:1, wikitext:'===Full Addons List===\n* [https://github.com/a/addon Addon] description\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections=='}});
 	if (url.includes('/rest/v1/rpc/')) {
 		const name = url.split('/').at(-1);

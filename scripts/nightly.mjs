@@ -1,5 +1,5 @@
 // Nightly import job, run by .github/workflows/nightly.yml.
-//   1. Reads the wiki and queues addons that are neither live nor already reviewed.
+//   1. Reads the wiki and OctoWoW and queues candidates that are neither live nor already reviewed.
 //   2. Trims the log and the trash of what is older than 90 days.
 //   3. Counts reports, suggestions and imports waiting for an admin after repository checks, for the workflow to tell
 //      them about.
@@ -25,6 +25,7 @@ import { forgeHostPath, askForge, forgePlace, forgeRepositoryEndpoint } from '..
 import { imagesIn, uncamo } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
+import { readOctowow } from '../src/lib/octowow.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 import { askGithub, fieldFailed, groupChecks, githubRepositoryKey, sharedGithubChecks } from '../src/lib/nightly-github.ts';
 import { request } from '../src/lib/request.ts';
@@ -101,6 +102,19 @@ try {
 }
 
 finishedWiki();
+
+const finishedOctowow = metrics.start('OctoWoW discovery');
+// Discovery is independent: a source outage must not prevent other repository checks.
+try {
+	const candidates = await readOctowow(metrics.observe('OctoWoW discovery'));
+	const added = await db('queue_octowow_imports', { items: candidates });
+	console.log(`OctoWoW: ${candidates.length} repositories listed, ${added} new in the queue.`);
+} catch (error) {
+	console.error(`OctoWoW was not imported: ${error.message}`);
+	process.exitCode = 1;
+}
+
+finishedOctowow();
 
 // 2. Housekeeping: what an addon looked like before an edit, and what is in the trash,
 // are kept for 90 days.
