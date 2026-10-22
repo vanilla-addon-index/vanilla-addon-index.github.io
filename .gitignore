@@ -38,6 +38,7 @@ vite.config.ts.timestamp-*
 
 # Wiki import dry-run output
 /wiki-import
+/octowow-import
 
 # Local tooling and editor settings
 .claude/

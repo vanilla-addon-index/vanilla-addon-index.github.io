@@ -14,9 +14,10 @@ test('lightweight refresh clears pending category guesses without replacing revi
 		const before = (await db.sql('select * from public.import_queue'))[0];
 		globalThis.fetch = async (endpoint, init) => {
 			let body;
+			if (endpoint.includes('octowow.st/git/api/')) return new Response(JSON.stringify({ok:true,data:[]}));
 			if (endpoint.includes('turtle-wow.fandom.com/api.php')) body = {parse:{revid:1, wikitext:`===Full Addons List===\n* [${url} CerniesWonderfulFunctions] Script methods helping players create macros\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections==`}};
 			else {
-				assert.ok(endpoint.endsWith('/rpc/queue_imports'), endpoint);
+				assert.ok(/\/rpc\/queue_(octowow_)?imports$/.test(endpoint), endpoint);
 				const {items, token} = JSON.parse(init.body);
 				body = await db.queueImports(items, token);
 			}

@@ -1,7 +1,8 @@
-// Lightweight Deploy refresh: only wiki parsing and queue updates, never repository checks.
+// Lightweight Deploy refresh: only source discovery and queue updates, never repository checks.
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/lib/config.ts';
+import { readOctowow } from '../src/lib/octowow.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 import { request } from '../src/lib/request.ts';
 
@@ -20,7 +21,13 @@ export async function refreshImports(token) {
 			return typeof body?.message === 'string' ? body.message : '';
 		}
 	});
-	return `Wiki revision ${revision}: refreshed ${candidates.length} import candidates; ${added} new entries. ` +
+	const octowow = await readOctowow();
+	const octoAdded = await request(`${SUPABASE_URL}/rest/v1/rpc/queue_octowow_imports`, {
+		init: { method: 'POST', headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ token, items: octowow }) },
+		read: response => response.json()
+	});
+	return `OctoWoW: ${octowow.length} candidates, ${octoAdded} new entries. Wiki revision ${revision}: refreshed ${candidates.length} import candidates; ${added} new entries. ` +
 		`${problems.length} bullets could not be read. Existing repository facts and screenshots were kept.`;
 }
 

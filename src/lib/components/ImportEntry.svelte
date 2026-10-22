@@ -168,12 +168,13 @@
 		class={[quiet, 'block min-h-[1lh] [field-sizing:content] text-muted']}
 		rows="2"
 		maxlength="5000"
-		placeholder="No description on the wiki."
+		placeholder="No description from the source."
 		aria-label="Description" disabled={!!nameMatch}
 		bind:value={description.value}
 	></textarea>
 
 	<div class="px-1.5">
+		<p class="text-sm text-muted">Source: {item.source ?? 'Turtle WoW Wiki'}</p>
 		{#if item.wiki_source}
 			<p class="text-sm text-muted"><a href={item.wiki_source} target="_blank" rel="noopener noreferrer" class="underline">Wiki source</a>{item.wiki_recommended ? ' · Wiki recommended · pins on approval' : ''}</p>
 		{/if}

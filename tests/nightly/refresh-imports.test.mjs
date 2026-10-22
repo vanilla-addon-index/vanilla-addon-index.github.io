@@ -12,7 +12,9 @@ test('Deploy refresh leaves categories for manual selection and only writes queu
 	const calls = [];
 	globalThis.fetch = async (url, init) => {
 		calls.push(url);
-		if (url.includes('turtle-wow.fandom.com/api.php')) return json({parse:{revid:123, wikitext:wiki}});
+		if (url.includes('octowow.st/git/api/')) return json({ok:true,data:[]});
+ if (url.includes('turtle-wow.fandom.com/api.php')) return json({parse:{revid:123, wikitext:wiki}});
+		if (url.endsWith('/rpc/queue_octowow_imports')) return json(0);
 		assert.ok(url.endsWith('/rest/v1/rpc/queue_imports'), url);
 		const { token, items } = JSON.parse(init.body);
 		assert.equal(token, 'test-token');
@@ -22,7 +24,7 @@ test('Deploy refresh leaves categories for manual selection and only writes queu
 		return json(0);
 	};
 	for (let i = 0; i < 2; i++) assert.match(await refreshImports('test-token'), /revision 123: refreshed 2.*0 new/);
-	assert.equal(calls.length, 4); // Same revision must still apply changed parser rules.
+	assert.equal(calls.length, 8); // Same revision must still apply changed parser rules.
 });
 
 test('missing configuration fails before network work', async () => {

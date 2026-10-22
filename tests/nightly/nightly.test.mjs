@@ -14,6 +14,7 @@ const calls = [];
 let metadataBatches = 0;
 const json = (body, status = 200) => new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json'}});
 globalThis.fetch = async (url, init = {}) => {
+ if (url.includes('octowow.st/git/api/')) return json({ok:true,data:[]});
  if (url.includes('turtle-wow.fandom.com/api.php')) return json({parse: {revid: 1, wikitext: '===Full Addons List===\\n* [https://github.com/a/addon Addon] description\\n==SuperWoW Addons==\\n==ClassicAPI Addons==\\n==Further Addons Collections=='}});
  if (url.includes('/rest/v1/rpc/')) {
   const name = url.split('/').at(-1);
@@ -205,7 +206,7 @@ test('diagnostics distinguish network requests, field failures, unchanged dates 
 	assert.equal(metrics.phases['GitHub .toc'].attempts, 1);
 	assert.equal(metrics.phases['GitHub README'].attempts, 1);
 	assert.equal(metrics.phases['Database reads'].attempts, 2);
-	assert.equal(metrics.phases['Database writes'].attempts, 8);
+	assert.equal(metrics.phases['Database writes'].attempts, 9);
 	assert.equal(metrics.counters.commit_dates_left_unchanged, 0);
 	assert.equal(metrics.counters.cache_hits, 0);
 	assert.match(stdout, /\[Nightly\] GitHub metadata 1\/1/);

@@ -9,6 +9,7 @@ const toc = options.toc ?? hash('c');
 const readme = options.readme ?? hash('d');
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 globalThis.fetch = async (url, init = {}) => {
+	if (url.includes('octowow.st/git/api/v1/repos/search')) return json({ok:true,data:[]});
 	if (url.includes('turtle-wow.fandom.com/api.php')) return json({ parse: { revid: 1, wikitext: '===Full Addons List===\n* [https://github.com/a/addon Addon] description\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections==' } });
 	if (url.includes('/rest/v1/rpc/')) {
 		const name = url.split('/').at(-1);
