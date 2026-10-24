@@ -43,7 +43,9 @@
      text baseline, authentication state, and any error or retry controls. -->
 <div>
 	{#if !auth.ready || (auth.session && loading)}
-		<button class="btn flex w-full" disabled aria-label="Loading favorite…" aria-busy="true">
+		<!-- Keep the shell at its final opacity: the shared disabled style otherwise
+		     dims it until the favorite request completes, causing a visible blink. -->
+		<button class="btn flex w-full disabled:opacity-100" disabled aria-label="Loading favorite…" aria-busy="true">
 			<span class="invisible" aria-hidden="true">☆</span>
 			<span class="invisible" aria-hidden="true">Add to favorites</span>
 		</button>
