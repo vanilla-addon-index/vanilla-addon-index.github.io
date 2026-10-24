@@ -43,11 +43,13 @@ test('loading a favorite reserves the final button space without flashing an emp
 	const loading = page.getByRole('button', { name: 'Loading favorite…', exact: true });
 	await expect(loading).toBeVisible();
 	await expect(loading).toBeDisabled();
+	await expect(loading).toHaveCSS('opacity', '1');
 	await expect(loading.locator('span').first()).toHaveCSS('visibility', 'hidden');
 	const before = await loading.boundingBox();
 	release();
 	const saved = page.getByRole('button', { name: 'Remove from favorites', exact: true });
 	await expect(saved).toBeEnabled();
+	await expect(saved).toHaveCSS('opacity', '1');
 	const after = await saved.boundingBox();
 	expect(after).toEqual(before);
 });

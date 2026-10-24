@@ -4,9 +4,9 @@ import { wikiSubmission } from '../../src/lib/wiki-submission.ts';
 
 const addon = { name: 'Blockvalue', description: 'Shows your total block value.', versions: [{ url: 'https://github.com/sondli/blockvalue', note: '' }], images: [], author: '', category: 'Combat' };
 
-test('generates the wiki bullet format and links to the wiki editor', () => {
+test('generates a wiki entry without a leading bullet and links to the wiki editor', () => {
 	const entry = wikiSubmission(addon);
-	assert.equal(entry.markup, '*[https://github.com/sondli/blockvalue Blockvalue] - Shows your total block value.');
+	assert.equal(entry.markup, '[https://github.com/sondli/blockvalue Blockvalue] - Shows your total block value.');
 	assert.equal(entry.href, 'https://turtle-wow.fandom.com/wiki/Addons?veaction=edit');
 });
 
