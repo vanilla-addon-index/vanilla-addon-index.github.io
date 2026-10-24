@@ -28,7 +28,7 @@
 			<button type="button" class="btn shrink-0" aria-label="Close wiki helper" onclick={close}>✕</button>
 		</div>
 		<p class="mt-3 text-accent">Help more players discover your addon by adding it to the <span class="text-[#a3d631]">Turtle WoW Wiki</span>.</p>
-		<p class="mt-2 text-sm text-muted">This post is saved here. It is not automatically sent to the wiki. To add it there, sign in with a Fandom account, check whether it is already listed, then edit the section and paste the entry in source mode before saving.</p>
+		<p class="mt-2 text-sm text-muted">This post is saved here. It is not automatically sent to the wiki. To add it there, sign in with a Fandom account, check whether it is already listed, then edit the section and paste the entry in source mode after the new line’s bullet before saving. The copied entry leaves out the bullet because the wiki adds it for you.</p>
 		<div class="mt-5 flex items-center justify-between gap-3">
 			<label for="wiki-entry" class="font-bold">Wiki entry <span class="text-sm font-normal text-muted">(wikitext)</span></label>
 			<button type="button" class="btn" onclick={copy}>{copied ? 'Copied!' : 'Copy wiki entry'}</button>

@@ -17,6 +17,6 @@ export function wikiSubmission(addon: AddonInput) {
 	return {
 		name, description, url, images,
 		href: 'https://turtle-wow.fandom.com/wiki/Addons?veaction=edit',
-		markup: `*${url ? `[${url} ${escapeText(name)}]` : escapeText(name)} - ${escapeText(description)}${images.map((image, i) => ` [${image} [Img${i + 1}]]`).join('')}`
+		markup: `${url ? `[${url} ${escapeText(name)}]` : escapeText(name)} - ${escapeText(description)}${images.map((image, i) => ` [${image} [Img${i + 1}]]`).join('')}`
 	};
 }
