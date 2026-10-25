@@ -49,8 +49,9 @@
 		if (next) goto(next, { replaceState: true });
 	});
 
-	// Admins see how many reports wait, next to "Admin", on every page.
+	// Refresh the badge on navigation as well as login: new work can arrive while open.
 	$effect(() => {
+		void page.url.pathname;
 		if (auth.isAdmin) { countReports(); countEditReviews(); } else editReviews.pending = 0;
 	});
 

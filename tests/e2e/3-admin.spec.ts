@@ -8,6 +8,34 @@ const waiting = async (page: Page) =>
 	Number(await page.locator('dl > div', { hasText: 'Waiting' }).locator('dd').innerText());
 const entry = (page: Page, name: string) => page.locator('[data-entry]').filter({ has: page.locator(`input[aria-label="Name"][value="${name}"]`) });
 
+test('returning to admin refreshes an empty import queue and review counts without reloading', async ({ page }) => {
+	await loginAs(page, 'admin');
+	let fresh = false;
+	let reviewCounts = 0;
+	await page.route('**/rest/v1/import_queue?**', async route => {
+		const url = new URL(route.request().url());
+		if (!fresh && route.request().method() === 'GET' && url.searchParams.get('status') === 'eq.pending') {
+			await route.fulfill({ json: [] });
+		} else await route.continue();
+	});
+	await page.route('**/rest/v1/addon_edit_requests?**', async route => {
+		if (route.request().method() === 'HEAD') {
+			reviewCounts++;
+			await route.fulfill({ status: 200, headers: { 'content-range': `*/${fresh ? 1 : 0}` } });
+		} else await route.continue();
+	});
+	await page.goto('/admin/import');
+	await expect(page.getByText('Loading', { exact: false })).toHaveCount(0);
+	await expect(page.locator('[data-entry]')).toHaveCount(0);
+	await expect.poll(() => reviewCounts).toBeGreaterThan(0);
+	const before = reviewCounts;
+	fresh = true;
+	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Edit reviews/ }).click();
+	await expect.poll(() => reviewCounts).toBeGreaterThan(before);
+	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: 'Import', exact: true }).click();
+	await expect(page.locator('[data-entry]').first()).toBeVisible();
+});
+
 test('the report a member sent shows up, with a count on the Admin button, and can be dismissed', async ({ page }) => {
 	await loginAs(page, 'admin');
 	const admin = page.getByRole('navigation').getByRole('link', { name: /^Admin/ });
