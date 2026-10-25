@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { resolve } from '$app/paths';
 	import { similarAddon, publishedForkParent, isWikiPage, type ReviewNote } from '#lib/import-review.ts';
@@ -37,8 +38,9 @@
 	let notice = $state('');
 	let error = $state('');
 
-	$effect(() => {
-		if (auth.isAdmin && !imports.loaded) loadQueue().catch((e) => (error = e.message));
+	// Keep the previous list visible, but check for work added since the last visit.
+	onMount(() => {
+		loadQueue().catch((e) => (error = e.message));
 	});
 	$effect(() => {
 		if (auth.isAdmin && view === 'rejected' && !imports.rejectedLoaded) {
