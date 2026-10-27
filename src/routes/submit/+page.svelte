@@ -11,6 +11,7 @@
 	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
 	import { hostAllowed, hostNames } from '#lib/hosts.ts';
 	import { linkError } from '#lib/link-validation.ts';
+	import { repositoryName } from '#lib/repository-name.ts';
 	import { linkKey } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { isGithubRepo, readmeImages } from '#lib/github.ts';
@@ -40,6 +41,10 @@
 		versions: [{ url: '', note: '' }],
 		images: []
 	});
+	let nameEdited = !!page.url.searchParams.get('name')?.trim();
+	function suggestName(value: string) {
+		if (!editSlug && !nameEdited) form.name = repositoryName(value);
+	}
 	let error = $state('');
 	let saving = $state(false);
 	let filled = false;
@@ -334,7 +339,7 @@
 							aria-invalid={!!linkErrors[0]} aria-describedby={linkErrors[0] ? 'repo-error' : undefined}
 							oninvalid={(event) => { event.preventDefault(); validateLink(0); event.currentTarget.focus(); }}
 							onblur={() => { if (form.versions[0].url.trim()) validateLink(0); }}
-							oninput={(event) => { if (linkErrors[0]) validateLink(0, event.currentTarget.value); }}
+							oninput={(event) => { suggestName(event.currentTarget.value); if (linkErrors[0]) validateLink(0, event.currentTarget.value); }}
 						/>
 						{#if linkErrors[0]}<p id="repo-error" class="mt-1 text-sm text-danger" role="alert">{linkErrors[0]}</p>{/if}
 					</div>
@@ -346,11 +351,12 @@
 							required
 							minlength="2"
 							maxlength="60"
-							placeholder="OctoArmoryLink"
+							placeholder="Name of the addon"
 							aria-describedby="addon-name-hint"
 							bind:value={form.name}
+							oninput={(event) => { nameEdited = !!event.currentTarget.value.trim(); }}
 						/>
-						<p id="addon-name-hint" class="hint">The name of the addon, e.g. OctoArmoryLink.</p>
+						<p id="addon-name-hint" class="hint">{editing ? 'The addon’s name.' : 'Suggested from the addon link. You can change it.'}</p>
 					</div>
 					<div>
 						<label class="field-label" for="category">Category</label>
