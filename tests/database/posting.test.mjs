@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CATEGORIES, IMAGE_HOSTS, LINK_HOSTS } from '../../src/lib/config.ts';
 import { hostAllowed } from '../../src/lib/hosts.ts';
-import { githubPlace, linkAuthor, linkKey } from '../../src/lib/links.ts';
+import { creditFor, githubPlace, linkAuthor, linkKey } from '../../src/lib/links.ts';
 import { addon, post } from '../helpers/db.mjs';
 import { createRulesContext } from '../helpers/rules-context.mjs';
 
@@ -333,4 +333,32 @@ describe('links and versions', () => {
 		await refused(() => post(db, alice, addon('A2', 'http://example.com/a')), /https/);
 	});
 
+});
+
+test('shared catalog credit follows the leading link rather than inherited author text', () => {
+ const entry={author:'rivi-s',repo_url:'https://octowow.st/git/lightblade/pfQuest-turtle'};
+ assert.equal(creditFor({...entry,shared:true}),'lightblade');
+ assert.equal(creditFor({...entry,shared:false}),'rivi-s');
+});
+
+test('renaming changes the address and keeps every previous address reserved', async () => {
+ const row=await post(db,alice,addon('Atlas'));
+ const rename=async name=>(await call(alice,'update public.addons set name=$1 where id=$2 returning slug,aliases',[name,row.id]))[0];
+ assert.deepEqual(await rename('Atlas Maps'),{slug:'atlas-maps',aliases:['atlas']});
+ assert.deepEqual(await rename('Atlas World'),{slug:'atlas-world',aliases:['atlas','atlas-maps']});
+ assert.deepEqual(await rename('Atlas'),{slug:'atlas',aliases:['atlas-maps','atlas-world']});
+ assert.deepEqual(await rename('ATLAS!'),{slug:'atlas',aliases:['atlas-maps','atlas-world']});
+ const other=await post(db,bob,addon('Atlas Maps','https://github.com/bob/Maps'));
+ assert.equal(other.slug,'atlas-maps-bob');
+ await refused(()=>rename('Atlas Maps'),/already exists/);
+});
+
+test('renaming to a reserved address picks a free address without stealing an old link', async () => {
+ const first=await post(db,alice,addon('First'));
+ await call(alice,'update public.addons set name=$1 where id=$2',['Second',first.id]);
+ const other=await post(db,bob,addon('Other','https://github.com/bob/Other'));
+ const [renamed]=await call(bob,'update public.addons set name=$1 where id=$2 returning slug,aliases',['First',other.id]);
+ assert.equal(renamed.slug,'first-bob'); assert.deepEqual(renamed.aliases,['other']);
+ const [holder]=await db.asVisitor(q=>q("select id from public.addons where 'first'=any(aliases)"));
+ assert.equal(holder.id,first.id);
 });

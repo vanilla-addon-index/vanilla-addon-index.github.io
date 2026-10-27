@@ -136,14 +136,6 @@
 
 	const counts = $derived(Object.groupBy(visibleAddons, (a) => a.category));
 
-	// Names used by more than one addon; their rows also say who hosts each.
-	const sharedNames = $derived.by(() => {
-		const seen = new Set<string>();
-		const shared = new Set<string>();
-		for (const { name } of store.addons) (seen.has(name.toLowerCase()) ? shared : seen).add(name.toLowerCase());
-		return shared;
-	});
-
 	// Keep the URL shareable without adding a history entry per keystroke.
 	$effect(() => {
 		const next = new URLSearchParams();
@@ -255,7 +247,7 @@
 					<AddonCard
 						addon={main}
 						defer
-						owner={others.length > 0 || sharedNames.has(main.name.toLowerCase()) ? creditFor(main, true) : ''}
+						owner={others.length > 0 ? creditFor(main, true) : ''}
 					/>
 					{#each others as other (other.id)}
 						<AddonCard addon={other} owner={creditFor(other, true)} minor defer />

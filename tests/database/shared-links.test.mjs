@@ -17,8 +17,8 @@ test('upgrade consolidates old groups and duplicate names, keeping canonical con
   assert.equal((await db.sql('select count(*) as n from public.addon_trash'))[0].n,2);
   const admin=await db.addUser('admin','admin');
   const [trash]=await db.sql("select id from public.addon_trash where name = 'ATLAS'");
-  await db.as(admin,q=>q('select public.restore_addon($1)',[trash.id]));
-  assert.equal((await db.sql('select count(*) as n from public.addons'))[0].n,2);
+  await assert.rejects(()=>db.as(admin,q=>q('select public.restore_addon($1)',[trash.id])),/already exists/);
+  assert.equal((await db.sql('select count(*) as n from public.addons'))[0].n,1);
  } finally {await db.close();}
 });
 
@@ -96,9 +96,52 @@ test('same-name imports are atomic link additions and name collisions can be sep
   await db.as(admin,sql=>sql('select public.unapprove_import($1)',[a.id]));
   assert.deepEqual((await db.sql('select versions from public.addons'))[0].versions.map(v=>v.url),[a.repo_url]);
   await db.as(admin,sql=>sql('select public.publish_import($1)',[q.id]));
-  await assert.rejects(()=>db.as(alice,sql=>sql('select public.split_addon_link($1,$2,$3::jsonb)',[a.id,url,JSON.stringify({name:'Atlas',category:'Miscellaneous'})])),/Only admins/);
-  await db.as(admin,sql=>sql('select public.split_addon_link($1,$2,$3::jsonb)',[a.id,url,JSON.stringify({name:'Atlas',category:'Miscellaneous'})]));
+  await assert.rejects(()=>db.as(alice,sql=>sql('select public.split_addon_link($1,$2)',[a.id,url])),/Only admins/);
+  await assert.rejects(()=>db.as(admin,sql=>sql('select public.split_addon_link($1,$2)',[a.id,url])),/Choose a different name/);
+  assert.equal((await db.sql('select versions from public.addons where id=$1',[a.id]))[0].versions.length,2);
+  await assert.rejects(()=>db.as(admin,sql=>sql('select public.split_addon_link($1,$2,$3)',[a.id,url,'a-t-l-a-s'])),/Choose a different name/);
+  await db.as(admin,sql=>sql('select public.split_addon_link($1,$2,$3)',[a.id,url,'Atlas Fork']));
   assert.equal((await db.sql('select count(*) as n from public.addons'))[0].n,2);
-  assert.equal((await db.sql('select * from public.addons where separate_name'))[0].repo_url,url);
+  const [separated] = await db.sql("select * from public.addons where name = 'Atlas Fork'");
+  assert.equal(separated.repo_url,url);
+  assert.equal(separated.author,'fork');
+  assert.equal(separated.description,'Replacement content');
+  assert.equal(separated.name,'Atlas Fork');
+  assert.equal(separated.separate_name,false);
+  assert.equal((await db.sql('select addon_id from public.import_queue where id = $1',[q.id]))[0].addon_id,separated.id);
+  await assert.rejects(()=>db.as(admin,sql=>sql('select public.split_addon_link($1,$2)',[a.id,url])),/no longer exists/);
  } finally { await db.close(); }
+});
+
+test('immediate separation does not inherit unrelated content and retains contribution access', async () => {
+ const db=await createDb();
+ try {
+  const alice=await db.addUser('alice'), admin=await db.addUser('admin','admin');
+  const a=await post(db,alice,{...addon('Atlas'),author:'Wrong author'});
+  const url='https://octowow.st/git/lightblade/Atlas';
+  await db.as(admin,q=>q('select public.request_addon_link($1,$2)',[a.id,url]));
+  await db.sql('update public.addon_link_contributions set submitted_by=$1 where url=$2',[alice.id,url]);
+  const [result]=await db.as(admin,q=>q('select public.split_addon_link($1,$2,$3) as id',[a.id,url,'Atlas Lightblade']));
+  const [row]=await db.sql('select * from public.addons where id=$1',[result.id]);
+  assert.equal(row.author,'lightblade'); assert.equal(row.description,'');
+  assert.deepEqual(row.images,[]); assert.equal(row.category,'Miscellaneous');
+  assert.equal(row.name,'Atlas Lightblade');
+  const [access]=await db.as(alice,q=>q('select public.addon_contribution_access($1) as access',[row.id]));
+  assert.equal(access.access.can_propose,true); assert.deepEqual(access.access.links,[url]);
+  await assert.rejects(()=>db.as(admin,q=>q('select public.split_addon_link($1,$2)',[row.id,url])),/only link/);
+ } finally { await db.close(); }
+});
+
+test('upgrade regroups old same-name exceptions and preserves their addresses', async () => {
+ const db=await createDb({beforeImmediateSeparation: async raw=>{
+  await raw.exec(`insert into public.addons(name, description, category, versions, separate_name, shared) values
+   ('Atlas', 'Canonical description', 'Miscellaneous', '[{"url":"https://github.com/original/Atlas","note":""}]',false,true),
+   ('A-TLAS', 'Other description', 'Miscellaneous', '[{"url":"https://github.com/fork/Atlas","note":""}]',true,true);`);
+ }});
+ try {
+  const rows=await db.sql('select * from public.addons');
+  assert.equal(rows.length,1); assert.equal(rows[0].versions.length,2);
+  assert.equal(rows[0].description,'Canonical description');
+  assert.ok(rows[0].aliases.includes('a-tlas')); assert.equal(rows[0].separate_name,false);
+ } finally {await db.close();}
 });

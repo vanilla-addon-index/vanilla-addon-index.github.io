@@ -30,9 +30,6 @@
 	}
 
 	const editSlug = page.url.searchParams.get('edit');
-	const splitId = Number(page.url.searchParams.get('split'));
-	const splitLink = page.url.searchParams.get('link') ?? '';
-	const splitting = $derived(auth.isAdmin && splitId > 0 && splitLink ? { target: splitId, link: splitLink } : undefined);
 	const editing = $derived(editSlug ? store.addons.find((a) => a.slug === editSlug) : undefined);
 
 	let form = $state<AddonInput>({
@@ -96,17 +93,8 @@
 		};
 	});
 
-	let splitFilled = false;
-	$effect(() => {
-		if (!splitting || splitFilled) return;
-		const original = store.addons.find((a) => a.id === splitting.target);
-		if (!original) return;
-		splitFilled = true;
-		form = { name: original.name, description: original.description, category: original.category, author: original.author, versions: [{url: splitting.link, note: ''}], images: [...original.images] };
-	});
-
 	const mainLink = $derived(form.versions[0]?.url ?? '');
-	const matched = $derived(!editing && !splitting && plainName(form.name) ? store.addons.find((a) => plainName(a.name) === plainName(form.name)) : undefined);
+	const matched = $derived(!editing && plainName(form.name) ? store.addons.find((a) => plainName(a.name) === plainName(form.name)) : undefined);
 
 	function removeVersion(index: number) {
 		form.versions = form.versions.filter((_, i) => i !== index);
@@ -118,7 +106,7 @@
 		if (saving) return undefined;
 		const keys = form.versions.filter((v) => v.url.trim()).map((v) => linkKey(v.url));
 		return store.addons.find(
-			(a) => a.id !== editing?.id && a.id !== splitting?.target && a.versions.some((v) => keys.includes(linkKey(v.url)))
+			(a) => a.id !== editing?.id && a.versions.some((v) => keys.includes(linkKey(v.url)))
 		);
 	});
 
@@ -248,14 +236,14 @@
 		if (!matched && !input.category) return (error = 'Pick a category.');
 		if (!editing && !slugify(input.name)) return (error = 'The name needs at least one letter or digit.');
 		saving = true;
-		const showWikiHelper = !editing && !matched && !splitting;
+		const showWikiHelper = !editing && !matched;
 		try {
 			if (proposing && editing && proposalBase) {
 				await proposeEdit(editing.id, input, proposalBase);
 				await goto(resolve('/addon/[slug]', {slug:editing.slug}) + '?proposed=1');
 				return;
 			}
-			const addon = editing ? await updateAddon(editing.id, input, since) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input, splitting);
+			const addon = editing ? await updateAddon(editing.id, input, since) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input);
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
 			await goto(resolve('/addon/[slug]', { slug: addon.slug }));
@@ -348,7 +336,6 @@
 						<label class="field-label" for="repo">Link to the addon</label>
 						<input
 							id="repo"
-							readonly={!!splitting}
 							class={['input', linkErrors[0] && 'border-danger']}
 							type="url"
 							required={!editing?.shared}
@@ -557,7 +544,7 @@
 				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
 			<div class="flex gap-2">
 				<button class="btn btn-primary" disabled={saving}>
-					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? (auth.isAdmin ? 'Add link' : 'Submit for review') : splitting ? 'Separate addon' : 'Post addon'}
+					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? (auth.isAdmin ? 'Add link' : 'Submit for review') : 'Post addon'}
 				</button>
 				<a href={editing ? resolve('/addon/[slug]', { slug: editing.slug }) : resolve('/')} class="btn">
 					Cancel
