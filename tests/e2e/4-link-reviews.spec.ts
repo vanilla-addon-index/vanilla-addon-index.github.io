@@ -75,3 +75,24 @@ test('a member can withdraw a link suggestion without changing the published lin
 	await expect(page.getByRole('link', { name: url, exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(address);
 });
+
+test('repository links suggest names live while preserving names chosen by the user', async ({ page }) => {
+ await loginAs(page, 'member');
+ await page.goto('/submit');
+ const link=page.getByLabel('Link to the addon',{exact:true});
+ const name=page.getByLabel('Addon name',{exact:true});
+ await expect(name).toHaveValue('');
+ await expect(name).toHaveAttribute('placeholder', 'Name of the addon');
+ await link.fill('https://github.com/example/MyAddon');
+ await expect(name).toHaveValue('MyAddon');
+ await link.fill('https://octowow.st/git/example/OtherAddon');
+ await expect(name).toHaveValue('OtherAddon');
+ await name.fill('My chosen name');
+ await link.fill('https://github.com/example/ThirdAddon');
+ await expect(name).toHaveValue('My chosen name');
+ await name.fill('');
+ await link.fill('https://github.com/example/Pack/tree/main/AddOns/FolderAddon');
+ await expect(name).toHaveValue('FolderAddon');
+ await link.fill('https://example.com/example/BadHost');
+ await expect(name).toHaveValue('');
+});
