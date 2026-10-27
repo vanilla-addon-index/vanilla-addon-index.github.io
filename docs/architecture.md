@@ -31,9 +31,9 @@ use atomic database functions, with locks and a unique canonical-name index to
 prevent duplicate pages. A second link permanently makes a page shared: direct content edits require an admin. Links sort by
 their latest known commit date, unknown dates last; an admin pin overrides the
 leading link and the page's code date. Admins can separate an unrelated link into
-an explicit name-collision exception. Shared status is permanent, including when
+a distinct page directly on the current page. Matching names always share one page; if the saved name matches an existing page, the admin must enter a different name inline before separating. Separation uses the selected link’s queued import details when available; otherwise it leaves description and screenshots empty and uses Miscellaneous. Author credit follows the selected repository. Shared status is permanent, including when
 all links are removed: the page keeps its address, description and history, has
-an unknown code date, and invites contributors to add a link. Existing merged addresses remain aliases,
+an unknown code date, and invites contributors to add a link. Renaming updates the address and keeps every previous address as an alias; visitors opening an alias move to the current address. Existing merged addresses remain aliases,
 and removed entries are retained in the normal trash for 90 days.
 
 Link provenance is private. Link additions are logged as reversible edits;

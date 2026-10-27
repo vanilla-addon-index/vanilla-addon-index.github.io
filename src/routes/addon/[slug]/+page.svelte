@@ -6,7 +6,7 @@
 		deleteAddon,
 		fetchAddon,
 		findAddon,
-		store, pinLink, mergeAddons,
+		store, pinLink, mergeAddons, separateAddon,
 	} from '#lib/addons.svelte.ts';
 	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
@@ -23,6 +23,11 @@
 	import type { Addon } from '#lib/types.ts';
 
 	const found = $derived(findAddon(page.params.slug));
+	// Alias pages also exist in the static build; move the browser to the current address.
+	$effect(() => {
+		if (!found || found.slug === page.params.slug) return;
+		void goto(resolve('/addon/[slug]', { slug: found.slug }) + page.url.search + page.url.hash, { replaceState: true });
+	});
 	// While a delete is under way the addon is already gone from the list; the copy
 	// taken just before keeps the page as it was until the next page replaces it.
 	let kept = $state.raw<Addon>();
@@ -31,6 +36,25 @@
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 
 	let error = $state('');
+	let success = $state('');
+	let separating = $state(false);
+	let renameLink = $state('');
+	let separateName = $state('');
+	async function separate(link: string, name?: string) {
+		if (!addon || separating) return;
+		separating = true;
+		error = ''; success = '';
+		try {
+			await separateAddon(addon.id, link, name);
+			renameLink = ''; separateName = '';
+			success = 'Addon separated.';
+		} catch (e) {
+			if ((e as {code?: string}).code === 'PNA01') {
+				renameLink = link;
+			}
+			error = (e as Error).message;
+		} finally { separating = false; }
+	}
 	let report = $state<ReturnType<typeof ReportDialog>>();
 
 	// An addon the list does not have may have been posted since the daily snapshot was
@@ -70,6 +94,7 @@
 	// Group changes are small and reversible, so they happen at once, with no prompt.
 	async function change(work: () => Promise<void>) {
 		error = '';
+		success = '';
 		try {
 			await work();
 		} catch (e) {
@@ -289,12 +314,24 @@
 							<p class="break-all text-sm text-muted">{version.url}</p>
 							<div class="flex flex-wrap gap-2">
 								<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
-								{#if addon.versions.length > 1}<a class="btn px-2 py-0.5 text-sm" href={resolve('/submit') + '?split=' + addon.id + '&link=' + encodeURIComponent(version.url)}>Separate addon</a>{/if}
+								{#if addon.versions.length > 1}<button class="btn px-2 py-0.5 text-sm" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>{/if}
 							</div>
+							{#if renameLink === version.url}
+								<form class="space-y-2 pt-2" onsubmit={(event) => { event.preventDefault(); void separate(version.url, separateName); }}>
+									<label class="field-label" for="separate-name">New addon name</label>
+									<p class="text-sm text-muted">Matching names stay grouped. Give this addon a different name to separate it.</p>
+									<input id="separate-name" class="input" bind:value={separateName} required minlength="2" maxlength="60" disabled={separating} />
+									<div class="flex gap-2">
+										<button class="btn" disabled={separating}>{separating ? 'Separating…' : 'Separate addon'}</button>
+										<button type="button" class="btn" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; error = ''; }}>Cancel</button>
+									</div>
+								</form>
+							{/if}
 						</div>
 					{/each}
 				</section>
 			{/if}
+			{#if success}<p role="status">{success}</p>{/if}
 			{#if error}<p class="text-danger">{error}</p>{/if}
 		</aside>
 		<ReportDialog bind:this={report} {addon} />

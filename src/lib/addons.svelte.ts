@@ -278,10 +278,10 @@ function explain(error: { code?: string; message: string }) {
 	return error.message;
 }
 
-export async function createAddon(input: AddonInput, split?: { target: number; link: string }) {
+export async function createAddon(input: AddonInput) {
 	if (!supabase) throw new Error('Database is not configured.');
 	// The database makes the address from the name; see the slugs migration.
-	const { data: id, error } = await supabase.rpc(split ? 'split_addon_link' : 'submit_addon', split ? { ...split, input } : { input });
+	const { data: id, error } = await supabase.rpc('submit_addon', { input });
 	if (error) throw new Error(explain(error));
 	const { data, error: readError } = await supabase.from('addons').select('*, profiles:profiles!addons_owner_fkey(username)').eq('id', id).single();
 	if (readError) throw new Error(explain(readError));
@@ -429,4 +429,12 @@ export function ownedText({ posted, imported }: Owned) {
 		posted.length || !imported.length ? count(posted.length, 'addon', 'posted') : '',
 		imported.length ? count(imported.length, 'import', 'approved') : ''
 	].filter(Boolean);
+}
+
+/** Separates using link-specific content; the database asks for a new name on collisions. */
+export async function separateAddon(id: number, link: string, name?: string) {
+ if (!supabase) throw new Error('Database is not configured.');
+ const { error } = await supabase.rpc('split_addon_link', { target: id, link, new_name: name ?? null });
+ if (error) throw Object.assign(new Error(explain(error)), { code: error.code });
+ await loadAddons();
 }

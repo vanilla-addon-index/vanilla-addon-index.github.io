@@ -74,6 +74,6 @@ export function linkOwner(url: string): string {
  * of its repository. Empty when neither is known, unless a name is needed to tell
  * same-named addons apart, in which case the host stands in.
  */
-export function creditFor(addon: { author: string; repo_url: string }, needed = false): string {
-	return addon.author || linkAuthor(addon.repo_url) || (needed ? linkKey(addon.repo_url).split('/')[0] : '');
+export function creditFor(addon: { author: string; repo_url: string; shared?: boolean }, needed = false): string {
+	return (!addon.shared ? addon.author : '') || linkAuthor(addon.repo_url) || (needed ? linkKey(addon.repo_url).split('/')[0] : '');
 }
