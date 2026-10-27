@@ -6,7 +6,7 @@ test('successful posts offer a copyable wiki entry and editor link on desktop an
 	await loginAs(page, 'member');
 	const name = unique('Browser Wiki Helper');
 	await page.goto('/submit');
-	await page.getByLabel('Name', { exact: true }).fill(name);
+	await page.getByLabel('Addon name', { exact: true }).fill(name);
 	await page.getByLabel('Link to the addon').fill(`https://gitlab.com/e2e/${name.replace(/\W+/g, '-')}`);
 	await page.getByLabel('Category', { exact: true }).selectOption('Combat');
 	await page.getByLabel('Description', { exact: true }).fill('Shows your total block value.');

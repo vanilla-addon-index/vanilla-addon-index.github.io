@@ -18,7 +18,7 @@ test('link fields explain invalid URLs inline and clear the error after correcti
 	await expect(input).toHaveAttribute('aria-invalid', 'false');
 	await expect(page.getByRole('alert')).toHaveCount(0);
 	await page.goto('/submit');
-	await page.getByLabel('Name', { exact: true }).fill(unique('Invalid link'));
+	await page.getByLabel('Addon name', { exact: true }).fill(unique('Invalid link'));
 	await page.getByLabel('Category', { exact: true }).selectOption('Combat');
 	await page.getByLabel('Description', { exact: true }).fill('A description long enough for submission.');
 	const main = page.getByLabel('Link to the addon', { exact: true });

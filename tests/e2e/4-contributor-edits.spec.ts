@@ -16,7 +16,7 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  const description= `${name} was posted by a browser test.`;
  await switchUser(page,'admin');
  await page.goto('/submit');
- await page.getByLabel('Name',{exact:true}).fill(name);
+ await page.getByLabel('Addon name', { exact: true }).fill(name);
  await page.getByLabel('Link to the addon').fill('https://gitlab.com/e2e/'+name.replace(/\W+/g,'-')+'-fork');
  await page.getByRole('button',{name:'Add link',exact:true}).click();
  await expect(page.getByRole('heading',{level:1,name})).toBeVisible();
@@ -29,7 +29,7 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await expect(page.getByRole('link',{name:'Edit',exact:true})).toHaveCount(0);
  await page.getByRole('link',{name:'Propose edits',exact:true}).click();
  await page.getByLabel('Description',{exact:true}).fill('A new description for review, not yet published.');
- await page.getByLabel('Addon author',{exact:true}).fill('Reviewed author');
+ await page.getByLabel('Addon author (optional)', { exact: true }).fill('Reviewed author');
  await page.getByRole('button',{name:'Submit for review',exact:true}).click();
  await expect(page.getByText('Your edit is waiting for admin review.')).toBeVisible();
  await expect(page.getByText(description,{exact:true})).toBeVisible();
@@ -42,7 +42,7 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await expect(request).toHaveCount(0);
  await page.goto(address);
  await page.getByRole('link',{name:'Edit',exact:true}).click();
- await expect(page.getByLabel('Addon author',{exact:true})).toHaveValue('Reviewed author');
+ await expect(page.getByLabel('Addon author (optional)', { exact: true })).toHaveValue('Reviewed author');
  await page.goto(address);
  await expect(page.getByText(description,{exact:true})).toBeVisible();
  // Admins can remove the final link without deleting the shared page.
@@ -55,14 +55,14 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await page.goto(address);
  await expect(page.getByText('No download links currently listed.')).toBeVisible();
  await page.getByRole('link',{name:'Propose edits',exact:true}).click();
- await page.getByLabel('Addon author',{exact:true}).fill('Another proposed author');
+ await page.getByLabel('Addon author (optional)', { exact: true }).fill('Another proposed author');
  await page.getByRole('button',{name:'Submit for review',exact:true}).click();
  await page.getByRole('link',{name:'Propose edits',exact:true}).click();
- await expect(page.getByLabel('Addon author',{exact:true})).toHaveValue('Another proposed author');
- await page.getByLabel('Addon author',{exact:true}).fill('Revised author proposal');
+ await expect(page.getByLabel('Addon author (optional)', { exact: true })).toHaveValue('Another proposed author');
+ await page.getByLabel('Addon author (optional)', { exact: true }).fill('Revised author proposal');
  await page.getByRole('button',{name:'Submit for review',exact:true}).click();
  await page.getByRole('button',{name:'Withdraw proposal',exact:true}).click();
  await expect(page.getByText('Your edit is waiting for admin review.')).toHaveCount(0);
  await page.getByRole('link',{name:'Propose edits',exact:true}).click();
- await expect(page.getByLabel('Addon author',{exact:true})).toHaveValue('Reviewed author');
+ await expect(page.getByLabel('Addon author (optional)', { exact: true })).toHaveValue('Reviewed author');
 });

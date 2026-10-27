@@ -63,7 +63,7 @@ test('a login link cannot send you to another site', async ({ page }) => {
 test('the form refuses a description that is too short, and a link that is already listed', async ({ page }) => {
 	await loginAs(page, 'member');
 	await page.goto('/submit');
-	await page.getByLabel('Name', { exact: true }).fill(unique('Short'));
+	await page.getByLabel('Addon name', { exact: true }).fill(unique('Short'));
 	await page.getByLabel('Link to the addon').fill('https://gitlab.com/e2e/short');
 	await page.getByLabel('Category', { exact: true }).selectOption('Combat');
 	await page.getByLabel('Description', { exact: true }).fill('Too short');
@@ -156,10 +156,10 @@ test('a member deletes their own account, and what they posted stays in the list
 test('a matching name submits a link for review and never grants control of the shared page', async ({page}) => {
  await loginAs(page,'member');
  await page.goto('/submit');
- await page.getByLabel('Name',{exact:true}).fill('raidhelper');
+ await page.getByLabel('Addon name', { exact: true }).fill('raidhelper');
  await expect(page.getByLabel('Description',{exact:true})).toBeDisabled();
  await expect(page.getByLabel('Category',{exact:true})).toBeDisabled();
- await expect(page.getByLabel('Addon author',{exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Addon author (optional)', { exact: true })).toBeDisabled();
  const url='https://gitlab.com/e2e/shared-fork';
  await page.getByLabel('Link to the addon').fill(url);
  await page.getByRole('button',{name:'Submit for review',exact:true}).click();

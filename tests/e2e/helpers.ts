@@ -32,7 +32,7 @@ export async function chooseImportCategory(entry: Locator) {
 /** Posts an addon through the submit form and lands on its page. Returns that page's address. */
 export async function postAddon(page: Page, name: string, extra: { category?: string; description?: string } = {}) {
 	await page.goto('/submit');
-	await page.getByLabel('Name', { exact: true }).fill(name);
+	await page.getByLabel('Addon name', { exact: true }).fill(name);
 	// Not a GitHub link, so the form does not go looking for a README.
 	await page.getByLabel('Link to the addon').fill(`https://gitlab.com/e2e/${name.replace(/\W+/g, '-')}`);
 	await page.getByLabel('Category', { exact: true }).selectOption(extra.category ?? 'Combat');
