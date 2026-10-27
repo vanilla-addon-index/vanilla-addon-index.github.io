@@ -37,3 +37,16 @@ export function stillGone(gone: number[], snapshot: Pick<Stamped, 'id'>[]): numb
 	const listed = new Set(snapshot.map((row) => row.id));
 	return [...new Set(gone)].filter((id) => listed.has(id));
 }
+
+/** Reuse newer cached content, but trust the published snapshot when stamps tie.
+ * Address repairs can change slugs and aliases without changing the content stamp.
+ * The live outline will separately remove missing rows and refresh ownership/groups.
+ */
+export function liveRows<T extends Stamped>(snapshot: T[], kept: T[]): Map<number, T> {
+ const rows = new Map(kept.map(row => [row.id, row]));
+ for (const row of snapshot) {
+  const cached = rows.get(row.id);
+  if (!cached || row.updated_at >= cached.updated_at) rows.set(row.id, row);
+ }
+ return rows;
+}
