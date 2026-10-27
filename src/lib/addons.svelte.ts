@@ -2,7 +2,7 @@ import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
 import { LOCAL, PUBLIC_ADDON_COLUMNS } from './config';
 import { tell } from './confirm.svelte';
-import { mergeFresh, newestStamp, stillGone } from './fresh';
+import { liveRows, mergeFresh, newestStamp, stillGone } from './fresh';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 
@@ -194,7 +194,7 @@ async function fetchLive() {
 	]);
 	// What this browser already holds counts too: rows loaded earlier in the visit or saved
 	// by the last one. An admin approving imports by the hundred fetches each row once.
-	const rows = new Map([...snapshot, ...store.addons].map((a) => [a.id, a]));
+	const rows = liveRows(snapshot, store.addons);
 	const changed = outline.filter((o) => rows.get(o.id)?.updated_at !== o.updated_at).map((o) => o.id);
 	if (changed.length > MAX_CHANGED) return fetchAll();
 

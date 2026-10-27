@@ -4,7 +4,7 @@
 //   npm test
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { mergeFresh, newestStamp, stillGone } from '../../src/lib/fresh.ts';
+import { liveRows, mergeFresh, newestStamp, stillGone } from '../../src/lib/fresh.ts';
 
 const row = (id, name, day, extra = {}) => ({ id, name, updated_at: `2026-10-${String(day).padStart(2, '0')}T12:00:00.000000+00:00`, ...extra });
 const names = (rows) => rows.map((r) => r.name);
@@ -63,4 +63,21 @@ describe('a visitor\'s list', () => {
 		const list = mergeFresh(snapshot, [row(4, 'Old name', 9)], [row(4, 'New name', 10)]);
 		assert.deepEqual(names(list), ['Atlas', 'Bagnon', 'Cartographer', 'New name']);
 	});
+});
+
+test('admin catalog replaces a cached old address when the published stamp ties', () => {
+ const cached=row(715,'SuperCleveRoidMacros',10,{slug:'supercleveroidmacros-classicapi',aliases:[]});
+ const published={...cached,slug:'supercleveroidmacros',aliases:[cached.slug]};
+ const rows=liveRows([published],[cached]);
+ assert.deepEqual(rows.get(715),published);
+});
+
+test('admin catalog keeps newer edits while preferring newer snapshot content', () => {
+ const snapshot=[row(1,'Published',10),row(2,'Published second',10)];
+ const cached=[row(1,'New edit',11),row(2,'Old second',9),row(3,'New post',11)];
+ const rows=liveRows(snapshot,cached);
+ assert.equal(rows.get(1).name,'New edit');
+ assert.equal(rows.get(2).name,'Published second');
+ assert.equal(rows.get(3).name,'New post');
+ assert.equal(liveRows(snapshot,[]).size,2);
 });
