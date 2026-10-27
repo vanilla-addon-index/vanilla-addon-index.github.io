@@ -5,7 +5,7 @@ for (const who of ['member', 'admin'] as const) {
 	test(`${who} can select a category by letter and tab away before submitting`, async ({page}) => {
 		await loginAs(page, who);
 		await page.goto('/submit');
-		await page.getByLabel('Name', {exact:true}).fill(unique('Keyboard category'));
+		await page.getByLabel('Addon name', { exact: true }).fill(unique('Keyboard category'));
 		await page.getByLabel('Link to the addon').fill('https://gitlab.com/keyboard/category');
 		await page.getByLabel('Description', {exact:true}).fill('An addon submitted with a keyboard-selected category.');
 		const category = page.getByLabel('Category', {exact:true});

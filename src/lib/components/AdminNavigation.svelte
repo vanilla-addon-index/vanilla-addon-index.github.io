@@ -7,7 +7,7 @@
 		{path:'/admin/import',label:'Import'},
 		{path:'/admin/reports',label:'Reports'},
 		{path:'/admin/edits',label:'Edit reviews'},
-		{path:'/admin/groups',label:'Shared addons'},
+		{path:'/admin/groups',label:'Grouped addons'},
 		{path:'/admin/log',label:'Log'},
 		{path:'/admin/trash',label:'Trash'},
 		{path:'/admin/users',label:'Users'}

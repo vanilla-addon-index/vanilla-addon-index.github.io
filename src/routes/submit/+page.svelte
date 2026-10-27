@@ -278,7 +278,7 @@
 				<p class="text-muted">{editing ? editing.name : 'Add one to the index'}</p>
 			</div>
 			<ul class="space-y-2 px-3 py-3 text-sm text-muted">
-				<li>Name, link, category and description are <span class="text-accent">required</span>.</li>
+				<li>Addon link, addon name, category and description are <span class="text-accent">required</span>.</li>
 				<li>Everything else is optional and helps players find the addon.</li>
 				<li>You can edit your own addon's details directly. If it becomes part of a grouped entry, you can propose changes for admin review and remove your own links.</li>
 				{#if !auth.isAdmin}
@@ -321,18 +321,6 @@
 			<div class="panel space-y-4 border-accent/30 p-4">
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div>
-						<label class="field-label" for="name">Name</label>
-						<input
-							id="name"
-							class="input"
-							required
-							minlength="2"
-							maxlength="60"
-							placeholder="As players know it"
-							bind:value={form.name}
-						/>
-					</div>
-					<div>
 						<label class="field-label" for="repo">Link to the addon</label>
 						<input
 							id="repo"
@@ -349,6 +337,20 @@
 							oninput={(event) => { if (linkErrors[0]) validateLink(0, event.currentTarget.value); }}
 						/>
 						{#if linkErrors[0]}<p id="repo-error" class="mt-1 text-sm text-danger" role="alert">{linkErrors[0]}</p>{/if}
+					</div>
+					<div>
+						<label class="field-label" for="name">Addon name</label>
+						<input
+							id="name"
+							class="input"
+							required
+							minlength="2"
+							maxlength="60"
+							placeholder="OctoArmoryLink"
+							aria-describedby="addon-name-hint"
+							bind:value={form.name}
+						/>
+						<p id="addon-name-hint" class="hint">The name of the addon, e.g. OctoArmoryLink.</p>
 					</div>
 					<div>
 						<label class="field-label" for="category">Category</label>
@@ -396,14 +398,16 @@
 			<fieldset disabled={!!matched} class="panel space-y-4 p-4 disabled:opacity-40">
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div>
-						<label class="field-label" for="author">Addon author</label>
+						<label class="field-label" for="author">Addon author (optional)</label>
 						<input
 							id="author"
 							class="input"
 							maxlength="60"
-							placeholder="If that is not you"
+							placeholder="Creator’s name"
+							aria-describedby="addon-author-hint"
 							bind:value={form.author}
 						/>
+						<p id="addon-author-hint" class="hint">Who created the addon. Leave blank if unknown.</p>
 					</div>
 				</div>
 				{#if form.versions.length > 1}
@@ -524,7 +528,7 @@
 				</div>
 			</fieldset>
 
-			<h2 id="addon-preview" class="section-title mt-8">Preview</h2>
+			<h2 id="addon-preview" class="section-title mt-8">How your addon will appear</h2>
 			<p class="mb-2 text-muted">How it will look in the list.</p>
 			<div class="panel addon-list">
 				<AddonCard
