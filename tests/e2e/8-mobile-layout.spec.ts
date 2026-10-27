@@ -65,7 +65,7 @@ test('phone account options and submit fields remain usable at the smallest widt
 	await page.goto('/submit');
 	await expect(page.getByLabel('Addon name', { exact: true })).toBeInViewport();
 	await page.getByRole('navigation', { name: 'Form sections' }).getByRole('button', { name: 'Preview', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Preview', exact: true })).toBeInViewport();
+	await expect(page.getByRole('heading', { name: 'How your addon will appear', exact: true })).toBeInViewport();
 	await page.getByRole('navigation', { name: 'Form sections' }).getByRole('button', { name: 'Required details', exact: true }).click();
 	await expect(page.getByLabel('Addon name', { exact: true })).toBeInViewport();
 	await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
