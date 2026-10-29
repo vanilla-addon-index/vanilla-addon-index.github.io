@@ -54,7 +54,7 @@ export const DEFAULT_CATEGORY = 'Miscellaneous';
 // The columns of an addon a visitor may read, granted by the database migrations.
 // Who posted or approved an addon is for accounts only.
 export const PUBLIC_ADDON_COLUMNS =
-	'id,slug,name,description,category,author,versions,repo_url,link_keys,aliases,images,source,group_id,is_main,created_at,updated_at,code_update,link_code_updates,shared,pinned_link,separate_name';
+	'id,slug,name,description,category,author,versions,repo_url,link_keys,aliases,images,source,group_id,is_main,created_at,updated_at,code_update,link_code_updates,unavailable_links,shared,pinned_link,separate_name';
 
 // The sites a member's link, and a member's screenshots, may be on. An admin is not held
 // to them. Must match allowed_hosts() in the allowed hosts migration; a test compares the

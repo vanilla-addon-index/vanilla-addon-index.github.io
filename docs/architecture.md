@@ -90,14 +90,19 @@ queue decisions are preserved. Failed or empty reads leave the article waiting, 
 retry and manual paste controls. Expanded source records do not count as published
 addons. Resolved articles are not automatically monitored for subsequent changes.
 
-After saving successful checks, Nightly files confirmed missing repositories under
-**Decided → Dead links**. These are not admin rejections and require no decision.
-Only explicit missing answers from the current run qualify for live removal; timeouts,
+An explicit missing repository answer starts a 14-day grace period. Published links
+stay visible, labelled **Currently unavailable**, and Nightly continues checking them.
+A successful check clears the label and resets the clock. After 14 days, a fresh
+explicit missing answer lets Nightly file the repository under **Decided → Dead links**.
+These are not admin rejections and require no decision.
+Only explicit missing answers from the current run qualify for removal; timeouts,
 rate limits, unsupported hosts and other unanswered checks preserve existing entries.
 Archived repositories remain available and are not removed. Dead links are removed
 individually from multi-link addons; only an addon with no remaining links leaves the
 live list. Each removed link retains a full addon snapshot in the private queue, and
-deleted addons also enter the normal trash. Filed dead links are not automatically
+deleted addons also enter the normal trash. The existing 90-day revert/restore window
+starts at removal; reverting a removed link or restoring an addon resets its grace
+period. Filed dead links are not automatically
 republished or rechecked once they are no longer published or pending.
 
 Owner rejections can only be returned to the import queue by the owner. Admins can

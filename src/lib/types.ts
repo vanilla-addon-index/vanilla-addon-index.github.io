@@ -37,6 +37,8 @@ export interface Addon {
 	updated_at: string;
 	code_update: CodeUpdate | null;
 	link_code_updates: Record<string, CodeUpdate>;
+	// Absent in snapshots written before repository grace periods were introduced.
+	unavailable_links?: string[];
 	shared: boolean;
 	pinned_link: string | null;
 	separate_name: boolean;
