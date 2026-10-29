@@ -253,6 +253,7 @@
 							>
 								{version.url}
 							</a>
+							{#if addon.unavailable_links?.includes(version.url)}<p class="text-sm text-danger">Currently unavailable</p>{/if}
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
                             <dl class="mt-2 space-y-1 text-sm">
                                 <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Author</dt><dd class="min-w-0 break-words text-right">{(!addon.shared ? addon.author : '') || linkAuthor(version.url) || 'Unknown'}</dd></div>

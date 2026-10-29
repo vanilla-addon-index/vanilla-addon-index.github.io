@@ -7,8 +7,9 @@
 //      kept there (stars, last update, archived, fork parent, current address, and the
 //      game version its .toc file declares) and stores the answers for the review page.
 //      GitHub is asked with the workflow's own token; the others need none.
-//      Confirmed missing links are filed separately from rejections and removed from
-//      published entries; a page stays live as long as it has another link.
+//      Missing links stay published with an unavailable label for 14 days. A fresh
+//      missing check after that grace period retires them; a page stays live as long
+//      as it has another link. Successful checks reset the grace period.
 //   4. Looks at the screenshots of each queued entry, once: keeps the wiki's that still
 //      load, adds the ones in the repository's README, and stores them for the review.
 //
@@ -598,14 +599,15 @@ for (const outcome of outcomes) if (outcome.status === 'rejected') {
 }
 await saveProgress();
 
-// Only explicit missing answers from this run qualify; failed checks keep live links.
+// Only explicit missing answers from this run qualify; the database also enforces
+// the 14-day grace period. Failed checks keep live links.
 const retired = await db('retire_dead_links', { keys: stats.filter(row => row.missing).map(row => row.key) });
 console.log(`Dead links: ${retired.queued} imports filed, ${retired.links_removed} live links removed, ${retired.addons_removed} addons removed.`);
 
 console.log(`Processed ${saved.stats} repository fact records, commit dates for ${saved.dates} addon links, and ${saved.pictures} completed screenshot checks; unanswered checks retain their last known facts.`);
 
 console.log(
-	`Checked ${stats.length} repositories: ${stats.filter((s) => s.missing).length} no longer exist, ` +
+	`Checked ${stats.length} repositories: ${stats.filter((s) => s.missing).length} unavailable, ` +
 		`${stats.filter((s) => s.canonical && s.canonical !== s.key).length} have moved, ` +
 		`${stats.filter((s) => s.interface !== null).length} have a readable .toc.` +
 		(unanswered ? ` GitHub gave no answer about ${unanswered}; what was known about those is kept.` : '')

@@ -35,7 +35,7 @@ All objects below are in the `public` schema. Supabase manages the separate
 | Recovery | `activity_log`, `addon_trash` | Reversible edits, deleted pages and moderation history. |
 | Account safeguards | `banned_identities`, `left_posts` | Ban continuity and posting limits after account deletion. |
 | Imports | `import_queue`, `wiki_listing` | Wiki candidates, decisions and the guard against unexpectedly short wiki results. |
-| Repository facts | `repo_stats`, `repo_stats_checks`, `repo_stats_current` (view) | Private repository facts and check times, combined for admin reads. |
+| Repository facts | `repo_stats`, `repo_stats_checks`, `repo_missing_since`, `repo_stats_current` (view) | Private repository facts, check times and missing-link grace periods; facts and check times are combined for admin reads. |
 | Code dates | `repo_code_updates` | Commit dates for exact repository, branch or folder URLs; derived public dates live on `addons`. |
 | Check cache | `repo_check_cache` | Private reusable repository checks, maintained by Nightly. |
 | Nightly authentication | `nightly_token` | Hash of the dedicated maintenance token; not readable through the application API. |
