@@ -7,6 +7,7 @@ export interface LinkRequest {
 	id: number;
 	addon_id: number;
 	url: string;
+	images?: string[];
 	proposer?: { username: string } | null;
 }
 function client() {

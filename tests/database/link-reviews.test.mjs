@@ -84,3 +84,57 @@ test('invalid, banned and duplicate suggestions are refused; withdrawal leaves t
 		assert.deepEqual((await db.sql('select versions from public.addons'))[0].versions, a.versions);
 	} finally { await db.close(); }
 });
+
+
+for (const approved of [true,false]) test(`same-name screenshots ${approved ? 'publish with an admin link' : 'wait with a member link'} and fill remaining slots`,async()=>{
+ const db=await createDb();
+ try {
+  const author=await db.addUser('author'), member=await db.addUser('member'), admin=await db.addUser('admin','admin');
+  const shot=n=>`https://i.imgur.com/shot${n}.png`;
+  const original=await post(db,author,addon('Images',undefined,{images:[shot(1),shot(2),shot(3)]}));
+  const input={name:'Images',versions:[{url:'https://github.com/member/images'}],images:[shot(3),shot(4),shot(4),shot(5),shot(6)]};
+  await db.as(approved ? admin : member,q=>q('select public.submit_addon($1::jsonb)',[JSON.stringify(input)]));
+  if(!approved) {
+   assert.deepEqual((await db.sql('select images from public.addons'))[0].images,original.images);
+   const [request]=await db.sql('select * from public.addon_link_requests');
+   assert.deepEqual(request.images,[shot(3),shot(4),shot(5),shot(6)]);
+   await db.as(admin,q=>q('select public.decide_addon_link($1,true)',[request.id]));
+  }
+  const [live]=await db.sql('select * from public.addons');
+  assert.deepEqual(live.images,[shot(1),shot(2),shot(3),shot(4),shot(5)]);
+  assert.equal(live.versions.length,2);
+  assert.equal(live.description,original.description);
+ } finally {await db.close();}
+});
+
+test('rejected screenshot suggestions leave live images unchanged; invalid images cannot bypass validation',async()=>{
+ const db=await createDb();
+ try {
+  const member=await db.addUser('member'), admin=await db.addUser('admin','admin');
+  const a=await post(db,member,addon('Images'));
+  const input={name:'Images',versions:[{url:'https://github.com/member/new'}],images:['https://i.imgur.com/a.png']};
+  await db.as(member,q=>q('select public.submit_addon($1::jsonb)',[JSON.stringify(input)]));
+  const [request]=await db.sql('select id from public.addon_link_requests');
+  await db.as(admin,q=>q('select public.decide_addon_link($1,false)',[request.id]));
+  assert.deepEqual((await db.sql('select images from public.addons'))[0].images,a.images);
+  for(const images of [Array.from({length:6},(_,i)=>`https://i.imgur.com/${i}.png`),['http://i.imgur.com/a.png'],['https://evil.example/a.png'],['https://i.imgur.com/'+ 'x'.repeat(501)],{}]) {
+   await assert.rejects(db.as(member,q=>q('select public.submit_addon($1::jsonb)',[JSON.stringify({...input,images})])));
+  }
+ } finally {await db.close();}
+});
+
+test('signed GitHub attachments normalize before screenshot length validation, for submissions and suggestions',async()=>{
+ const db=await createDb();
+ try {
+  const member=await db.addUser('member'), admin=await db.addUser('admin','admin');
+  const signed='https://private-user-images.githubusercontent.com/29808955/641515915-39f10b7d-8916-4150-a547-09a24fa2efd8.png?jwt='+'x'.repeat(800);
+  const stable='https://github.com/user-attachments/assets/39f10b7d-8916-4150-a547-09a24fa2efd8';
+  const a=await post(db,member,addon('Signed',undefined,{images:[signed]}));
+  assert.deepEqual(a.images,[stable]);
+  await db.as(member,q=>q('select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Signed',versions:[{url:'https://github.com/member/new'}],images:[signed]})]));
+  const [request]=await db.sql('select * from public.addon_link_requests');
+  assert.deepEqual(request.images,[stable]);
+  await db.as(admin,q=>q('select public.decide_addon_link($1,true)',[request.id]));
+  assert.deepEqual((await db.sql('select images from public.addons'))[0].images,[stable]);
+ } finally {await db.close();}
+});

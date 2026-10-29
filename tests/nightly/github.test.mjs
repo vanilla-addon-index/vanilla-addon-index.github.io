@@ -4,7 +4,7 @@
 //   npm test
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { imagesIn, uncamo } from '../../src/lib/github.ts';
+import { imagesIn, uncamo, screenshotUrl } from '../../src/lib/github.ts';
 
 const base = 'https://raw.githubusercontent.com/Owner/Addon/HEAD/README.md';
 
@@ -38,9 +38,19 @@ describe('pictures in a README', () => {
 		assert.equal(uncamo('https://camo.githubusercontent.com/abc/zz'), 'https://camo.githubusercontent.com/abc/zz');
 	});
 
-	test('at most six, and none from a README without any', () => {
+	test('at most five, and none from a README without any', () => {
 		const readme = Array.from({ length: 8 }, (_, i) => `![s](s${i}.png)`).join('\n');
-		assert.equal(imagesIn(readme, base).length, 6);
+		assert.equal(imagesIn(readme, base).length, 5);
 		assert.deepEqual(imagesIn('Just words.', base), []);
 	});
+});
+
+
+test('temporary GitHub attachment URLs become stable public addresses before storage', () => {
+ const stable = 'https://github.com/user-attachments/assets/39f10b7d-8916-4150-a547-09a24fa2efd8';
+ const signed = 'https://private-user-images.githubusercontent.com/29808955/641515915-39f10b7d-8916-4150-a547-09a24fa2efd8.png?jwt=' + 'x'.repeat(800);
+ assert.equal(screenshotUrl(signed),stable);
+ assert.deepEqual(imagesIn(`![shot](${signed}) ![same](${stable})`,base),[stable]);
+ assert.equal(screenshotUrl('https://private-user-images.githubusercontent.com/invalid.png?jwt=abc'),'https://private-user-images.githubusercontent.com/invalid.png?jwt=abc');
+ assert.equal(screenshotUrl('https://private-user-images.githubusercontent.com.evil.example/29808955/641515915-39f10b7d-8916-4150-a547-09a24fa2efd8.png?jwt=abc'),'https://private-user-images.githubusercontent.com.evil.example/29808955/641515915-39f10b7d-8916-4150-a547-09a24fa2efd8.png?jwt=abc');
 });

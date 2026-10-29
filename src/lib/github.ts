@@ -34,6 +34,13 @@ export function uncamo(url: string): string {
 	}
 }
 
+/** Store GitHub attachments by their stable public address, not an expiring JWT URL. */
+export function screenshotUrl(value: string): string {
+ const url = toRaw(uncamo(value.trim()));
+ const attachment = /^https:\/\/private-user-images\.githubusercontent\.com\/\d+\/\d+-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.[a-z0-9]+(?:[?#].*)?$/i.exec(url);
+ return attachment ? `https://github.com/user-attachments/assets/${attachment[1].toLowerCase()}` : url;
+}
+
 /**
  * Image links in the text of a README, in document order. "base" is the README's own raw
  * address, so that a picture kept next to it in the repository resolves to where it is.
@@ -42,7 +49,7 @@ export function imagesIn(readme: string, base: string): string[] {
 	const images = new Set<string>();
 	for (const [, markdown, html] of readme.matchAll(IMAGE)) {
 		try {
-			const url = toRaw(new URL(markdown ?? html, base).href);
+			const url = screenshotUrl(new URL(markdown ?? html, base).href);
 			if (url.startsWith('https://') && !/\s/.test(url) && !NOT_A_SCREENSHOT.test(url)) images.add(url);
 		} catch {
 			// Not a usable URL.
