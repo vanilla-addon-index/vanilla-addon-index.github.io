@@ -269,7 +269,6 @@
 				</ol>
 			</div>
 
-            {#if addon.shared}<p class="panel px-3 py-2 text-sm text-muted">This is a shared page. Original owners and contributors can propose edits for admin review.</p>{/if}
 			<FavoriteButton addonId={addon.id} />
             {#if auth.session && !auth.banned}{#key addon.id + ':' + auth.session.user.id}<AddAddonLink addonId={addon.id} hasLinks={addon.versions.length > 0} />{/key}{/if}
             {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
