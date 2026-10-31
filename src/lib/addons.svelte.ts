@@ -297,8 +297,18 @@ export async function createAddon(input: AddonInput) {
  * "updated_at" then. If someone else has edited it in the meantime, nothing is saved, so
  * their edit is not quietly overwritten by a form that never showed it.
  */
-export async function updateAddon(id: number, input: AddonInput, since: string) {
+export async function updateAddon(id: number, input: AddonInput, since: string, reviewId?: number) {
 	if (!supabase) throw new Error('Database is not configured.');
+	if (reviewId) {
+		const { error } = await supabase.rpc('resolve_log_edit', { log_id: reviewId, input, expected_updated: since });
+		if (error) throw new Error(explain(error));
+		const existing = store.addons.find(a => a.id === id);
+		if (existing) await fetchAddon(existing.slug);
+		const saved = store.addons.find(a => a.id === id);
+		if (!saved) throw new Error('Saved, but the addon could not be refreshed. Reload the page.');
+		return saved;
+	}
+
 	const previous = store.addons;
 	// Optimistic: show the edit immediately, roll back if the database rejects it.
 	store.addons = previous.map((a) => (a.id === id ? { ...a, ...input } : a));

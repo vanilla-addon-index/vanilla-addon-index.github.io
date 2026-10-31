@@ -18,7 +18,7 @@ test('History shows the rate-limit error and keeps the page unchanged; the owner
   await loginAs(page,'admin');
   await page.goto(`/admin/log?addon=${id}`);
   const edited = logLine(page,new RegExp(`edited\\s+${name}`));
-  await edited.getByText('Show what changed').click();
+  await edited.getByText('View changes').click();
   await edited.getByRole('button',{name:'Revert',exact:true}).click();
   await confirm(page,'Revert');
   await expect(page.getByText('You can make at most 30 edits an hour. Try again later.',{exact:true})).toBeVisible();
@@ -29,7 +29,7 @@ test('History shows the rate-limit error and keeps the page unchanged; the owner
   await loginAs(page,'owner');
   await page.goto(`/admin/log?addon=${id}`);
   const recovery = logLine(page,new RegExp(`edited\\s+${name}`));
-  await recovery.getByText('Show what changed').click();
+  await recovery.getByText('View changes').click();
   await recovery.getByRole('button',{name:'Revert',exact:true}).click();
   await confirm(page,'Revert');
   await expect(page.getByText(`"${name}" is back to how it was before that edit.`,{exact:true})).toBeVisible();

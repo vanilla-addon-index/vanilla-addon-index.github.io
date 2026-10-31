@@ -54,6 +54,8 @@ test('History offers reopening only to the owner and returns handled reports to 
  await logLine(page,new RegExp(`handled a report about\\s+${fixture.name}`)).getByRole('button',{name:'Reopen report',exact:true}).click();
  await confirm(page,'Reopen report');
  await expect(page.getByText(`The report about "${fixture.name}" is open again.`,{exact:true})).toBeVisible();
+ await expect(logLine(page,new RegExp(`handled a report about\\s+${fixture.name}`))).toContainText('Recovered by owner');
+ await page.reload();
  await expect(logLine(page,new RegExp(`reopened a report about\\s+${fixture.name}`))).toBeVisible();
  expect(sql(`select status from public.reports where id=${fixture.report}`)).toBe('open');
 });

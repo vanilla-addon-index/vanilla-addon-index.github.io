@@ -1,8 +1,13 @@
 <script lang="ts">
+	import HistoryGrouping from '#lib/components/HistoryGrouping.svelte';
+	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
+	import { fieldLabel, changeSummary } from '#lib/history.ts';
+	import { recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { goto } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
@@ -10,6 +15,8 @@
 		LOG_PAGE,
 		loadLog,
 		loadTrashIds,
+		loadRecoveryStatus,
+		type RecoveryStatus,
 		remembered,
 		requeueImport,
 		reopenReport,
@@ -75,7 +82,10 @@
 		clearTimeout(typing);
 		typing = setTimeout(() => narrow({ q: query.trim() || undefined }), 300);
 	}
-	let notice = $state('');
+	let outcomes = $state<Record<number, { text: string; failed: boolean }>>({});
+	let active = $state<number | null>(null);
+	let loading = $state(false);
+	let recoveries = $state<Record<number, RecoveryStatus>>({});
 	let error = $state('');
 	// What is still in the trash, so "Restore" is only offered for what can be restored.
 	let inTrash = $state(new Set<number>());
@@ -85,19 +95,30 @@
 	async function load(older = false) {
 		const mine = ++asked;
 		const wanted = filter;
+		loading = true;
+		error = '';
 		try {
 			const next = await loadLog(wanted, older ? entries.at(-1)?.id : undefined);
 			if (mine !== asked) return;
 			const combined = older ? [...entries, ...next] : next;
-			const trash = await loadTrashIds(combined.flatMap(entry => entry.details?.trash_id === undefined ? [] : [entry.details.trash_id]));
+			const [trash, status] = await Promise.all([
+				loadTrashIds(combined.flatMap(entry => entry.details?.trash_id === undefined ? [] : [entry.details.trash_id])),
+				loadRecoveryStatus(combined.map(entry => entry.id))
+			]);
 			if (mine !== asked) return;
 			entries = combined;
 			inTrash = trash;
+			recoveries = status;
 			if (!filtered) remembered.log = entries;
 			more = next.length === LOG_PAGE;
 			loaded = true;
 		} catch (e) {
-			if (mine === asked) error = (e as Error).message;
+			if (mine === asked) {
+				error = (e as Error).message;
+				recoveries = {};
+			}
+		} finally {
+			if (mine === asked) loading = false;
 		}
 	}
 	// Runs at once, and again whenever the log is narrowed differently.
@@ -114,8 +135,12 @@
 	const historyOf = $derived(
 		filter.addonId ? (live(filter.addonId)?.name ?? entries.find((e) => e.subject)?.subject ?? 'this addon') : ''
 	);
-	const shown = (value: unknown) =>
-		typeof value === 'string' ? value || '(empty)' : JSON.stringify(value, null, 1);
+	let comparisons = $state<Record<number, RecoveryComparison>>({});
+	let comparisonErrors = $state<Record<number, string>>({});
+	async function inspect(entry: LogEntry) {
+		try { comparisons[entry.id] = await recoveryComparison(entry.id); comparisonErrors[entry.id] = ''; }
+		catch(e) { comparisonErrors[entry.id] = (e as Error).message; }
+	}
 
 	// A ban can be lifted, and a rejected import put back, only from the newest line about
 	// that account or link: an older one has been overtaken by what came after.
@@ -136,9 +161,7 @@
 		return ids;
 	});
 
-	// Group changes that a later line already undid.
-	const undone = $derived(new Set(entries.map((e) => (e.action === 'group.undo' ? e.details?.undid : undefined))));
-	const reopened = $derived(new Set(entries.filter(e => e.action === 'report.reopen').map(e => e.details?.undid)));
+	// Recovery status comes from the whole audit trail, independently of these entries.
 
 	interface Undo {
 		label: string;
@@ -154,6 +177,8 @@
 	// How each kind of line is undone, for as long as undoing it still makes sense.
 	function undos(entry: LogEntry, addon: Addon | undefined): Undo[] {
 		const name = entry.subject ?? 'this addon';
+		const recovery = recoveries[entry.id];
+		if (['user.ban', 'import.reject'].includes(entry.action) && outcomes[entry.id] && !outcomes[entry.id].failed) return [];
 		const remove: Undo | null = addon
 			? {
 					label: 'Delete',
@@ -168,13 +193,13 @@
 		switch (entry.action) {
 			case 'addon.update':
 			case 'addon.revert':
-				return addon && entry.details?.before
+				return addon && recovery?.available
 					? [
 							{
 								label: 'Revert',
-								title: `Put "${name}" back to how it was before this edit?`,
-								body: 'The whole entry goes back to that point, so any edits made after this one are undone as well. Reverting is logged and can itself be reverted.',
-								run: () => revertEdit(entry.id),
+                                title: `Recover the changes to "${name}"?`,
+                                body: 'Only the fields changed by this edit will be restored. Unrelated later edits are preserved. Conflicting changes will stop recovery.',
+                                run: () => revertEdit(entry.id),
 								done: `"${name}" is back to how it was before that edit.`
 							}
 						]
@@ -214,7 +239,7 @@
 			case 'group.remove':
 			case 'group.main':
 			case 'group.undo':
-				return entry.details?.groups_before?.length && !undone.has(entry.id)
+				return recovery?.available
 					? [
 							{
 								label: 'Undo',
@@ -227,7 +252,7 @@
 					: [];
 			case 'report.handle':
 			case 'report.dismiss':
-				return auth.isOwner && !reopened.has(entry.id) ? [{
+				return auth.isOwner && recovery?.available ? [{
 					label: 'Reopen report',
 					title: `Reopen the report about "${name}"?`,
 					body: 'The original report returns to the review queue. A later decision will be preserved.',
@@ -265,19 +290,52 @@
 		}
 	}
 
-	async function undo(action: Undo) {
-		const confirmed = await ask({ title: action.title, body: action.body, action: action.label, danger: action.danger });
-		if (!confirmed) return;
-		error = notice = '';
+	// Refresh status without replacing or prepending any of the loaded log entries.
+	async function refreshStatus() {
+		const mine = asked;
+		const current = entries;
+		const [trash, status] = await Promise.all([
+			loadTrashIds(current.flatMap(entry => entry.details?.trash_id === undefined ? [] : [entry.details.trash_id])),
+			loadRecoveryStatus(current.map(entry => entry.id))
+		]);
+		if (mine !== asked) return;
+		inTrash = trash;
+		recoveries = status;
+		await Promise.all(current.filter(entry => comparisons[entry.id]).map(entry => inspect(entry)));
+	}
+
+	async function undo(entry: LogEntry, action: Undo) {
+		if (active !== null) return;
+		active = entry.id;
 		try {
+			const confirmed = await ask({ title: action.title, body: action.body, action: action.label, danger: action.danger });
+			if (!confirmed) return;
 			const result = await action.run();
-			await Promise.all([loadAddons(), load()]);
-			// Undo helpers return false when the action no longer applies.
-			notice = result === false ? 'That action has already been undone or superseded.' : action.done;
+			const row = document.getElementById(`log-${entry.id}`);
+			const top = row?.getBoundingClientRect().top;
+			outcomes[entry.id] = {
+				text: result === false ? 'That action has already been undone or superseded.' : action.done,
+				failed: false
+			};
+			try {
+				await loadAddons();
+				await refreshStatus();
+			} catch (e) {
+				// The recovery succeeded even if its status could not be refreshed.
+				recoveries = {};
+				outcomes[entry.id].text += ` Status could not be refreshed: ${(e as Error).message}. Reload before continuing.`;
+			}
+			await tick();
+			if (row?.isConnected && top !== undefined) window.scrollBy(0, row.getBoundingClientRect().top - top);
 		} catch (e) {
-			error = (e as Error).message;
+			outcomes[entry.id] = { text: (e as Error).message, failed: true };
+			// A concurrent recovery may have invalidated the confirmation.
+			try { await refreshStatus(); } catch { recoveries = {}; }
+		} finally {
+			active = null;
 		}
 	}
+
 </script>
 
 <svelte:head>
@@ -324,8 +382,8 @@
 {/if}
 
 <div aria-live="polite">
-	{#if error || notice}
-		<p class={['mb-2 break-words', error ? 'text-danger' : 'text-accent']}>{error || notice}</p>
+	{#if error}
+		<p class="mb-2 break-words text-danger">{error}</p>
 	{/if}
 </div>
 
@@ -340,7 +398,7 @@
 		{#each entries as entry (entry.id)}
 			{@const addon = live(entry.addon_id)}
 			{@const actions = undos(entry, addon)}
-			<div class="border-b border-border px-3 py-2 last:border-b-0">
+			<div id={`log-${entry.id}`} class="border-b border-border px-3 py-2 last:border-b-0">
 				<div class="flex flex-wrap items-baseline gap-x-3">
 					<p class="min-w-0 flex-1 break-words">
 						<UserLink name={entry.actor_name} fallback="The system" class="font-bold" />
@@ -367,7 +425,8 @@
 					{#each actions as action (action.label)}
 						<button
 							class={['btn shrink-0 px-2 py-0.5 text-sm', action.danger && 'btn-danger']}
-							onclick={() => undo(action)}
+							disabled={active !== null || loading}
+							onclick={() => undo(entry, action)}
 						>
 							{action.label}
 						</button>
@@ -384,6 +443,19 @@
 					<span class="shrink-0 text-sm text-muted">{when(entry.at)}</span>
 				</div>
 
+				{#if recoveries[entry.id]?.recovery_id}
+					<p class="mt-1 text-sm text-accent">
+						Recovered by {recoveries[entry.id].actor_name ?? 'Deleted account'}
+						{#if recoveries[entry.id].recovered_at}· {when(recoveries[entry.id].recovered_at!)}{/if}
+					</p>
+				{:else if recoveries[entry.id]?.reason}
+					<p class="mt-1 text-sm text-muted">{recoveries[entry.id].reason}</p>
+				{/if}
+				{#if active === entry.id}<p class="mt-1 text-sm text-muted" role="status">Recovering…</p>{/if}
+				{#if outcomes[entry.id]}
+					<p class={['mt-1 text-sm break-words', outcomes[entry.id].failed ? 'text-danger' : 'text-accent']} role="status">{outcomes[entry.id].text}</p>
+				{/if}
+
 				{#if entry.action === 'user.rollback'}
 					<p class="mt-1 text-sm text-muted">{entry.details?.steps ?? 0} changes rolled back; {entry.details?.skipped ?? 0} steps could not be undone.</p>
 					{#each entry.details?.skipped_details ?? [] as miss, index (index)}
@@ -398,35 +470,26 @@
 					<p class="mt-1 text-sm break-words text-muted">{entry.details.names.join(', ')}</p>
 				{/if}
 
+				{#if entry.details?.groups_before?.length}
+					<details class="mt-2 text-sm"><summary class="cursor-pointer text-muted">View grouping changes</summary><HistoryGrouping {entry} addons={store.addons} /></details>
+					{#if addon && recoveries[entry.id]?.reason}<a class="btn mt-2 text-sm" href={resolve('/addon/[slug]',{slug:addon.slug})}>Review current grouping</a>{/if}
+				{/if}
+
 				{#if entry.details?.changed && entry.details.before}
-					{@const before = entry.details.before}
-					{@const after = entry.details.after}
-					<details class="mt-1 text-sm">
-						<summary class="cursor-pointer text-muted hover:text-fg">
-							Changed {entry.details.changed.join(', ')}. Show what changed.
-						</summary>
-						{#each entry.details.changed as field (field)}
-							<div class="mt-2">
-								<h3 class="label">{field}</h3>
-								<div class="grid gap-2 sm:grid-cols-2">
-									<div class="border border-border p-2">
-										<p class="label text-danger">Before</p>
-										<p class="max-h-40 overflow-y-auto break-words whitespace-pre-wrap">{shown(before[field])}</p>
-									</div>
-									<div class="border border-border p-2">
-										<p class="label text-accent">After</p>
-										<p class="max-h-40 overflow-y-auto break-words whitespace-pre-wrap">
-											{after ? shown(after[field]) : 'Not recorded for this line.'}
-										</p>
-									</div>
-								</div>
-							</div>
-						{/each}
+					<p class="mt-1 text-sm text-muted">{changeSummary(entry.details.changed,entry.details.before,entry.details.after)}</p>
+					<details class="mt-1 text-sm" ontoggle={event => { if(event.currentTarget.open) void inspect(entry); }}>
+						<summary class="cursor-pointer text-muted hover:text-fg">View changes</summary>
+						{#if comparisonErrors[entry.id]}<p class="text-danger">{comparisonErrors[entry.id]}</p>{/if}
+						{#if !comparisons[entry.id]}<p class="text-muted">Loading current content…</p>{/if}
+						<HistoryComparison {entry} comparison={comparisons[entry.id]} />
 					</details>
+					{#if addon && !recoveries[entry.id]?.recovery_id}
+						<a class="btn mt-2 text-sm" href={resolve(`/submit?edit=${addon.slug}&review=${entry.id}`)}>Edit current addon</a>
+					{/if}
 				{:else if entry.details?.changed}
 					<!-- Older than 90 days: the line stays, the copy of the addon does not. -->
 					<p class="mt-1 text-sm text-muted">
-						Changed {entry.details.changed.join(', ')}. What it looked like before is no longer kept.
+						Changed {entry.details.changed.map(fieldLabel).join(', ')}. What it looked like before is no longer kept.
 					</p>
 				{/if}
 			</div>
@@ -435,5 +498,5 @@
 </div>
 
 {#if loaded && more}
-	<button class="btn mt-2 w-full" onclick={() => load(true)}>Show older lines</button>
+	<button class="btn mt-2 w-full" disabled={loading || active !== null} onclick={() => load(true)}>{loading ? 'Loading…' : 'Show older lines'}</button>
 {/if}

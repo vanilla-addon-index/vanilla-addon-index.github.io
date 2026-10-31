@@ -334,7 +334,7 @@ describe('rolling an account back', () => {
 
 		await refused(() => rollback(admin, admin2), /Only the owner/);
 		const preview = await rollback(owner, admin2, true);
-		assert.equal(preview.steps.find((s) => s.kind === 'revert').others, 1);
+		assert.equal(preview.steps.find((s) => s.kind === 'revert').others, 0);
 
 		const result = await rollback(owner, admin2);
 		assert.deepEqual(kinds(result), [
@@ -347,6 +347,7 @@ describe('rolling an account back', () => {
 		]);
 		assert.deepEqual(await live(), ['One', 'Three', 'Two']);
 		assert.equal(await author(one), '');
+		assert.equal((await db.sql('select category from public.addons where id=$1',[one.id]))[0].category,'PvP');
 		assert.equal((await db.sql('select count(*)::int as n from public.addons where group_id is not null'))[0].n, 0);
 		assert.equal((await role(bob)).banned, false);
 		assert.deepEqual(await db.sql('select status from public.import_queue order by id'), [

@@ -27,7 +27,8 @@ export interface LogEntry {
 		// For group changes: how the addons involved were grouped before, which is what
 		// undoing the line restores.
 		groups_before?: unknown[];
-		// For "undid a group change": the log line that was undone.
+		groups_after?: unknown[];
+		// The original edit, group change or report decision recovered by this entry.
 		undid?: number;
 		// For "declined to group": the addon it was not grouped with.
 		target?: string;
@@ -71,6 +72,7 @@ export const ACTION_TEXT: Record<string, string> = {
 	'addon.create': 'posted',
 	'addon.update': 'edited',
 	'addon.revert': 'reverted an edit of',
+	'addon.recovery': 'recovered an edit of',
 	'addon.delete': 'deleted',
 	'addon.merge': 'merged away',
 	'addon.purge': 'trashed (with a ban)',
@@ -251,6 +253,25 @@ export async function unbanByName(username: string) {
 /** Sets an addon back to how it was before the edit in this log line. */
 export const revertEdit = (logId: number) => call<null>('revert_addon', { log_id: logId });
 
+export interface RecoveryStatus {
+ log_id: number;
+ recovery_id: number | null;
+ actor_name: string | null;
+ recovered_at: string | null;
+ available: boolean;
+ reason: string | null;
+ conflicts: string[];
+}
+
+/** Uses the full audit trail, including recovery events excluded by the current filters. */
+export async function loadRecoveryStatus(ids: number[]) {
+ const unique = [...new Set(ids)];
+ const batches: number[][] = [];
+ for (let i = 0; i < unique.length; i += 100) batches.push(unique.slice(i, i + 100));
+ const results = await Promise.all(batches.map(batch => call<RecoveryStatus[]>('log_recovery_status', { ids: batch })));
+ return Object.fromEntries(results.flat().map(status => [status.log_id, status]));
+}
+
 export const listUsers = (search: string) => call<UserRow[]>('list_users', { search });
 
 /** Bans or unbans. What the account posted or imported stays up either way. */
@@ -301,3 +322,12 @@ export const listDeletedAccounts = (target: string | null = null, beforeId: stri
 
 /** Owner-only recovery of the exact report decision in this audit entry. */
 export const reopenReport = (logId: number) => call<boolean>('reopen_report', { log_id: logId });
+
+export interface RecoveryComparison {
+ entry: LogEntry;
+ current: Record<string, unknown>;
+ conflicts: string[];
+ later: { actor: string | null; at: string; fields: string[] }[];
+}
+export const recoveryComparison = (id: number) => call<RecoveryComparison>('recovery_comparison', { log_id: id });
+export const resolveLogEdit = (id: number, input: unknown, since: string) => call<null>('resolve_log_edit', { log_id: id, input, expected_updated: since });

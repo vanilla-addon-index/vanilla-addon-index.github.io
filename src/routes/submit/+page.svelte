@@ -1,4 +1,6 @@
 <script lang="ts">
+	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
+	import { recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { wikiThanks } from '#lib/wiki-submission.svelte.ts';
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
@@ -31,6 +33,13 @@
 	}
 
 	const editSlug = page.url.searchParams.get('edit');
+	const reviewId = Number(page.url.searchParams.get('review')) || undefined;
+	let comparison = $state<RecoveryComparison>();
+	let reviewError = $state('');
+	$effect(() => {
+		if (!reviewId || !auth.isAdmin) return;
+		recoveryComparison(reviewId).then(value => comparison = value).catch(e => reviewError = e.message);
+	});
 	const editing = $derived(editSlug ? store.addons.find((a) => a.slug === editSlug) : undefined);
 
 	let form = $state<AddonInput>({
@@ -201,6 +210,9 @@
 		if (!auth.session) return 'You need to log in to post or edit addons.';
 		if (editSlug && !editing) return 'That addon does not exist.';
 		if (proposing && !reviewReady) return 'Loading contributor access…';
+		if (reviewId && (!auth.isAdmin || reviewError)) return reviewError || 'Only admins can review log edits.';
+		if (reviewId && !comparison) return 'Loading the recovery comparison…';
+		if (reviewId && comparison?.entry.addon_id !== editing?.id) return 'This log entry belongs to another addon.';
 		if (editing && !canEdit(editing.owner) && !(proposing && canPropose)) return editing.shared ? 'Only the original owner and contributors can propose edits to this shared page.' : 'Only the person who posted this addon can edit it.';
 		return '';
 	});
@@ -250,7 +262,7 @@
 				await goto(resolve('/addon/[slug]', {slug:editing.slug}) + '?proposed=1');
 				return;
 			}
-			const addon = editing ? await updateAddon(editing.id, input, since) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input);
+			const addon = editing ? await updateAddon(editing.id, input, since, reviewId) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input);
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
 			await goto(resolve('/addon/[slug]', { slug: addon.slug }));
@@ -276,8 +288,16 @@
 		{/if}
 	</div>
 {:else}
-	<div class="page-workspace">
-		<aside class="page-sidebar">
+	<div class={reviewId ? "grid items-start gap-4 xl:h-[calc(100dvh-10rem)] xl:grid-cols-2" : ""}>
+ {#if reviewId && comparison}
+ <section class="panel min-w-0 p-4 xl:order-2 xl:max-h-full xl:overflow-y-auto" aria-label="Recovery review">
+  <h2 class="text-xl font-bold">Review this edit alongside the current addon</h2>
+  <p class="text-muted">The form starts with current content. Keep the useful changes and correct what is needed. Saving logs a manual resolution of this entry.</p>
+  <HistoryComparison entry={comparison.entry} {comparison} />
+ </section>
+ {/if}
+ <div class={reviewId ? "min-w-0 xl:h-full xl:min-h-0" : "page-workspace"}>
+		{#if !reviewId}<aside class="page-sidebar">
 			<ResponsiveSidebar label="Submission guidance">
 			<div class="panel">
 			<div class="border-b border-border px-3 py-3">
@@ -298,7 +318,7 @@
 			</ul>
 			</div>
 		</ResponsiveSidebar>
-		</aside>
+		</aside>{/if}
 
 		<form onsubmit={save} class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
 			<div class="shrink-0 pb-2">
@@ -566,4 +586,5 @@
 			</div>
 		</form>
 	</div>
+ </div>
 {/if}
