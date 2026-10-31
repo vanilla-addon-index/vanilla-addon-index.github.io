@@ -196,6 +196,14 @@ checking existing repositories and reports the source failure.
 
 ## Recovering activity after account deletion
 
+Owner rollback also reopens reports the target account dismissed or marked handled,
+provided that exact decision is still current. The Log offers an owner-only
+**Reopen report** action for individual decisions. The original reporter, reason,
+note and creation time are preserved, and reopening is logged. Later decisions by
+other reviewers are left unchanged. If a newer report from the same member is
+already open, or an older decision cannot be matched safely, rollback lists an
+explicit skipped step for manual review instead of silently discarding evidence.
+
 The owner can open **Admin → Users → Deleted account recovery**, select a deletion,
 choose a time window, preview the changes, and confirm rollback. The recovery page
 also links to that deleted account's grouped activity in the Log. Only the owner

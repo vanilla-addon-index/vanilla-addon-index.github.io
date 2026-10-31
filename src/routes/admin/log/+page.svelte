@@ -12,6 +12,7 @@
 		loadTrashIds,
 		remembered,
 		requeueImport,
+		reopenReport,
 		restoreAddon,
 		revertEdit,
 		unapproveImport,
@@ -24,6 +25,7 @@
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
+	import { auth } from '#lib/auth.svelte.ts';
 	import type { Addon } from '#lib/types.ts';
 
 	const GROUPS = {
@@ -133,6 +135,7 @@
 
 	// Group changes that a later line already undid.
 	const undone = $derived(new Set(entries.map((e) => (e.action === 'group.undo' ? e.details?.undid : undefined))));
+	const reopened = $derived(new Set(entries.filter(e => e.action === 'report.reopen').map(e => e.details?.undid)));
 
 	interface Undo {
 		label: string;
@@ -219,6 +222,15 @@
 							}
 						]
 					: [];
+			case 'report.handle':
+			case 'report.dismiss':
+				return auth.isOwner && !reopened.has(entry.id) ? [{
+					label: 'Reopen report',
+					title: `Reopen the report about "${name}"?`,
+					body: 'The original report returns to the review queue. A later decision will be preserved.',
+					run: () => reopenReport(entry.id),
+					done: `The report about "${name}" is open again.`
+				}] : [];
 			case 'user.ban':
 				return entry.subject && newest.has(entry.id)
 					? [
@@ -257,8 +269,8 @@
 		try {
 			const result = await action.run();
 			await Promise.all([loadAddons(), load()]);
-			// The two lookups by name or link answer false when there was nothing left to undo.
-			notice = result === false ? 'That had already been undone.' : action.done;
+			// Undo helpers return false when the action no longer applies.
+			notice = result === false ? 'That action has already been undone or superseded.' : action.done;
 		} catch (e) {
 			error = (e as Error).message;
 		}
