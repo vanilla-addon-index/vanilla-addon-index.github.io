@@ -147,3 +147,25 @@ test('migration links unambiguous legacy decisions and warns about ambiguous old
  assert.equal((await state(first.id)).status,'dismissed');
  assert.equal((await state(second.id)).status,'dismissed');
 });
+
+ test('partial rollback retains actual failure details in its audit entry, while previews write nothing', async () => {
+  const failed = await post(db,alice,addon('FailedRecovery'));
+  const successful = await post(db,alice,addon('SuccessfulRecovery'));
+  await close((await report(failed)).id);
+  await close((await report(successful)).id);
+  const preview = await rollback(admin,true);
+  assert.equal(preview.steps.length,2);
+  assert.deepEqual(preview.skipped,[]);
+  assert.equal((await db.sql("select id from public.activity_log where action='user.rollback'")).length,0);
+  await report(failed,bob,'New evidence blocks reopening the original.');
+  const done = await rollback();
+  assert.equal(done.steps.length,1);
+  assert.equal(done.skipped.length,1);
+  assert.equal(done.skipped[0].subject,failed.name);
+  assert.match(done.skipped[0].why,/newer report.*already open/);
+  const [log] = await db.sql("select actor,details from public.activity_log where action='user.rollback'");
+  assert.equal(log.actor,owner.id);
+  assert.equal(log.details.steps,1);
+  assert.equal(log.details.skipped,1);
+  assert.deepEqual(log.details.skipped_details,done.skipped);
+ });

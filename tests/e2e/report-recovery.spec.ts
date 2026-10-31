@@ -57,3 +57,33 @@ test('History offers reopening only to the owner and returns handled reports to 
  await expect(logLine(page,new RegExp(`reopened a report about\\s+${fixture.name}`))).toBeVisible();
  expect(sql(`select status from public.reports where id=${fixture.report}`)).toBe('open');
 });
+
+for (const refreshFails of [false, true]) {
+ test(`actual rollback failures remain visible and are readable later in the Log (refresh fails: ${refreshFails})`, async ({ page }) => {
+  const fixture=closedReport('dismissed');
+  await loginAs(page,'owner');
+  await page.goto(`/admin/users/profile?name=${fixture.reviewer}`);
+  await page.getByRole('button',{name:'Show what would change'}).click();
+  await expect(page.getByRole('button',{name:'Roll back 1 change',exact:true})).toBeVisible();
+  // The preview was valid; a new report arrives before the rollback runs.
+  sql(`begin;
+   select set_config('request.jwt.claims',jsonb_build_object('sub',reported_by,'role','authenticated')::text,true) from public.reports where id=${fixture.report};
+   select public.report_addon(${fixture.addon},'harmful','New evidence after the preview.');
+   commit;`);
+  if (refreshFails) await page.route('**/rest/v1/rpc/list_users', route => route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Refresh unavailable'})}));
+  await page.getByRole('button',{name:'Roll back 1 change',exact:true}).click();
+  await confirm(page,'Roll back');
+  const result=page.getByRole('status').filter({has:page.getByRole('heading',{name:'Rollback result'})});
+  await expect(result).toContainText('0 changes rolled back; 1 step could not be undone.');
+  await expect(result).toContainText('A newer report from this member is already open');
+  await expect(result).toContainText(fixture.name);
+  if (refreshFails) {
+   await expect(page.getByText('Refresh unavailable',{exact:true})).toBeVisible();
+   await page.unroute('**/rest/v1/rpc/list_users');
+  }
+  await page.goto(`/admin/log?kind=user&q=${fixture.reviewer}`);
+  await expect(page.getByText(/Cannot undo/).filter({hasText:fixture.name})).toContainText('A newer report from this member is already open');
+  await page.reload();
+  await expect(page.getByText(/Cannot undo/).filter({hasText:fixture.name})).toBeVisible();
+ });
+}

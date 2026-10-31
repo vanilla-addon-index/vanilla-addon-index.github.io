@@ -384,6 +384,16 @@
 					<span class="shrink-0 text-sm text-muted">{when(entry.at)}</span>
 				</div>
 
+				{#if entry.action === 'user.rollback'}
+					<p class="mt-1 text-sm text-muted">{entry.details?.steps ?? 0} changes rolled back; {entry.details?.skipped ?? 0} steps could not be undone.</p>
+					{#each entry.details?.skipped_details ?? [] as miss, index (index)}
+						<p class="mt-1 text-sm break-words text-danger">Cannot undo "{ACTION_TEXT[miss.action] ?? miss.action} {miss.subject}": {miss.why}</p>
+					{/each}
+					{#if entry.details?.skipped && !entry.details.skipped_details}
+						<p class="mt-1 text-sm text-muted">Detailed failure reasons were not recorded for this older rollback.</p>
+					{/if}
+				{/if}
+
 				{#if entry.action === 'trash.purge' && entry.details?.names && entry.details.names.length > 1}
 					<p class="mt-1 text-sm break-words text-muted">{entry.details.names.join(', ')}</p>
 				{/if}

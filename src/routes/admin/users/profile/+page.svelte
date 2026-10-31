@@ -52,6 +52,7 @@
 	}
 	// Runs again when a link on this page leads to another account.
 	$effect(() => {
+		result = undefined;
 		load(name, recoveryId);
 	});
 
@@ -84,6 +85,7 @@
 	let period = $state<Period>('24');
 	// What a rollback would do, for the stretch of time it was asked about.
 	let plan = $state<Rollback & { since: Date; period: Period }>();
+	let result = $state<Rollback>();
 	let working = $state(false);
 	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -102,24 +104,29 @@
 
 	async function runRollback() {
 		if (!user || !plan) return;
+		const target = user;
+		const selected = plan;
 		const confirmed = await ask({
 			title: `Roll back ${plural(plan.steps.length, 'change')} by ${user.username}?`,
 			body: 'Each one is logged under your name and can be undone from the log like any other change.',
 			action: 'Roll back',
 			danger: true
 		});
-		if (!confirmed) return;
+		if (!confirmed || user?.id !== target.id || plan !== selected) return;
 		working = true;
 		try {
-			const done = await rollbackAccount(user.id, plan.since, false);
-			await Promise.all([loadAddons(), load(user.username)]);
-			notice =
-				`Rolled back ${plural(done.steps.length, 'change')} by ${user.username}.` +
-				(done.skipped.length ? ` ${plural(done.skipped.length, 'step')} could not be undone; see the log.` : '');
+			const done = await rollbackAccount(target.id, selected.since, false);
+			if (user?.id !== target.id) return;
+			result = done;
+			plan = undefined;
+			await Promise.all([loadAddons(), load(target.username, target.deleted ? target.id : null)]);
+			if (user?.id !== target.id) return;
+			notice = `Rolled back ${plural(done.steps.length, 'change')} by ${target.username}.`;
 		} catch (e) {
 			error = (e as Error).message;
+		} finally {
+			working = false;
 		}
-		working = false;
 	}
 
 	// The owner appoints the admins, and nobody else does.
@@ -248,6 +255,17 @@
 		</AdminSidebarContent>
 
 		<section>
+			{#if result}
+				<div class="panel mb-5 p-3" role="status">
+					<h2 class="font-bold">Rollback result</h2>
+					<p>{plural(result.steps.length, 'change')} rolled back; {plural(result.skipped.length, 'step')} could not be undone.</p>
+					{#each result.skipped as miss, index (index)}
+						<p class="mt-2 break-words text-danger">Cannot undo "{ACTION_TEXT[miss.action] ?? miss.action} {miss.subject}": {miss.why}</p>
+					{/each}
+					{#if result.skipped.length}<p class="mt-2 text-sm text-muted">Failure details are saved in the Log.</p>{/if}
+					<button class="btn mt-2" onclick={() => (result = undefined)}>Close result</button>
+				</div>
+			{/if}
 			{#if plan}
 				<div class="panel mb-5 border-accent/30">
 					<div class="border-b border-border px-3 py-2">
