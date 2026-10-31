@@ -36,7 +36,7 @@ describe('limits', () => {
 		await remove(admin, rows[20]);
 	});
 
-	test('a member can make 10 edits an hour and 50 a day', async () => {
+	test('a member can make 10 edits an hour and 30 a day', async () => {
 		const mine = await post(db, alice, addon('Atlas'));
 		for (let i = 0; i < 10; i++) await edit(alice, mine, `Draft ${i}`);
 		await refused(() => edit(alice, mine, 'One too many'), /at most 10 edits an hour/);
@@ -48,10 +48,10 @@ describe('limits', () => {
 		// Spread over a day, the hourly limit is never reached but the daily one is.
 		await db.sql(
 			`insert into public.activity_log (actor, action, at)
-			 select $1, 'addon.update', now() - interval '3 hours' from generate_series(1, 39)`,
+			 select $1, 'addon.update', now() - interval '3 hours' from generate_series(1, 19)`,
 			[alice.id]
 		);
-		await refused(() => edit(alice, mine, 'Too many today'), /at most 50 edits a day/);
+		await refused(() => edit(alice, mine, 'Too many today'), /at most 30 edits a day/);
 	});
 
 	test('an admin can make 30 edits an hour, whoever posted the addon', async () => {

@@ -22,7 +22,7 @@ begin
  -- requests updating different addons. Held until the audit entry is committed.
  perform pg_advisory_xact_lock(hashtextextended('addon-edit-budget:' || auth.uid()::text, 0));
  hourly := case when public.is_admin() then 30 else 10 end;
- daily := case when public.is_admin() then 90 else 50 end;
+ daily := case when public.is_admin() then 90 else 30 end;
  select count(*) filter (where at > now() - interval '1 hour'), count(*)
  into in_hour, in_day
  from public.activity_log
