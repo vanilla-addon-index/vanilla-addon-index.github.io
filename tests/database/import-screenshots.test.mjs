@@ -19,11 +19,14 @@ async function scene(work) {
 
 for (const existing of [[],[shot(1),shot(2),shot(3),shot(4),shot(5)],Array.from({length:6},(_,i)=>shot(i+1))]) {
  test(`same-name import preserves ${existing.length} existing pictures and fills only available slots`, () => scene(async ({db,admin,call,queue,current}) => {
+  // Simulate an entry created under the previous six-image policy.
+  if(existing.length > 5) await db.sql('alter table public.addons disable trigger addons_aa_screenshots');
   const a=await post(db,admin,addon('Atlas',undefined,{images:existing}));
+  if(existing.length > 5) await db.sql('alter table public.addons enable trigger addons_aa_screenshots');
   const id=await queue('Atlas',[shot(1),shot(7),shot(7),shot(8)]);
   await call('select public.approve_imports($1)',[[id]]);
   const after=await current(a.id);
-  assert.deepEqual(after.images,[...new Set([...existing,shot(1),shot(7),shot(8)])].slice(0,6));
+  assert.deepEqual(after.images,[...new Set([...existing,shot(1),shot(7),shot(8)])].slice(0,Math.max(5,existing.length)));
   assert.equal(after.description,a.description);assert.equal(after.category,a.category);assert.equal(after.author,a.author);
   assert.equal(after.versions.length,2);
   assert.equal((await db.sql('select status from public.import_queue where id=$1',[id]))[0].status,'approved');
@@ -43,8 +46,8 @@ test('edited approval adds only retained pictures and supports an explicit desti
  assert.deepEqual((await current(a.id)).images,[shot(1),shot(3),shot(4)]);
 }));
 
-test('six screenshots are accepted for new imports and edit proposals; seven are rejected', () => scene(async ({db,admin,member,call,queue,current}) => {
- const images=Array.from({length:6},(_,i)=>shot(i));
+test('five screenshots are accepted for new imports and edit proposals; six are rejected', () => scene(async ({db,admin,member,call,queue,current}) => {
+ const images=Array.from({length:5},(_,i)=>shot(i));
  const id=await queue('New import',images);
  await call('select public.approve_imports($1)',[[id]]);
  const [q]=await db.sql('select addon_id from public.import_queue where id=$1',[id]);
@@ -53,6 +56,6 @@ test('six screenshots are accepted for new imports and edit proposals; seven are
  await call('select public.submit_addon($1::jsonb)',[JSON.stringify({name:'Atlas',versions:[{url:'https://gitlab.com/fork/Atlas'}]})]);
  const base=await current(a.id);
  await db.as(member,q=>q('select public.propose_addon_edit($1,$2::jsonb,$3::jsonb)',[a.id,JSON.stringify({images}),JSON.stringify(base)]));
- await assert.rejects(()=>db.as(member,q=>q('select public.propose_addon_edit($1,$2::jsonb,$3::jsonb)',[a.id,JSON.stringify({images:[...images,shot(7)]}),JSON.stringify(base)])),/Invalid screenshot/);
- await assert.rejects(()=>call('update public.addons set images=$1 where id=$2',[[...images,shot(7)],a.id]),/images_check/);
+ await assert.rejects(()=>db.as(member,q=>q('select public.propose_addon_edit($1,$2::jsonb,$3::jsonb)',[a.id,JSON.stringify({images:[...images,shot(7)]}),JSON.stringify(base)])),/at most 5/);
+ await assert.rejects(()=>call('update public.addons set images=$1 where id=$2',[[...images,shot(7)],a.id]),/at most 5/);
 }));

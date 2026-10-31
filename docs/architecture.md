@@ -20,6 +20,12 @@ links directly; direct member updates cannot bypass link review.
 
 Link suggestions are private to the proposer and admins. Members can see and
 withdraw their pending suggestions; each member can suggest at most 20 links a day.
+Same-name submissions can include screenshots with the suggested link. Member
+screenshots stay private until that link is approved, and admins see their previews
+in the link review. Approval preserves existing images and appends unique submitted
+images into the remaining slots, up to five. Existing six-image entries and their
+recovery snapshots are retained. GitHub signed attachment URLs are normalized to
+stable public attachment addresses before image checks and storage.
 Approved links retain their proposer as contributor and remain covered by account
 rollback. The admin badge and nightly review counts include pending links.
 Admins review wiki imports, handle reports and manage content. The owner appoints

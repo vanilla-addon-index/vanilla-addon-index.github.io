@@ -23,7 +23,12 @@
 			<h2 class="font-bold">New link for {#if addon}<a class="text-accent" href={resolve('/addon/[slug]', { slug: addon.slug })}>{addon.name}</a>{:else}unavailable addon{/if}</h2>
 			<p class="mt-1 text-sm text-muted">Suggested by {request.proposer?.username ?? 'a member'}</p>
 			<a class="mt-2 block break-all text-accent hover:underline" href={request.url} target="_blank" rel="noopener noreferrer">{request.url}</a>
-			<div class="mt-3 flex gap-2">
+			{#if request.images?.length}
+            <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {#each request.images as image}<img src={image} alt="Suggested screenshot" referrerpolicy="no-referrer" class="aspect-video w-full border border-border object-contain" />{/each}
+            </div>
+            {/if}
+            <div class="mt-3 flex gap-2">
 				<button class="btn btn-primary" disabled={busy === request.id || !addon} onclick={() => decide(request, true)}>Approve link</button>
 				<button class="btn" disabled={busy === request.id} onclick={() => decide(request, false)}>Reject link</button>
 			</div>
