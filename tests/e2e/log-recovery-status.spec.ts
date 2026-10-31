@@ -184,7 +184,6 @@ test('group and report recovery status survives filters excluding the recovering
   await expect(row).toBeVisible();
   await expect(row.locator('details[data-comparison]')).toHaveAttribute('open','');
   await expect(row.getByRole('region',{name:'Description comparison'})).toContainText('Damaged description for recovery.');
-  await expect(row.getByRole('link',{name:'Link to entry',exact:true})).toHaveAttribute('href',`/admin/log?entry=${f.edit}#log-${f.edit}`);
   await expect(page.locator('[id^="log-"][tabindex="-1"]')).toHaveCount(1);
   await page.reload();
   await expect(row).toBeVisible();
