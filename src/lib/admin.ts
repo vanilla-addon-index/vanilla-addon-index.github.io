@@ -33,6 +33,9 @@ export interface LogEntry {
 		target?: string;
 		// For emptying the trash: what was removed for good.
 		names?: string[];
+		steps?: number;
+		skipped?: number;
+		skipped_details?: Rollback['skipped'];
 	} | null;
 }
 
