@@ -119,6 +119,13 @@ backstop. A paused Supabase project must be restored from its dashboard.
 
 ## Database administration
 
+Trash search covers all stored entries by addon name or deleting account, with
+exact total/matching counts and pages of 100 entries. **Load more entries** shows
+older matches; **Refresh trash** refreshes the current search. History checks only
+the trash IDs referenced by its loaded log entries, so older restore actions are
+not hidden by the API row cap. Trash is cleared automatically after 90 days; the
+owner can also permanently delete individual entries after confirmation.
+
 Manual History reverts and ordinary edits share the admin limit of 30 changes per
 rolling hour and 90 per rolling 24 hours. Pin changes and reverts performed during an admin's account rollback also
 use that budget; a save that changes nothing does not. The owner remains unlimited

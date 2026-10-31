@@ -86,9 +86,12 @@
 		const mine = ++asked;
 		const wanted = filter;
 		try {
-			const [next, trash] = await Promise.all([loadLog(wanted, older ? entries.at(-1)?.id : undefined), loadTrashIds()]);
+			const next = await loadLog(wanted, older ? entries.at(-1)?.id : undefined);
 			if (mine !== asked) return;
-			entries = older ? [...entries, ...next] : next;
+			const combined = older ? [...entries, ...next] : next;
+			const trash = await loadTrashIds(combined.flatMap(entry => entry.details?.trash_id === undefined ? [] : [entry.details.trash_id]));
+			if (mine !== asked) return;
+			entries = combined;
 			inTrash = trash;
 			if (!filtered) remembered.log = entries;
 			more = next.length === LOG_PAGE;
