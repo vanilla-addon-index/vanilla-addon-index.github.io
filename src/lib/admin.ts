@@ -82,6 +82,7 @@ export const ACTION_TEXT: Record<string, string> = {
 	'report.create': 'reported',
 	'report.handle': 'handled a report about',
 	'report.dismiss': 'dismissed a report about',
+	'report.reopen': 'reopened a report about',
 	'import.approve': 'approved the import of',
 	'import.submitted': 'submitted a link already waiting for import:',
 	'import.reject': 'rejected the import of',
@@ -170,7 +171,7 @@ export const restoreAddon = (trashId: number) => call<string>('restore_addon', {
 export const purgeTrash = (ids: number[]) => call<number>('purge_trash', { ids });
 
 export interface RollbackStep {
-	kind: 'restore' | 'revert' | 'delete' | 'unapprove' | 'requeue' | 'ungroup' | 'unban' | 'dismiss' | 'withdraw';
+	kind: 'restore' | 'revert' | 'delete' | 'unapprove' | 'requeue' | 'ungroup' | 'unban' | 'dismiss' | 'withdraw' | 'reopen';
 	// The addon or account the step is about.
 	subject: string;
 	// For a revert: how many edits by other people, made since, go with it.
@@ -193,6 +194,7 @@ export const ROLLBACK_TEXT: Record<RollbackStep['kind'], string> = {
 	ungroup: 'Undo a group change of',
 	unban: 'Lift the ban on',
 	dismiss: 'Dismiss their report about',
+	reopen: 'Reopen the report about',
 	withdraw: 'Withdraw their group suggestion for'
 };
 
@@ -288,3 +290,6 @@ export interface DeletedAccount { id: string; deleted_at: string; actions: numbe
 /** Owner-only discovery of pseudonymous recovery records; no login or username is retained. */
 export const listDeletedAccounts = (target: string | null = null, beforeId: string | null = null) =>
  call<DeletedAccount[]>('list_deleted_accounts', { target, before_id: beforeId });
+
+/** Owner-only recovery of the exact report decision in this audit entry. */
+export const reopenReport = (logId: number) => call<boolean>('reopen_report', { log_id: logId });
