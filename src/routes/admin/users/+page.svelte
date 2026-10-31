@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
-	import { listUsers, loginsOf, remembered, setAdmin, setBanned, type UserRow } from '#lib/admin.ts';
+	import { listUsers, listDeletedAccounts, type DeletedAccount, loginsOf, remembered, setAdmin, setBanned, type UserRow } from '#lib/admin.ts';
 	import { ownedBy, ownedText } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
@@ -16,6 +17,23 @@
 	let query = $state('');
 	let notice = $state('');
 	let error = $state('');
+	let deletedAccounts = $state<DeletedAccount[]>([]);
+	let moreDeleted = $state(false);
+	let loadingDeleted = $state(false);
+	async function loadDeleted(older = false) {
+		loadingDeleted = true;
+		try {
+			const rows = await listDeletedAccounts(null, older ? deletedAccounts.at(-1)?.id ?? null : null);
+			if (!auth.isOwner) return;
+			deletedAccounts = older ? [...deletedAccounts, ...rows] : rows;
+			moreDeleted = rows.length === 200;
+		} catch (e) { error = (e as Error).message; }
+		finally { loadingDeleted = false; }
+	}
+	$effect(() => {
+		if (auth.isOwner) void loadDeleted();
+		else deletedAccounts = [];
+	});
 
 	async function search(term = query.trim()) {
 		try {
@@ -163,4 +181,17 @@
 </div>
 {#if loaded && users.length === 200}
 	<p class="hint">Showing the first 200 accounts. Search to find others.</p>
+{/if}
+
+{#if auth.isOwner}
+ <section class="panel mt-5 p-3" aria-label="Deleted account recovery">
+  <h2 class="font-bold">Deleted account recovery</h2>
+  <p class="text-sm text-muted">Review and roll back activity after an account leaves. Login details and usernames are removed.</p>
+  {#each deletedAccounts as account (account.id)}
+   <a class="mt-2 block text-accent hover:underline" href={resolve(`/admin/users/profile?deleted=${account.id}`)}>
+    Deleted {new Date(account.deleted_at).toLocaleString()} · {account.actions} logged actions · {account.id.slice(0, 8)}
+   </a>
+  {:else}<p class="mt-2 text-sm text-muted">No deleted accounts recorded.</p>{/each}
+  {#if moreDeleted}<button class="btn mt-3" disabled={loadingDeleted} onclick={() => loadDeleted(true)}>{loadingDeleted ? 'Loading…' : 'Load older deleted accounts'}</button>{/if}
+ </section>
 {/if}

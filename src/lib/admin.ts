@@ -51,6 +51,7 @@ export interface UserRow {
 	joined: string;
 	banned: boolean;
 	role: 'owner' | 'admin' | 'member';
+	deleted?: boolean;
 	addons: number;
 	// What the account logs in with, e.g. ['github'].
 	providers?: string[];
@@ -116,6 +117,7 @@ export interface LogFilter {
 	addonId?: number;
 	// Lines by one account, by its exact name.
 	by?: string;
+	recoveryId?: string;
 	// Part of an addon's or an account's name.
 	q?: string;
 }
@@ -126,6 +128,7 @@ export async function loadLog(filter: LogFilter = {}, before?: number) {
 	if (filter.kind) query = query.like('action', `${filter.kind}.%`);
 	if (filter.addonId) query = query.eq('addon_id', filter.addonId);
 	if (filter.by) query = query.eq('actor_name', filter.by);
+	if (filter.recoveryId) query = query.eq('recovery_actor', filter.recoveryId);
 	const text = filter.q?.trim();
 	if (text) {
 		// Quoted, so a comma or bracket in what was typed is searched for, not read as syntax.
@@ -139,11 +142,11 @@ export async function loadLog(filter: LogFilter = {}, before?: number) {
 }
 
 /** The latest lines by an account, and the ones about it (bans and suspensions). */
-export async function loadLogAbout(user: { id: string; username: string }) {
+export async function loadLogAbout(user: { id: string; username: string; deleted?: boolean }) {
 	const latest = () => client().from('activity_log').select('*').order('id', { ascending: false }).limit(50);
 	const [by, about] = await Promise.all([
-		latest().eq('actor', user.id),
-		latest().like('action', 'user.%').eq('subject', user.username)
+		latest().eq(user.deleted ? 'recovery_actor' : 'actor', user.id),
+		user.deleted ? Promise.resolve({ data: [], error: null }) : latest().like('action', 'user.%').eq('subject', user.username)
 	]);
 	if (by.error || about.error) throw new Error((by.error ?? about.error)!.message);
 	const lines = new Map([...by.data, ...about.data].map((line: LogEntry) => [line.id, line]));
@@ -280,3 +283,8 @@ export async function loadForks() {
 	if (error) throw new Error(error.message);
 	return new Map((data as { key: string; fork_of: string }[]).map((row) => [row.key, row.fork_of]));
 }
+
+export interface DeletedAccount { id: string; deleted_at: string; actions: number }
+/** Owner-only discovery of pseudonymous recovery records; no login or username is retained. */
+export const listDeletedAccounts = (target: string | null = null, beforeId: string | null = null) =>
+ call<DeletedAccount[]>('list_deleted_accounts', { target, before_id: beforeId });

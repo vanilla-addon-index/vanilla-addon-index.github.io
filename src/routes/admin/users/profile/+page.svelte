@@ -8,6 +8,7 @@
 		ACTION_TEXT,
 		ROLLBACK_TEXT,
 		listUsers,
+		listDeletedAccounts,
 		loadLogAbout,
 		loginsOf,
 		rollbackAccount,
@@ -25,20 +26,24 @@
 
 	const ROLES: Record<UserRow['role'], string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 
-	const name = $derived(page.url.searchParams.get('name') ?? '');
+	const recoveryId = $derived(page.url.searchParams.get('deleted'));
+	const name = $derived(recoveryId ? 'Deleted account' : page.url.searchParams.get('name') ?? '');
 	let user = $state<UserRow>();
 	let activity = $state<LogEntry[]>([]);
 	let loaded = $state(false);
 	let notice = $state('');
 	let error = $state('');
 
-	async function load(username: string) {
+	async function load(username: string, deletedId: string | null = recoveryId) {
 		loaded = false;
 		error = notice = '';
 		plan = undefined;
 		try {
 			// The search matches part of a name; the profile is the exact one.
-			user = (await listUsers(username)).find((u) => u.username.toLowerCase() === username.toLowerCase());
+			if (deletedId) {
+    const [record] = await listDeletedAccounts(deletedId);
+    user = record ? { id: record.id, username: 'Deleted account', joined: record.deleted_at, role: 'member', banned: false, addons: 0, deleted: true } : undefined;
+   } else user = (await listUsers(username)).find((u) => u.username.toLowerCase() === username.toLowerCase());
 			activity = user ? await loadLogAbout(user) : [];
 		} catch (e) {
 			error = (e as Error).message;
@@ -47,7 +52,7 @@
 	}
 	// Runs again when a link on this page leads to another account.
 	$effect(() => {
-		load(name);
+		load(name, recoveryId);
 	});
 
 	// Imports the account approved as an admin are listed apart from what it posted itself.
@@ -58,11 +63,12 @@
 
 	// Admins may ban members. Only the owner may suspend an admin, and nobody the owner.
 	const mayBan = $derived(
-		user !== undefined &&
+		user !== undefined && !user.deleted &&
 			user.id !== auth.session?.user.id &&
 			user.role !== 'owner' &&
 			(user.role === 'member' || auth.isOwner)
 	);
+	const mayRollback = $derived(user?.deleted ? auth.isOwner : mayBan);
 	const verb = $derived(user?.role === 'admin' ? 'Suspend' : 'Ban');
 
 	// Rolling back: everything the account did in a stretch of time, undone in one go. It
@@ -201,7 +207,7 @@
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="truncate text-2xl leading-tight font-bold">{user.username}</h1>
-					<p class={user.role === 'member' ? 'text-muted' : 'text-accent'}>{ROLES[user.role]}</p>
+					<p class={user.role === 'member' ? 'text-muted' : 'text-accent'}>{user.deleted ? 'Recovery record' : ROLES[user.role]}</p>
 					{#if user.banned}
 						<p class="text-danger">{user.role === 'admin' ? 'Suspended' : 'Banned'}</p>
 					{/if}
@@ -209,7 +215,7 @@
 				<dl>
 					{@render fact('Addons posted', String(owned.posted.length))}
 					{#if owned.imported.length}{@render fact('Imports approved', String(owned.imported.length))}{/if}
-					{@render fact('Joined', date(user.joined))}
+					{@render fact(user.deleted ? 'Deleted' : 'Joined', date(user.joined))}
 					{#if loginsOf(user)}{@render fact('Logs in with', loginsOf(user))}{/if}
 				</dl>
 			</div>
@@ -224,6 +230,8 @@
 				{:else}
 					<button class="btn btn-danger w-full" onclick={() => ban(true)}>{verb}</button>
 				{/if}
+			{/if}
+			{#if mayRollback}
 				<div class="panel p-3">
 					<h2 class="label">Roll back</h2>
 					<label class="text-sm text-muted" for="period">Undo everything this account did in</label>
@@ -303,7 +311,7 @@
 			<div class="mt-5 flex items-baseline justify-between">
 				<h2 class="label">Recent activity</h2>
 				<a
-					href={resolve(`/admin/log?by=${encodeURIComponent(user.username)}`)}
+					href={resolve(user.deleted ? `/admin/log?recovery=${user.id}` : `/admin/log?by=${encodeURIComponent(user.username)}`)}
 					class="text-sm text-muted hover:text-accent hover:underline"
 				>
 					Everything they did, in the log

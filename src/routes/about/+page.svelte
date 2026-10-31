@@ -156,7 +156,9 @@
 			The <a href={resolve('/account')} class="text-accent hover:underline">account page</a> has a
 			"Delete account" button. It removes your login, email address, username and sessions at
 			once. The addons you posted stay in the list, belonging to nobody; delete the ones you
-			want gone first. What you did stays in the admins' log without your name.
+			want gone first. What you did stays in the admins' log without your name. A random recovery
+			identifier keeps those actions grouped so the owner can undo mistakes or abuse after deletion;
+			it retains no login details or username.
 		</p>
 		<p class="mt-3">
 			If the account was banned, a fingerprint of the login it used is kept, so that the ban
