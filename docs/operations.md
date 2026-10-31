@@ -119,6 +119,12 @@ backstop. A paused Supabase project must be restored from its dashboard.
 
 ## Database administration
 
+Manual History reverts and ordinary edits share the admin limit of 30 changes per
+rolling hour and 90 per rolling 24 hours. Pin changes and reverts performed during an admin's account rollback also
+use that budget; a save that changes nothing does not. The owner remains unlimited
+for incident recovery. Reaching a limit refuses the change without suspending the
+account, and edits become available again as earlier changes age out of the hour.
+
 Migrations are append-only once applied. For manual hosted administration, first
 authenticate and link the intended project:
 
