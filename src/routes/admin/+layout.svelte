@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '#lib/auth.svelte.ts';
+	import { countImports } from '#lib/imports.svelte.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -19,6 +20,11 @@
 	}});
 
 	const importing = $derived(page.url.pathname.startsWith(resolve('/admin/import')));
+	$effect(() => {
+		void page.url.pathname;
+		// The Import page refreshes its own queue, including this count.
+		if (auth.isAdmin && !importing) void countImports().catch(() => {});
+	});
 </script>
 
 {#if !auth.ready}

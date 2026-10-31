@@ -76,6 +76,12 @@ async function count(status: QueueItem['status']) {
 	return n ?? 0;
 }
 
+/** Refreshes the Import tab badge without loading the queue or repository details. */
+export async function countImports() {
+	if (!supabase) return;
+	imports.counts.pending = await count('pending');
+}
+
 export async function loadQueue() {
 	const [items, stats, pending, approved, rejected, submitted, dead] = await Promise.all([
 		all<QueueItem>('import_queue', ['status', 'pending']),
