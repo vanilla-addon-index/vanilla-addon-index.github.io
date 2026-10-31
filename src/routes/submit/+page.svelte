@@ -14,7 +14,7 @@
 	import { repositoryName } from '#lib/repository-name.ts';
 	import { linkKey } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
-	import { isGithubRepo, readmeImages } from '#lib/github.ts';
+	import { isGithubRepo, readmeImages, screenshotUrl } from '#lib/github.ts';
 	import { contributionAccess, contentOf, ownPendingEdit, proposeEdit, withdrawEdit, displayEditValue, FIELD_LABELS, type EditRequest, type EditField } from '#lib/edit-reviews.svelte.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
@@ -133,8 +133,8 @@
 		(kind === 'link' ? editing?.versions.some((v) => v.url === url) : editing?.images.includes(url)) === true;
 
 	function addImages(urls: string[]) {
-		const fresh = urls.filter((u) => !form.images.includes(u) && !removed.has(u) && mayUse(u, 'image'));
-		form.images = [...form.images, ...fresh].slice(0, MAX_IMAGES);
+		const fresh = [...new Set(urls.map(screenshotUrl))].filter((u) => !form.images.includes(u) && !removed.has(u) && mayUse(u, 'image')).slice(0, Math.max(0, MAX_IMAGES - form.images.length));
+		form.images = [...form.images, ...fresh];
 		return fresh.length;
 	}
 
@@ -153,12 +153,13 @@
 		});
 
 	async function addImageLink() {
-		let url = imageLink.trim();
+		let url = screenshotUrl(imageLink);
 		if (checking || !url) return;
 		if (!/^https:\/\/\S+$/.test(url)) return (imageNote = 'Image links must start with https://');
 		// Imgur's page for a single image has a direct address built from the same id.
 		const imgur = /^https:\/\/(?:www\.)?imgur\.com\/(\w+)$/.exec(url);
 		if (imgur) url = `https://i.imgur.com/${imgur[1]}.jpg`;
+		if (url.length > 500) return (imageNote = 'A screenshot link can be at most 500 characters.');
 		if (!mayUse(url, 'image')) return (imageNote = `That link is on a site screenshots cannot be kept on. These can: ${hostNames('image')}.`);
 
 		checking = true;
@@ -175,7 +176,7 @@
 	}
 
 	async function fetchReadmeImages() {
-		if (matched || !isGithubRepo(mainLink) || fetching) return;
+		if (!isGithubRepo(mainLink) || fetching) return;
 		fetching = true;
 		imageNote = '';
 		try {
@@ -213,6 +214,7 @@
 
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
+		if (fetching || checking) return;
 		error = '';
 		for (let index = 0; index < form.versions.length; index++) {
 			if (matched && index > 0) continue;
@@ -220,7 +222,7 @@
 		}
 		// A pasted screenshot link that was never added with the button is added now.
 		// It stays in the field when it is rejected, and the note under it says why.
-		if (!matched && imageLink.trim() && form.images.length < MAX_IMAGES) {
+		if (imageLink.trim() && form.images.length < MAX_IMAGES) {
 			await addImageLink();
 			if (imageLink.trim()) return;
 		}
@@ -320,7 +322,7 @@
                     <button type="button" class="btn mt-2" onclick={withdraw}>Withdraw proposal</button>
                 </div>
             {/if}
-			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. {auth.isAdmin ? 'Only your link will be added.' : 'Your link will be submitted for admin review.'}</p>{/if}
+			{#if matched}<p class="panel mb-4 p-3 text-accent">{matched.name} already exists. {auth.isAdmin ? 'Your link and screenshots will be added where there is room.' : 'Your link and screenshots will be submitted for admin review.'}</p>{/if}
 			<h2 id="required-details" class="section-title text-accent">Required</h2>
 			<p class="mb-2 text-muted">{matched ? 'Add a repository link to the existing page.' : 'The four things every entry needs.'}</p>
 			<div class="panel space-y-4 border-accent/30 p-4">
@@ -401,12 +403,13 @@
 
 			<h2 id="optional-details" class="section-title mt-8">Optional</h2>
 			<p class="mb-2 text-muted">Leave any of these empty.</p>
-			<fieldset disabled={!!matched} class="panel space-y-4 p-4 disabled:opacity-40">
+			<fieldset class="panel space-y-4 p-4">
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div>
 						<label class="field-label" for="author">Addon author (optional)</label>
 						<input
 							id="author"
+							disabled={!!matched}
 							class="input"
 							maxlength="60"
 							placeholder="Creator’s name"
@@ -416,13 +419,13 @@
 						<p id="addon-author-hint" class="hint">Who created the addon. Leave blank if unknown.</p>
 					</div>
 				</div>
-				{#if form.versions.length > 1}
+				{#if !matched && form.versions.length > 1}
 				<div>
 					<div class="flex items-baseline justify-between">
 						<span class="field-label">Extra links</span>
 						<span class="text-sm text-muted">{form.versions.length - 1} / {MAX_VERSIONS - 1}</span>
 					</div>
-					{#if form.versions.length > 1}
+					{#if !matched && form.versions.length > 1}
 						<input
 							class="input mb-2"
 							maxlength="80"
@@ -553,7 +556,7 @@
 			<div class="shrink-0 pt-2">
 				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
 			<div class="flex gap-2">
-				<button class="btn btn-primary" disabled={saving}>
+				<button class="btn btn-primary" disabled={saving || fetching || checking}>
 					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? (auth.isAdmin ? 'Add link' : 'Submit for review') : 'Post addon'}
 				</button>
 				<a href={editing ? resolve('/addon/[slug]', { slug: editing.slug }) : resolve('/')} class="btn">

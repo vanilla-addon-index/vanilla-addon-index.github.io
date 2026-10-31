@@ -32,15 +32,51 @@ test('returning to admin refreshes an empty import queue and review counts witho
 	fresh = true;
 	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Edit reviews/ }).click();
 	await expect.poll(() => reviewCounts).toBeGreaterThan(before);
-	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: 'Import', exact: true }).click();
+	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Import(?:\s+\d+)?$/ }).click();
 	await expect(page.locator('[data-entry]').first()).toBeVisible();
 });
 
+test('only the three moderation queues show tab notifications', async ({ page }) => {
+	await loginAs(page, 'admin');
+	let empty = false;
+	for (const [table, status, count] of [
+		['import_queue', 'pending', 16],
+		['reports', 'open', 3],
+		['addon_edit_requests', 'pending', 7],
+		['addon_link_requests', 'pending', 4]
+	] as const) {
+		await page.route(`**/rest/v1/${table}?**`, async route => {
+			const url = new URL(route.request().url());
+			if (route.request().method() === 'HEAD' && url.searchParams.get('status') === `eq.${status}`) {
+				await route.fulfill({ status: 200, headers: { 'content-range': `*/${empty ? 0 : count}`, 'access-control-expose-headers': 'content-range' } });
+			} else await route.continue();
+		});
+	}
+	await page.goto('/');
+	const total = page.locator('header').getByRole('link', { name: /^Admin/ });
+	await expect(total).toHaveText('Admin 30');
+	await page.goto('/admin/log');
+	const tabs = page.getByRole('navigation', { name: 'Admin', exact: true });
+	for (const label of ['Import 16', 'Reports 3', 'Edit reviews 11', 'Grouped addons', 'Log', 'Trash', 'Users']) {
+		await expect(tabs.getByRole('link', { name: label, exact: true })).toBeVisible();
+	}
+	await expect(total).toHaveText('Admin 30');
+	empty = true;
+	await tabs.getByRole('link', { name: 'Users', exact: true }).click();
+	await expect(total).toHaveText('Admin');
+	await expect(total).toHaveAttribute('href', '/admin/import');
+});
+
 test('the report a member sent shows up, with a count on the Admin button, and can be dismissed', async ({ page }) => {
+	await page.route('**/rest/v1/import_queue?**', async route => {
+		if (route.request().method() === 'HEAD') {
+			await route.fulfill({ status: 200, headers: { 'content-range': '*/16', 'access-control-expose-headers': 'content-range' } });
+		} else await route.continue();
+	});
 	await loginAs(page, 'admin');
 	const admin = page.getByRole('navigation').getByRole('link', { name: /^Admin/ });
 	// The member tests leave one report and one link suggestion for review.
-	await expect(admin).toHaveText('Admin 2');
+	await expect(admin).toHaveText('Admin 18');
 	await admin.click();
 	await expect(page).toHaveURL(/\/admin\/reports/);
 
@@ -49,7 +85,7 @@ test('the report a member sent shows up, with a count on the Admin button, and c
 	await expect(report.getByText('Reported by a browser test.')).toBeVisible();
 	await report.getByRole('button', { name: 'Dismiss' }).click();
 	await expect(page.getByText('No reports are waiting.')).toBeVisible();
-	await expect(admin).toHaveText('Admin 1');
+	await expect(admin).toHaveText('Admin 17');
 	await expect(admin).toHaveAttribute('href', '/admin/edits');
 });
 
