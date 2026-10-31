@@ -45,10 +45,11 @@
 			kind: kind in GROUPS && kind !== 'all' ? kind : undefined,
 			addonId: Number(params.get('addon')) || undefined,
 			by: params.get('by') || undefined,
+			recoveryId: params.get('recovery') || undefined,
 			q: params.get('q') || undefined
 		};
 	});
-	const filtered = $derived(Boolean(filter.kind || filter.addonId || filter.by || filter.q));
+	const filtered = $derived(Boolean(filter.kind || filter.addonId || filter.by || filter.recoveryId || filter.q));
 
 	function narrow(change: Record<string, string | undefined>) {
 		const url = new URL(page.url.href);

@@ -32,6 +32,7 @@ All objects below are in the `public` schema. Supabase manages the separate
 | Contributions | `addon_link_contributions`, `addon_contributors` | Private ownership of active links and participation that survives link removal. |
 | Edit reviews | `addon_edit_requests` | Private proposals, original values, reviewed fields and decisions. |
 | Moderation | `reports`, `group_suggestions` | Reports and suggested grouping awaiting admin decisions. |
+| Deleted-account recovery | `deleted_account_recovery` | Private pseudonymous provenance for owner-only rollback after account deletion; activity is grouped through `activity_log.recovery_actor`. |
 | Recovery | `activity_log`, `addon_trash` | Reversible edits, deleted pages and moderation history. |
 | Account safeguards | `banned_identities`, `left_posts` | Ban continuity and posting limits after account deletion. |
 | Imports | `import_queue`, `wiki_listing` | Wiki candidates, decisions and the guard against unexpectedly short wiki results. |

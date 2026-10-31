@@ -180,3 +180,18 @@ writes. Apply the new database migration before running discovery against a data
 Invalid responses (including browser verification pages) and incomplete pagination
 fail discovery before any OctoWoW candidates are queued. The nightly job continues
 checking existing repositories and reports the source failure.
+
+## Recovering activity after account deletion
+
+The owner can open **Admin → Users → Deleted account recovery**, select a deletion,
+choose a time window, preview the changes, and confirm rollback. The recovery page
+also links to that deleted account's grouped activity in the Log. Only the owner
+can list these records or run their rollback; other admins retain ordinary access
+to the activity log and individual undo actions.
+
+Deletion still removes the login, sessions, username and live account ownership.
+A random recovery identifier groups the existing log lines and private contribution
+references; it stores no original account id or login details. The existing 90-day
+history and trash retention still limits what can be recovered. This protection
+starts with the deleted-account-recovery migration: previously anonymized accounts
+cannot be regrouped automatically.
