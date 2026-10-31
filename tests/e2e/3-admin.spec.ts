@@ -201,8 +201,8 @@ test('an edit is reverted, and a deleted addon restored to the same address, fro
 
 	await page.goto('/admin/log');
 	const edited = logLine(page, new RegExp(`edited\\s+${name}`));
-	await edited.getByText('Show what changed').click();
-	await expect(edited.getByText('The description as it should be.')).toBeVisible();
+	await edited.getByText('View changes').click();
+	await expect(edited.getByRole('region',{name:'Description comparison'}).getByRole('heading',{name:'Before this edit',exact:true}).locator('..')).toContainText('The description as it should be.');
 	await edited.getByRole('button', { name: 'Revert' }).click();
 	await confirm(page, 'Revert');
 	await expect(page.getByText(`"${name}" is back to how it was before that edit.`)).toBeVisible();

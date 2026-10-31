@@ -65,7 +65,7 @@ describe('limits', () => {
 
 		// Grouping still works, but manual reverts share the edit budget.
 		await call(admin, 'select public.group_addons($1)', [[own.id, theirs.id]]);
-		const [{ id }] = await db.sql(`select id from public.activity_log where action = 'addon.update' order by id limit 1`);
+		const [{ id }] = await db.sql(`select id from public.activity_log where action = 'addon.update' order by id desc limit 1`);
 		await refused(() => call(admin, 'select public.revert_addon($1)', [id]), /at most 30 edits an hour/);
 	});
 
@@ -93,7 +93,8 @@ describe('limits', () => {
 		await call(admin, 'select public.revert_addon($1)', [id]);
 		await db.sql("insert into public.activity_log(actor,action) select $1,'addon.update' from generate_series(1,29)", [admin.id]);
 		const before = await db.sql('select count(*)::int as n from public.activity_log');
-		await call(admin, 'select public.revert_addon($1)', [id]);
+		const [status] = await call(admin, 'select * from public.log_recovery_status($1)', [[id]]);
+		await refused(() => call(admin, 'select public.recover_edit($1)', [id]), /already been recovered/);
 		assert.deepEqual(await db.sql('select count(*)::int as n from public.activity_log'), before);
 	});
 
@@ -117,7 +118,8 @@ describe('limits', () => {
 		// Saving the same content and repeating an already-applied revert stay free.
 		await edit(admin, row, before[0].author);
 		const [{ id: applied }] = await db.sql("select id from public.activity_log where addon_id=$1 and action='addon.update' order by id desc limit 1", [row.id]);
-		await call(admin, 'select public.revert_addon($1)', [applied]);
+		const [status] = await call(admin, 'select * from public.log_recovery_status($1)', [[applied]]);
+		await refused(() => call(admin, 'select public.recover_edit($1)', [applied]), /already been recovered/);
 		assert.equal((await db.sql("select count(*)::int as n from public.activity_log where actor=$1 and action in ('addon.update','addon.revert')", [admin.id]))[0].n, 90);
 		assert.equal((await role(admin)).banned, false);
 		await call(owner, 'select public.revert_addon($1)', [logId]);
@@ -209,7 +211,7 @@ describe('limits', () => {
 		assert.deepEqual(await live(), []);
 		const mine = await post(db, owner, addon('Mine'));
 		for (let i = 0; i < 105; i++) await edit(owner, mine, `Draft ${i}`);
-		const [{ id }] = await db.sql("select id from public.activity_log where addon_id=$1 and action='addon.update' order by id limit 1", [mine.id]);
+		const [{ id }] = await db.sql("select id from public.activity_log where addon_id=$1 and action='addon.update' order by id desc limit 1", [mine.id]);
 		await call(owner, 'select public.revert_addon($1)', [id]);
 		for (let i = 0; i < 55; i++) await post(db, owner, addon(`Owner${i}`));
 	});
