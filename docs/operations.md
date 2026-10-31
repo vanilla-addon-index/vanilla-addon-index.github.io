@@ -126,6 +126,12 @@ for incident recovery. Reaching a limit refuses the change without suspending th
 account, and edits become available again as earlier changes age out of the hour
 or day. Members can make 10 edits per rolling hour and 30 per rolling 24 hours.
 
+Bans and unbans share a separate admin allowance of 5 changes per rolling hour
+and 15 per rolling 24 hours. Repeating the existing ban state spends nothing and
+adds no log entry. Unbans performed during account rollback use the same allowance;
+the owner remains unlimited for recovery. Reaching either limit refuses the action
+without suspending the admin or changing the target account.
+
 Migrations are append-only once applied. For manual hosted administration, first
 authenticate and link the intended project:
 
