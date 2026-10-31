@@ -465,7 +465,6 @@
 					{/each}
 
 					{#if entry.details?.undid}<a class="shrink-0 text-sm text-accent hover:underline" href={resolve(`/admin/log?entry=${entry.details.undid}#log-${entry.details.undid}`)}>View original entry</a>{/if}
-					<a class="shrink-0 text-sm text-muted hover:text-accent hover:underline" href={resolve(`/admin/log?entry=${entry.id}#log-${entry.id}`)}>Link to entry</a>
 					<span class="shrink-0 text-sm text-muted">{when(entry.at)}</span>
 				</div>
 
