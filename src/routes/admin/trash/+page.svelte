@@ -3,7 +3,7 @@
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import { resolve } from '$app/paths';
-	import { TRASH_DAYS, loadTrash, purgeTrash, remembered, restoreAddon, type TrashEntry } from '#lib/admin.ts';
+	import { TRASH_DAYS, loadTrash, purgeTrash, restoreAddon, type TrashEntry } from '#lib/admin.ts';
 	import { loadAddons } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
@@ -17,28 +17,46 @@
 	};
 	const DAY = 24 * 60 * 60 * 1000;
 
-	let entries = $state<TrashEntry[]>(remembered.trash ?? []);
-	let loaded = $state(Boolean(remembered.trash));
-	// Remembered only once it has really been loaded, so an empty list is never shown early.
-	$effect(() => {
-		if (loaded) remembered.trash = entries;
-	});
+	let entries = $state<TrashEntry[]>([]);
+	let loaded = $state(false);
+	let loading = $state(false);
+	let working = $state(false);
+	let total = $state(0);
+	let matching = $state(0);
+	let more = $state(false);
 	let query = $state('');
 	let notice = $state('');
-	// Address of the addon the last restore brought back, for the link in the notice.
 	let restored = $state('');
 	let error = $state('');
+	let asked = 0;
 
-	loadTrash()
-		.then((rows) => {
-			entries = rows;
+	async function load(older = false, term = query.trim(), mine = ++asked) {
+		if (mine !== asked) return;
+		loading = true;
+		error = '';
+		try {
+			const page = await loadTrash(term, older ? entries.at(-1) : undefined);
+			if (mine !== asked) return;
+			entries = older ? [...entries, ...page.items] : page.items;
+			total = page.total;
+			matching = page.matching;
+			more = page.more;
 			loaded = true;
-		})
-		.catch((e) => (error = e.message));
-
-	const visible = $derived(
-		entries.filter((e) => `${e.name} ${e.deleted_by_name ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
-	);
+		} catch (e) {
+			if (mine === asked) error = (e as Error).message;
+		} finally {
+			if (mine === asked) loading = false;
+		}
+	}
+	$effect(() => {
+		const term = query.trim();
+		const mine = ++asked;
+		loaded = false;
+		loading = true;
+		entries = [];
+		const timer = setTimeout(() => load(false, term, mine), 250);
+		return () => clearTimeout(timer);
+	});
 
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 	const daysLeft = (iso: string) =>
@@ -46,15 +64,18 @@
 		Math.max(0, TRASH_DAYS - Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY)));
 
 	async function restore(entry: TrashEntry) {
+		if (working) return;
+		working = true;
 		error = notice = restored = '';
 		try {
 			const slug = await restoreAddon(entry.id);
-			entries = entries.filter((e) => e.id !== entry.id);
-			await loadAddons();
+			await Promise.all([loadAddons(), load()]);
 			restored = slug;
 			notice = `Restored "${entry.name}".`;
 		} catch (e) {
 			error = (e as Error).message;
+		} finally {
+			working = false;
 		}
 	}
 
@@ -65,14 +86,17 @@
 			action: 'Delete forever',
 			danger: true
 		});
-		if (!confirmed) return;
+		if (!confirmed || working) return;
+		working = true;
 		error = notice = restored = '';
 		try {
 			const gone = await purgeTrash(ids);
-			entries = entries.filter((e) => !ids.includes(e.id));
+			await load();
 			notice = `Removed ${gone} for good.`;
 		} catch (e) {
 			error = (e as Error).message;
+		} finally {
+			working = false;
 		}
 	}
 </script>
@@ -85,14 +109,12 @@
 <AdminSidebarContent>
 	<div class="panel p-3"><h1 class="text-2xl font-bold">Trash</h1><p class="text-muted">Recover removed addons.</p></div>
 	<dl class="panel space-y-2 p-3 text-sm">
-		<div class="flex justify-between gap-2"><dt class="text-muted">Stored entries</dt><dd>{loaded ? entries.length : '…'}</dd></div>
-		<div class="flex justify-between gap-2"><dt class="text-muted">Matching entries</dt><dd>{loaded ? visible.length : '…'}</dd></div>
+		<div class="flex justify-between gap-2"><dt class="text-muted">Stored entries</dt><dd>{loaded ? total : '…'}</dd></div>
+		<div class="flex justify-between gap-2"><dt class="text-muted">Matching entries</dt><dd>{loaded ? matching : '…'}</dd></div>
 		<div class="flex justify-between gap-2"><dt class="text-muted">Retention</dt><dd>{TRASH_DAYS} days</dd></div>
 	</dl>
 	<p class="panel p-3 text-sm text-muted">Restore an addon to recover its saved details. Permanent deletion cannot be undone.</p>
-	{#if auth.isOwner && entries.length}
-		<button class="btn btn-danger w-full" onclick={() => purge(entries.map(entry => entry.id), `Remove all ${entries.length} trashed addons for good?`)}>Empty the trash</button>
-	{/if}
+
 </AdminSidebarContent>
 <div class="flex flex-wrap gap-2">
 	<input
@@ -102,6 +124,7 @@
 		aria-label="Search the trash"
 		bind:value={query}
 	/>
+	<button class="btn" disabled={loading || working} onclick={() => load()}>Refresh trash</button>
 </div>
 
 <AdminNavigation />
@@ -120,15 +143,15 @@
 
 <div class="panel">
 	{#if !loaded}
-		<p class="px-3 py-8 text-center text-muted">Loading the trash…</p>
-	{:else if !visible.length}
+		<p class="px-3 py-8 text-center text-muted">{loading ? 'Loading the trash…' : 'Unable to load the trash. Try refreshing.'}</p>
+	{:else if !entries.length}
 		<p class="px-3 py-8 text-center text-muted">
-			{entries.length
+			{total
 				? 'Nothing in the trash matches.'
 				: `The trash is empty. Deleted addons stay here for ${TRASH_DAYS} days.`}
 		</p>
 	{:else}
-		{#each visible as entry (entry.id)}
+		{#each entries as entry (entry.id)}
 			<div class="border-b border-border px-3 py-2 last:border-b-0">
 				<div class="flex flex-wrap items-baseline gap-x-3">
 					<span class="font-bold">{entry.name}</span>
@@ -154,11 +177,11 @@
 					</a>
 				{/each}
 				<div class="mt-1.5 flex flex-wrap gap-2">
-					<button class="btn btn-primary py-1" onclick={() => restore(entry)}>Restore</button>
+					<button class="btn btn-primary py-1" disabled={working || loading} onclick={() => restore(entry)}>Restore</button>
 					{#if auth.isOwner}
 						<button
 							class="btn btn-danger py-1"
-							onclick={() => purge([entry.id], `Remove "${entry.name}" for good?`)}
+							disabled={working || loading} onclick={() => purge([entry.id], `Remove "${entry.name}" for good?`)}
 						>
 							Delete forever
 						</button>
@@ -168,3 +191,8 @@
 		{/each}
 	{/if}
 </div>
+
+{#if loaded}
+ <p class="mt-2 text-sm text-muted" role="status">Showing {entries.length} of {matching} matching entries.</p>
+ {#if more}<button class="btn mt-3" disabled={loading || working} onclick={() => load(true)}>{loading ? 'Loading…' : 'Load more entries'}</button>{/if}
+{/if}

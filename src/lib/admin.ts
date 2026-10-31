@@ -61,7 +61,7 @@ export interface UserRow {
 export const loginsOf = (user: UserRow) => (user.providers ?? []).map((p) => PROVIDER_NAMES[p] ?? p).join(', ');
 
 /** What each tab last loaded, kept while the site stays open. */
-export const remembered: { log?: LogEntry[]; trash?: TrashEntry[]; users?: UserRow[] } = {};
+export const remembered: { log?: LogEntry[]; users?: UserRow[] } = {};
 
 // What each action reads as, after the name of who did it.
 export const ACTION_TEXT: Record<string, string> = {
@@ -154,15 +154,16 @@ export async function loadLogAbout(user: { id: string; username: string; deleted
 	return [...lines.values()].sort((a, b) => b.id - a.id).slice(0, 50);
 }
 
-export async function loadTrash() {
-	const { data, error } = await client()
-		.from('addon_trash')
-		.select('*')
-		.order('deleted_at', { ascending: false })
-		.limit(1000);
-	if (error) throw new Error(error.message);
-	return data as TrashEntry[];
+export interface TrashPage {
+ items: TrashEntry[];
+ total: number;
+ matching: number;
+ more: boolean;
 }
+
+/** Search all stored entries; the timestamp/id cursor stays valid after a restore. */
+export const loadTrash = (search = '', before?: Pick<TrashEntry, 'id' | 'deleted_at'>) =>
+ call<TrashPage>('list_trash', { search, before_time: before?.deleted_at ?? null, before_id: before?.id ?? null });
 
 /** Puts a trashed addon back and returns its address. */
 export const restoreAddon = (trashId: number) => call<string>('restore_addon', { trash_id: trashId });
@@ -206,10 +207,14 @@ export const rollbackAccount = (id: string, since: Date, preview: boolean) =>
 	call<Rollback>('rollback_account', { target: id, since: since.toISOString(), preview });
 
 /** Which trash entries still exist, so the log only offers to restore what can be restored. */
-export async function loadTrashIds() {
-	const { data, error } = await client().from('addon_trash').select('id').limit(5000);
-	if (error) throw new Error(error.message);
-	return new Set((data as { id: number }[]).map((row) => row.id));
+export async function loadTrashIds(ids: number[]) {
+ const unique = [...new Set(ids)];
+ const batches: number[][] = [];
+ for (let i = 0; i < unique.length; i += 100) batches.push(unique.slice(i, i + 100));
+ const answers = await Promise.all(batches.map(batch => client().from('addon_trash').select('id').in('id', batch)));
+ const error = answers.find(answer => answer.error)?.error;
+ if (error) throw new Error(error.message);
+ return new Set(answers.flatMap(answer => (answer.data ?? []).map((row: { id: number }) => row.id)));
 }
 
 /** Puts the addons of a logged group change back the way they were grouped before it. */
