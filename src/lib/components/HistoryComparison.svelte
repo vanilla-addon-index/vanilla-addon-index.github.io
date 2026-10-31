@@ -2,13 +2,13 @@
  import type { LogEntry, RecoveryComparison } from '#lib/admin.ts';
  import { fieldLabel, changeSummary, visibleHistoryFields } from '#lib/history.ts';
  import HistoryValue from './HistoryValue.svelte';
- let { entry, comparison }: {entry:LogEntry;comparison?:RecoveryComparison}=$props();
+ let { entry, comparison, showSummary = true }: {entry:LogEntry;comparison?:RecoveryComparison;showSummary?:boolean}=$props();
  const fields=$derived(visibleHistoryFields(entry.details?.changed??[]));
  const before=$derived(entry.details?.before??{});
  const after=$derived(entry.details?.after);
  const when=(at:string)=>new Date(at).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 </script>
-<p class="my-2 text-sm text-muted">{changeSummary(fields,before,after)}</p>
+{#if showSummary}<p class="my-2 text-sm text-muted">{changeSummary(fields,before,after)}</p>{/if}
 {#if comparison?.later.length}
  <details class="my-2 text-sm"><summary class="cursor-pointer text-muted">Later changes · latest {comparison.later.length}</summary>
  {#each comparison.later as change,index (index)}<p class="mt-1">{change.actor??'Deleted account'} · {when(change.at)} · {(change.fields??[]).map(fieldLabel).join(', ')}</p>{/each}</details>

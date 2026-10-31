@@ -30,6 +30,12 @@ test('filtered recovery permanently marks the original edit and removes its reco
  await confirm(page,'Revert');
  await expect(row).toContainText('Recovered by owner');
  await expect(row.getByRole('button',{name:/Revert/})).toHaveCount(0);
+ const recovery=sql(`select id from public.activity_log where details->>'undid'='${f.edit}' and action='addon.revert' order by id desc limit 1`);
+ await row.getByRole('link',{name:/Recovered by owner/}).click();
+ await expect(page).toHaveURL(new RegExp(`entry=${recovery}#log-${recovery}$`));
+ await expect(page.locator(`#log-${recovery}`)).toContainText('reverted an edit of');
+ await page.getByRole('link',{name:'View original entry',exact:true}).click();
+ await expect(page).toHaveURL(new RegExp(`entry=${f.edit}#log-${f.edit}$`));
  await page.reload();
  await expect(row).toContainText('Recovered by owner');
  await expect(row.getByRole('button',{name:/Revert/})).toHaveCount(0);
@@ -104,7 +110,7 @@ test('group and report recovery status survives filters excluding the recovering
    commit;`);
   await row.getByRole('button',{name:'Revert',exact:true}).click();
   await confirm(page,'Revert');
-  await expect(row).toContainText('already been recovered');
+  await expect(row).toContainText('Recovery failed: This edit has already been recovered.');
   await expect(row).toContainText('Recovered by owner');
   expect(sql(`select description from public.addons where id=${f.addon}`)).toBe('Legitimate work after concurrent recovery.');
  });
@@ -168,4 +174,37 @@ test('group and report recovery status survives filters excluding the recovering
   await confirm(page,'Revert');
   await expect(row).toContainText('Conflicts with later changes');
   expect(sql(`select description from public.addons where id=${f.addon}`)).toBe('New work arriving during confirmation.');
+ });
+
+ test('permanent entry links open older entries directly, expand comparisons and survive reload',async({page})=>{
+  const f=fixture(120);
+  await loginAs(page,'owner');
+  await page.goto(`/admin/log?entry=${f.edit}&by=Nobody&kind=report#log-${f.edit}`);
+  const row=page.locator(`#log-${f.edit}`);
+  await expect(row).toBeVisible();
+  await expect(row.locator('details[data-comparison]')).toHaveAttribute('open','');
+  await expect(row.getByRole('region',{name:'Description comparison'})).toContainText('Damaged description for recovery.');
+  await expect(row.getByRole('link',{name:'Link to entry',exact:true})).toHaveAttribute('href',`/admin/log?entry=${f.edit}#log-${f.edit}`);
+  await expect(page.locator('[id^="log-"][tabindex="-1"]')).toHaveCount(1);
+  await page.reload();
+  await expect(row).toBeVisible();
+  await expect(row.locator('details[data-comparison]')).toHaveAttribute('open','');
+  await page.getByRole('link',{name:'Show the whole log',exact:true}).click();
+  await expect(page).toHaveURL(/\/admin\/log$/);
+  await expect(page.getByRole('button',{name:'Show older lines',exact:true})).toBeVisible();
+  await expect(row).toHaveCount(0);
+ });
+ test('an unavailable entry has a clear message and a way back to the log',async({page})=>{
+  await loginAs(page,'owner');
+  await page.goto('/admin/log?entry=9000000000000');
+  await expect(page.getByText('This log entry is unavailable or no longer exists.',{exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'Show the whole log',exact:true}).click();
+  await expect(page).toHaveURL(/\/admin\/log$/);
+ });
+ test('permanent entry links retain admin access restrictions',async({page})=>{
+  const f=fixture();
+  await loginAs(page,'member');
+  await page.goto(`/admin/log?entry=${f.edit}`);
+  await expect(page.getByText('This part of the site is for admins.',{exact:true})).toBeVisible();
+  await expect(page.locator(`#log-${f.edit}`)).toHaveCount(0);
  });
