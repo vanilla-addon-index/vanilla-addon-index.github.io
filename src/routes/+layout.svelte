@@ -11,11 +11,13 @@
 	import { SITE_NAME } from '#lib/config.ts';
 	import { countEditReviews, editReviews } from '#lib/edit-reviews.svelte.ts';
 	import { countReports, reports } from '#lib/reports.svelte.ts';
+	import { countImports, imports } from '#lib/imports.svelte.ts';
 	import { loginHref, takeReturn } from '#lib/return.ts';
 	import { configured } from '#lib/supabase.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+	const pendingAdminItems = $derived(imports.counts.pending + reports.open + editReviews.pending);
 
 	// Shown inside a frame on someone else's page, the site could be laid under that page's
 	// own buttons, and a logged-in admin tricked into clicking through to something here.
@@ -52,7 +54,16 @@
 	// Refresh the badge on navigation as well as login: new work can arrive while open.
 	$effect(() => {
 		void page.url.pathname;
-		if (auth.isAdmin) { countReports(); countEditReviews(); } else editReviews.pending = 0;
+		if (auth.isAdmin) {
+			countReports();
+			countEditReviews();
+			// The Import page refreshes its own queue, including this count.
+			if (!page.url.pathname.startsWith(resolve('/admin/import'))) void countImports().catch(() => {});
+		} else {
+			imports.counts.pending = 0;
+			reports.open = 0;
+			editReviews.pending = 0;
+		}
 	});
 
 	// The header stays at the top of the window and the footer at the bottom; what sticks
@@ -104,8 +115,8 @@
 					{#if auth.isAdmin}
 						<a href={resolve(reports.open ? '/admin/reports' : editReviews.pending ? '/admin/edits' : '/admin/import')} class="btn">
 							Admin
-							{#if reports.open + editReviews.pending}
-								<span class="text-accent" aria-label="{reports.open + editReviews.pending} items waiting">{reports.open + editReviews.pending}</span>
+							{#if pendingAdminItems}
+								<span class="text-accent" aria-label="{pendingAdminItems} items waiting">{pendingAdminItems}</span>
 							{/if}
 						</a>
 					{/if}
