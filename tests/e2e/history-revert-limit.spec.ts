@@ -21,7 +21,7 @@ test('History shows the rate-limit error and keeps the page unchanged; the owner
   await edited.getByText('View changes').click();
   await edited.getByRole('button',{name:'Revert',exact:true}).click();
   await confirm(page,'Revert');
-  await expect(page.getByText('You can make at most 30 edits an hour. Try again later.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Recovery failed: You can make at most 30 edits an hour. Try again later.',{exact:true})).toBeVisible();
   expect(sql(`select description from public.addons where id=${id}`)).toBe('Damaged history description.');
   await page.goto('/account');
   await page.getByRole('button',{name:'Log out',exact:true}).click();

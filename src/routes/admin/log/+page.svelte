@@ -49,6 +49,8 @@
 	// addon's history from its page, an account's actions from its profile.
 	const filter = $derived.by<LogFilter>(() => {
 		const params = page.url.searchParams;
+		const entryId = Number(params.get('entry'));
+		if (Number.isSafeInteger(entryId) && entryId > 0) return { entryId };
 		const kind = params.get('kind') ?? '';
 		return {
 			kind: kind in GROUPS && kind !== 'all' ? kind : undefined,
@@ -58,10 +60,12 @@
 			q: params.get('q') || undefined
 		};
 	});
-	const filtered = $derived(Boolean(filter.kind || filter.addonId || filter.by || filter.recoveryId || filter.q));
+	const filtered = $derived(Boolean(filter.entryId || filter.kind || filter.addonId || filter.by || filter.recoveryId || filter.q));
 
 	function narrow(change: Record<string, string | undefined>) {
 		const url = new URL(page.url.href);
+		url.searchParams.delete('entry');
+		url.hash = '';
 		for (const [key, value] of Object.entries(change)) {
 			if (value) url.searchParams.set(key, value);
 			else url.searchParams.delete(key);
@@ -112,6 +116,19 @@
 			if (!filtered) remembered.log = entries;
 			more = next.length === LOG_PAGE;
 			loaded = true;
+			if (wanted.entryId) {
+				await tick();
+				if (mine !== asked) return;
+				const row = document.getElementById(`log-${wanted.entryId}`);
+				const comparison = row?.querySelector<HTMLDetailsElement>('details[data-comparison]');
+				if (comparison?.open) {
+					const entry = next.find(entry => entry.id === wanted.entryId);
+					if (entry?.details?.changed) void inspect(entry);
+				} else if (comparison) comparison.open = true;
+				row?.focus({ preventScroll: true });
+				row?.scrollIntoView({ block: 'start' });
+			}
+
 		} catch (e) {
 			if (mine === asked) {
 				error = (e as Error).message;
@@ -328,7 +345,7 @@
 			await tick();
 			if (row?.isConnected && top !== undefined) window.scrollBy(0, row.getBoundingClientRect().top - top);
 		} catch (e) {
-			outcomes[entry.id] = { text: (e as Error).message, failed: true };
+			outcomes[entry.id] = { text: `Recovery failed: ${(e as Error).message}`, failed: true };
 			// A concurrent recovery may have invalidated the confirmation.
 			try { await refreshStatus(); } catch { recoveries = {}; }
 		} finally {
@@ -368,6 +385,12 @@
 <AdminNavigation />
 </AdminToolbar>
 
+{#if filter.entryId}
+	<p class="mb-2">Log entry #{filter.entryId}
+		<a class="ml-2 text-sm text-accent hover:underline" href={resolve('/admin/log')}>Show the whole log</a>
+	</p>
+{/if}
+
 {#if filter.addonId || filter.by}
 	<p class="mb-2">
 		{#if filter.addonId}History of <span class="font-bold">{historyOf}</span>{/if}
@@ -392,13 +415,13 @@
 		<p class="px-3 py-8 text-center text-muted">Loading the log…</p>
 	{:else if !entries.length}
 		<p class="px-3 py-8 text-center text-muted">
-			{filtered ? 'No line matches.' : 'Nothing has been logged yet.'}
+			{filter.entryId ? 'This log entry is unavailable or no longer exists.' : filtered ? 'No line matches.' : 'Nothing has been logged yet.'}
 		</p>
 	{:else}
 		{#each entries as entry (entry.id)}
 			{@const addon = live(entry.addon_id)}
 			{@const actions = undos(entry, addon)}
-			<div id={`log-${entry.id}`} class="border-b border-border px-3 py-2 last:border-b-0">
+			<div id={`log-${entry.id}`} tabindex="-1" class="border-b border-border px-3 py-2 last:border-b-0">
 				<div class="flex flex-wrap items-baseline gap-x-3">
 					<p class="min-w-0 flex-1 break-words">
 						<UserLink name={entry.actor_name} fallback="The system" class="font-bold" />
@@ -421,6 +444,15 @@
 						{/if}
 						{#if entry.details?.trashed}<span class="text-muted">and trashed their addons</span>{/if}
 					</p>
+					<!-- Everything that ever happened to this addon, deleted or not. -->
+					{#if entry.addon_id && !filter.addonId}
+						<a
+							href={resolve(`/admin/log?addon=${entry.addon_id}`)}
+							class="btn shrink-0 px-2 py-0.5 text-sm"
+						>
+							History
+						</a>
+					{/if}
 					<!-- The way back, on the line itself. Gone once it no longer applies. -->
 					{#each actions as action (action.label)}
 						<button
@@ -431,23 +463,17 @@
 							{action.label}
 						</button>
 					{/each}
-					<!-- Everything that ever happened to this addon, deleted or not. -->
-					{#if entry.addon_id && !filter.addonId}
-						<a
-							href={resolve(`/admin/log?addon=${entry.addon_id}`)}
-							class="shrink-0 text-sm text-muted hover:text-accent hover:underline"
-						>
-							History
-						</a>
-					{/if}
+
+					{#if entry.details?.undid}<a class="shrink-0 text-sm text-accent hover:underline" href={resolve(`/admin/log?entry=${entry.details.undid}#log-${entry.details.undid}`)}>View original entry</a>{/if}
+					<a class="shrink-0 text-sm text-muted hover:text-accent hover:underline" href={resolve(`/admin/log?entry=${entry.id}#log-${entry.id}`)}>Link to entry</a>
 					<span class="shrink-0 text-sm text-muted">{when(entry.at)}</span>
 				</div>
 
 				{#if recoveries[entry.id]?.recovery_id}
-					<p class="mt-1 text-sm text-accent">
+					<a class="mt-1 block text-sm text-accent hover:underline" href={resolve(`/admin/log?entry=${recoveries[entry.id].recovery_id}#log-${recoveries[entry.id].recovery_id}`)}>
 						Recovered by {recoveries[entry.id].actor_name ?? 'Deleted account'}
 						{#if recoveries[entry.id].recovered_at}· {when(recoveries[entry.id].recovered_at!)}{/if}
-					</p>
+					</a>
 				{:else if recoveries[entry.id]?.reason}
 					<p class="mt-1 text-sm text-muted">{recoveries[entry.id].reason}</p>
 				{/if}
@@ -471,17 +497,17 @@
 				{/if}
 
 				{#if entry.details?.groups_before?.length}
-					<details class="mt-2 text-sm"><summary class="cursor-pointer text-muted">View grouping changes</summary><HistoryGrouping {entry} addons={store.addons} /></details>
+					<details data-comparison class="mt-2 text-sm"><summary class="cursor-pointer text-muted">View grouping changes</summary><HistoryGrouping {entry} addons={store.addons} /></details>
 					{#if addon && recoveries[entry.id]?.reason}<a class="btn mt-2 text-sm" href={resolve('/addon/[slug]',{slug:addon.slug})}>Review current grouping</a>{/if}
 				{/if}
 
 				{#if entry.details?.changed && entry.details.before}
 					<p class="mt-1 text-sm text-muted">{changeSummary(entry.details.changed,entry.details.before,entry.details.after)}</p>
-					<details class="mt-1 text-sm" ontoggle={event => { if(event.currentTarget.open) void inspect(entry); }}>
+					<details data-comparison class="mt-1 text-sm" ontoggle={event => { if(event.currentTarget.open) void inspect(entry); }}>
 						<summary class="cursor-pointer text-muted hover:text-fg">View changes</summary>
 						{#if comparisonErrors[entry.id]}<p class="text-danger">{comparisonErrors[entry.id]}</p>{/if}
 						{#if !comparisons[entry.id]}<p class="text-muted">Loading current content…</p>{/if}
-						<HistoryComparison {entry} comparison={comparisons[entry.id]} />
+						<HistoryComparison {entry} comparison={comparisons[entry.id]} showSummary={false} />
 					</details>
 					{#if addon && !recoveries[entry.id]?.recovery_id}
 						<a class="btn mt-2 text-sm" href={resolve(`/submit?edit=${addon.slug}&review=${entry.id}`)}>Edit current addon</a>
