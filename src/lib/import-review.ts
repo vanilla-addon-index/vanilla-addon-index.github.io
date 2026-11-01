@@ -26,7 +26,7 @@ export function publishedForkParent(parent: string | null | undefined, addons: A
 }
 
 // Only explicit port and variant labels may surround a complete addon name.
-const VARIANT_LABELS = ['tw', 'twow', 't wo w', 't wow', 'turtle', 'turtle wow', 'turtle wo w', 'for turtle wow', 'for turtle wo w', 'octo',
+const VARIANT_LABELS = ['tw', 'twow', 't wo w', 't wow', 'turtle', 'turtle wow', 'turtle wo w', 'for turtle wow', 'for turtle wo w', 'octo', 'octowow', 'octo wow', 'octo wo w',
  'vanilla', 'vanilla port', 'classic api', '1 12', '1 12 1', 'fixed', 'revamped', 'opaque'];
 
 function nameForms(name: string): Set<string> {

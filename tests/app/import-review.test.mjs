@@ -47,3 +47,13 @@ test('shared words and unapproved modifiers do not imply versions',()=>{
  const variants=['BuffBlock-TW','BuffBlock-Octo'].map((name,i)=>addon(i,name,'https://github.com/a/test'));
  assert.equal(similarAddon('BuffBlock-Vanilla',variants),undefined);
 });
+
+test('OctoWoW labels suggest the complete base addon without merging automatically',()=>{
+ const base=addon(1,'RangeColor','https://github.com/a/RangeColor');
+ for (const name of ['RangeColor_OctoWoW','RangeColor_OctoWow','RangeColor_octowow','RangeColor-OctoWOW','OctoWoW_RangeColor']) {
+  assert.equal(similarAddon(name,[base]),base,name);
+  assert.equal(similarAddon('RangeColor',[{...base,name}])?.name,name,name);
+ }
+ assert.equal(similarAddon('RangeColor_OctoWoW',[base,{...base,id:2}]),undefined);
+ assert.equal(similarAddon('RangeColor_OctoWoW_Extra',[base]),undefined);
+});
