@@ -79,12 +79,14 @@ guaranteed deletion or publication deadline.
 ## Wiki imports and repository checks
 
 The owner can upload Discord ZIP or JSON exports from the Import page. Parsing
-happens locally in the browser; only supported Git links and description text from
+happens locally in the browser; only the first supported Git link and description text from
 verified thread starters (message ID equals channel ID) are submitted. Replies,
 attachments and files without a verified starter are ignored. The database enforces
 owner-only submission. Published links, known repository renames and all existing
 queue decisions are skipped. New candidates use the normal admin review and nightly
 repository checks; Discord discovery itself requires another manual export.
+The owner can clear pending Discord imports before re-importing an export. This
+requires confirmation and preserves published addons, decided entries and other sources.
 
 [Nightly](../.github/workflows/nightly.yml) reads the Turtle WoW wiki into a pending
 queue for admin review. It then checks every supported published and pending

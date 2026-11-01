@@ -23,20 +23,19 @@ export function discordMessages(data: unknown): DiscordCandidate[] | null {
 	const opener = messages.find(m => m && typeof m.id === 'string' && /^\d+$/.test(m.id) && m.id === (m.channel_id ?? channel) && typeof m.content === 'string');
 	if (!opener) return null;
 	const content: string = opener.content;
-	const items = new Map<string, DiscordCandidate>();
+	// The first supported repository presents the addon; later links may be dependencies.
 	for (const match of content.matchAll(/https:\/\/[^\s<>\[\]()`"*]+/g)) {
 		const url = repositoryUrl(match[0].replace(/[.,;:!?]+$/, ''));
 		if (!url) continue;
-		const key = linkKey(url);
 		// Use the repository name; a Discord headline often includes a full marketing description.
 		const address = new URL(url);
 		const parts = address.pathname.split('/').filter(Boolean);
 		const octowow = address.hostname.replace(/^www\./, '') === 'octowow.st';
 		if (octowow && parts.length < 3) continue;
 		const name = decodeURIComponent(parts[octowow ? 2 : 1]).replace(/\.git$/i, '').slice(0, 120);
-		items.set(key, { url, name, description: content.trim().slice(0, 5000) });
+		return [{ url, name, description: content.trim().slice(0, 5000) }];
 	}
-	return [...items.values()];
+	return [];
 }
 
 /** ZIP contents stay in memory; attachments and non-JSON files are never extracted. */
