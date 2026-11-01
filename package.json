@@ -50,6 +50,7 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
-		"@supabase/supabase-js": "^2.118.0"
+		"@supabase/supabase-js": "^2.118.0",
+		"fflate": "^0.8.3"
 	}
 }

@@ -7,6 +7,7 @@
 	import { auth } from '#lib/auth.svelte.ts';
 	import ImportEntry from '#lib/components/ImportEntry.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
+	import DiscordUpload from '#lib/components/DiscordUpload.svelte';
 	import { CATEGORIES, SITE_NAME } from '#lib/config.ts';
 	import { imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
 	import { linkAuthor, linkKey } from '#lib/links.ts';
@@ -312,6 +313,8 @@
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
 				{@render choice('dead', 'Dead links', deadEntries.length)}
 			</div>
+
+			<DiscordUpload />
 
 			<div class="panel px-3 py-2 text-sm text-muted">
 				<h2 class="label">Keys</h2>
