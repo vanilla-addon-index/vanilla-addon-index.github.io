@@ -44,6 +44,7 @@
 	const pictureSlots = $derived(destination ? Math.max(0, MAX_IMAGES - destination.images.length) : 0);
 	const edited = $derived(Object.keys(edits).length > 0);
 	const categoryChosen = $derived((CATEGORIES as readonly string[]).includes(draft.category));
+	const descriptionProvided = $derived(!!draft.description.trim());
 	const statusLabels = new Set(['Missing', 'Queue', 'Publish failed']);
 	const facts = $derived(notes.filter(note => !statusLabels.has(note.label)));
 	const statusMessages = $derived.by(() => {
@@ -86,6 +87,7 @@
 			if (verdict === 'wiki') throw new Error('Find the download links before approving this wiki article.');
 			into = into === undefined ? destination : into;
 			if (!into && !categoryChosen) throw new Error('Choose a category before approving this import.');
+			if (!into && !descriptionProvided) throw new Error('Add a description before approving this import.');
 			if (edited || destination || draft.category !== item.category) {
 				saving = true;
 				try {
@@ -127,11 +129,12 @@
 		}
 	}
 
-	const quiet = 'disabled:opacity-40 input border-transparent bg-transparent px-1.5 py-0.5 hover:border-border';
+	const fieldStyle = 'disabled:opacity-40 input bg-transparent px-1.5 py-0.5';
+	const quiet = `${fieldStyle} border-transparent hover:border-border`;
+	const missing = `${fieldStyle} border-accent/60`;
 </script>
 
-<!-- Every field of the entry is there to be changed in place before approving; a field
-     shows its border when pointed at or typed in. -->
+<!-- Missing required fields keep their border visible until filled. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
 	data-entry={index}
@@ -150,7 +153,7 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select use:commitCategoryOnFocus class={[quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" disabled={!!nameMatch} bind:value={category.value}>
+		<select use:commitCategoryOnFocus class={[!nameMatch && !categoryChosen ? missing : quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" aria-required={!destination} disabled={!!nameMatch} bind:value={category.value}>
 			<option value="" disabled>{forkMatch ? 'Category if separate…' : 'Choose a category…'}</option>
 			{#each CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
@@ -165,11 +168,11 @@
 		/>
 	</div>
 	<textarea
-		class={[quiet, 'block min-h-[1lh] [field-sizing:content] text-muted']}
+		class={[!nameMatch && !descriptionProvided ? missing : quiet, 'block min-h-[1lh] [field-sizing:content] text-muted']}
 		rows="2"
 		maxlength="5000"
 		placeholder="No description from the source."
-		aria-label="Description" disabled={!!nameMatch}
+		aria-label="Description" aria-required={!destination} disabled={!!nameMatch}
 		bind:value={description.value}
 	></textarea>
 
@@ -230,7 +233,7 @@
 		</dl>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
 			{#if verdict !== 'wiki'}
-			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || (!destination && !categoryChosen)} onclick={() => publish()}>
+			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || (!destination && (!categoryChosen || !descriptionProvided))} onclick={() => publish()}>
 				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>
 			{#if match && !destination}
@@ -239,7 +242,7 @@
 				</button>
 			{/if}
 			{#if forkMatch && !nameMatch}
-				<button class="btn py-1" disabled={saving || !categoryChosen} onclick={() => publish(null)}>Approve separately</button>
+				<button class="btn py-1" disabled={saving || !categoryChosen || !descriptionProvided} onclick={() => publish(null)}>Approve separately</button>
 			{/if}
 			{/if}
 			<button data-act="reject" class="btn btn-danger py-1" disabled={saving} onclick={turnDown}>Reject</button>
