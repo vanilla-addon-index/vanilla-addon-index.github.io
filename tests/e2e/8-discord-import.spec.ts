@@ -32,10 +32,10 @@ test('owner uploads opening posts into the shared review queue; admin cannot upl
   clears++;
   return route.fulfill({json:1});
  });
- await page.getByRole('button',{name:'Clear pending Discord imports',exact:true}).click();
+ await page.getByRole('button',{name:'Clear pending',exact:true}).click();
  await page.locator('dialog[open]').getByRole('button',{name:'Cancel',exact:true}).click();
  expect(clears).toBe(0);
- await page.getByRole('button',{name:'Clear pending Discord imports',exact:true}).click();
+ await page.getByRole('button',{name:'Clear pending',exact:true}).click();
  await page.locator('dialog[open]').getByRole('button',{name:'Clear imports',exact:true}).click();
  await expect(page.getByText('1 pending Discord imports cleared.',{exact:true})).toBeVisible();
  expect(clears).toBe(1);
