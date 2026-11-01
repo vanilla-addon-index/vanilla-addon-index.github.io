@@ -87,6 +87,9 @@ queue decisions are skipped. New candidates use the normal admin review and nigh
 repository checks; Discord discovery itself requires another manual export.
 The owner can clear pending Discord imports before re-importing an export. This
 requires confirmation and preserves published addons, decided entries and other sources.
+Admins can search **Merge into existing addon…** on a repository import to find a live
+destination even when names do not match. Picking a result adds
+the imported link and reviewed screenshots while preserving the destination's details.
 
 [Nightly](../.github/workflows/nightly.yml) reads the Turtle WoW wiki into a pending
 queue for admin review. It then checks every supported published and pending

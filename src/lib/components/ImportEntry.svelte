@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
 	import WikiArticleFallback from './WikiArticleFallback.svelte';
+	import AddonPicker from './AddonPicker.svelte';
 	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
@@ -63,6 +64,21 @@
 		return messages.filter(Boolean);
 	});
 	let saving = $state(false);
+	const merge = (mergeTarget: Addon) => run(async () => {
+		if (saving || verdict === 'wiki') return '';
+		saving = true;
+		try {
+			await publishEdited(item, {
+				name: mergeTarget.name,
+				description: draft.description.trim(),
+				category: mergeTarget.category,
+				author: mergeTarget.author,
+				versions: [{ url: item.url, note: '' }],
+				images: draft.images
+			}, mergeTarget);
+			return '';
+		} finally { saving = false; }
+	});
 
 	const field = <K extends keyof Draft>(key: K) => ({
 		get value() {
@@ -123,6 +139,7 @@
 
 	// Ctrl+Enter approves from inside a field, where the single-letter shortcuts are off.
 	function keys(event: KeyboardEvent) {
+		if (event.target instanceof HTMLElement && event.target.closest('[role="combobox"]')) return;
 		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
 			event.preventDefault();
 			publish();
@@ -246,6 +263,11 @@
 			{/if}
 			{/if}
 			<button data-act="reject" class="btn btn-danger py-1" disabled={saving} onclick={turnDown}>Reject</button>
+			{#if verdict !== 'wiki'}
+				<fieldset class="m-0 w-72 min-w-0 border-0 p-0" disabled={saving}>
+					<AddonPicker placeholder="Merge into existing addon…" onpick={merge} />
+				</fieldset>
+			{/if}
 			{#if edited}
 				<button class="cursor-pointer text-sm text-muted hover:text-accent" onclick={() => (edits = {})}>
 					Undo my changes

@@ -56,7 +56,7 @@
 			<button class="btn mt-2" disabled={busy || !preview.items.length} onclick={queue}>Add to import queue</button>
 		{/if}
 		{#if pendingDiscord}
-			<button class="btn mt-2" disabled={busy} onclick={clearPending}>Clear pending Discord imports</button>
+			<button class="btn mt-2" disabled={busy} onclick={clearPending}>Clear pending</button>
 		{/if}
 		<p aria-live="polite" class={error ? 'text-danger' : 'text-accent'}>{busy ? 'Reading export…' : error || message}</p>
 	</div>
