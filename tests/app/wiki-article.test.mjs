@@ -37,7 +37,7 @@ test('standalone and bold-wrapped source links work without including contributo
 
 test('installation links are a fallback and never added to a curated Git list', () => {
  const install=`== How to install ==\n#Go to [https://github.com/celguar/wow-voiceover/releases/tag/1.5.0 GitHub].`;
- assert.equal(articleLinks(install)[0].url,'https://github.com/celguar/wow-voiceover/releases/tag/1.5.0');
+ assert.equal(articleLinks(install)[0].url,'https://github.com/celguar/wow-voiceover');
  assert.deepEqual(articleLinks(install+'\n== Git links ==\n[https://github.com/other/curated Curated]'),[{url:'https://github.com/other/curated',recommended:false}]);
 });
 

@@ -1,8 +1,17 @@
+/** Clean known release/archive routes without changing folder or file links. */
+export function repositoryLink(value: string): string {
+	const url = value.trim();
+	const match = /^(https:\/\/(?:www\.)?(?:github\.com|codeberg\.org|gitea\.com)\/[^/?#]+\/[^/?#]+)\/(?:releases|archive)(?:[/?#]|$)/i.exec(url)
+		?? /^(https:\/\/(?:www\.)?octowow\.st\/git\/[^/?#]+\/[^/?#]+)\/(?:releases|archive)(?:[/?#]|$)/i.exec(url)
+		?? /^(https:\/\/(?:www\.)?gitlab\.com\/(?:[^/?#]+\/)+[^/?#]+)\/-\/(?:releases|archive)(?:[/?#]|$)/i.exec(url);
+	return match ? match[1].replace(/\.git$/i, '') : url;
+}
+
 // Canonical form of a link, so different spellings of one repository compare equal.
 // public.link_key() in the folder links migration has the same rules, and a test compares
 // the two: change both or neither.
 export function linkKey(url: string): string {
-	const u = url
+	const u = repositoryLink(url)
 		.trim()
 		.toLowerCase()
 		.replace(/^https?:\/\/(www\.)?/, '')

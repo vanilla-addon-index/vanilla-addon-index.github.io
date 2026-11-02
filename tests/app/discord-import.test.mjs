@@ -8,7 +8,7 @@ const opener = {id:'123',channel_id:'123',content:'An addon! https://github.com/
 test('Discord imports only verified opening posts and deduplicates supported repositories', () => {
  const reply = {id:'124',channel_id:'123',content:'https://github.com/other/reply'};
  assert.equal(discordMessages([reply]), null);
- assert.deepEqual(discordMessages([reply, opener]).map(i => i.url), ['https://github.com/Author/Addon/releases/latest/download/addon.zip']);
+ assert.deepEqual(discordMessages([reply, opener]).map(i => i.url), ['https://github.com/Author/Addon']);
  assert.equal(discordMessages({channel:{id:'123'},messages:[{...opener,channel_id:undefined}]}).length,1);
  const archive = zipSync({'one.json':strToU8(JSON.stringify([reply,opener])), 'two.json':strToU8(JSON.stringify([opener])), 'missing.json':strToU8(JSON.stringify([reply])), 'README.html':strToU8('ignored')});
  const preview = readDiscordExport('export.zip',archive);
