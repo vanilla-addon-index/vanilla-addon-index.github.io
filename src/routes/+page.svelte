@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { addonSearch } from '#lib/addon-search.ts';
 	import { isOlderAddon } from '#lib/addon-age.ts';
 	import { preferences, loadPreferences } from '#lib/preferences.svelte.ts';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -43,14 +44,7 @@
 	// One block per addon, or per group of versions. A group shows when any of its versions
 	// matches, and is placed in the list by its main version.
 	const filteredBlocks = $derived.by(() => {
-		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-		const matches = (a: Addon) => {
-			if (category && a.category !== category) return false;
-			// The links are searched too, so a repository owner's name finds their addons.
-			const links = a.versions.map((v) => v.url).join(' ');
-			const haystack = `${a.name} ${a.description} ${a.author} ${links}`.toLowerCase();
-			return words.every((w) => haystack.includes(w));
-		};
+		const matches = (a: Addon) => (!category || a.category === category) && addonSearch(a, query).matches;
 
 		const groups = new Map<number, Addon[]>();
 		const list: { main: Addon; others: Addon[] }[] = [];
@@ -246,11 +240,12 @@
 					{/if}
 					<AddonCard
 						addon={main}
+						searchHint={addonSearch(main, query).hint}
 						defer
 						owner={others.length > 0 ? creditFor(main, true) : ''}
 					/>
 					{#each others as other (other.id)}
-						<AddonCard addon={other} owner={creditFor(other, true)} minor defer />
+						<AddonCard searchHint={addonSearch(other, query).hint} addon={other} owner={creditFor(other, true)} minor defer />
 					{/each}
 				{/each}
 			{:else}
