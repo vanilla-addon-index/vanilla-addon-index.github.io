@@ -60,9 +60,25 @@ test('a matching submission still fetches screenshots from its repository README
  await page.goto('/submit');
  await page.getByLabel('Addon name', { exact: true }).fill(name);
  await page.getByLabel('Link to the addon', { exact: true }).fill(`https://github.com/e2e/${repository}`);
- await page.getByLabel('Screenshots', { exact: true }).click();
+ await page.getByRole('button', { name: 'Fetch README images', exact: true }).click();
  await expect(page.locator('fieldset img')).toHaveAttribute('src', stable);
  await page.getByRole('button', { name: 'Add link', exact: true }).click();
  await expect(page).toHaveURL(address);
  await expect(page.getByRole('button', { name: /^View screenshot/ })).toHaveCount(1);
+});
+
+
+test('editing a release URL saves on the first click without fetching images', async ({ page }) => {
+ await loginAs(page, 'admin');
+ const name = unique('Save repository');
+ const address = await postAddon(page, name);
+ await page.getByRole('link', { name: 'Edit', exact: true }).click();
+ let reads = 0;
+ await page.route('https://api.github.com/repos/**/readme', route => { reads++; return route.abort(); });
+ await page.getByLabel('Link to the addon', { exact: true }).fill(`https://github.com/e2e/${name.replace(/\W+/g, '-')}/releases/latest/download/addon.zip`);
+ await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+ await expect(page).toHaveURL(address);
+ expect(reads).toBe(0);
+ await page.getByRole('link', { name: 'Edit', exact: true }).click();
+ await expect(page.getByLabel('Link to the addon', { exact: true })).toHaveValue(`https://github.com/e2e/${name.replace(/\W+/g, '-')}`);
 });

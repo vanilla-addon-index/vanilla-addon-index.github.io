@@ -14,7 +14,7 @@
 	import { hostAllowed, hostNames } from '#lib/hosts.ts';
 	import { linkError } from '#lib/link-validation.ts';
 	import { repositoryName } from '#lib/repository-name.ts';
-	import { linkKey } from '#lib/links.ts';
+	import { linkKey, repositoryLink } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { isGithubRepo, readmeImages, screenshotUrl } from '#lib/github.ts';
 	import { contributionAccess, contentOf, ownPendingEdit, proposeEdit, withdrawEdit, displayEditValue, FIELD_LABELS, type EditRequest, type EditField } from '#lib/edit-reviews.svelte.ts';
@@ -242,7 +242,7 @@
 			...form,
 			// Empty rows in the "other versions" list are dropped.
 			versions: form.versions
-				.map((v) => ({ ...v, url: v.url.trim(), note: v.note.trim() }))
+				.map((v) => ({ ...v, url: repositoryLink(v.url), note: v.note.trim() }))
 				.filter((v, index) => v.url || (index === 0 && !editing?.shared))
 		};
 		if (!matched && descriptionLength < DESCRIPTION_MIN && !auth.isAdmin && (!editing?.shared || form.description !== editing.description)) {
@@ -357,7 +357,7 @@
 							pattern="https://.*"
 							placeholder="https://github.com/author/addon"
 							bind:value={form.versions[0].url}
-							onchange={fetchReadmeImages}
+							onchange={() => { form.versions[0].url = repositoryLink(mainLink); }}
 							aria-invalid={!!linkErrors[0]} aria-describedby={linkErrors[0] ? 'repo-error' : undefined}
 							oninvalid={(event) => { event.preventDefault(); validateLink(0); event.currentTarget.focus(); }}
 							onblur={() => { if (form.versions[0].url.trim()) validateLink(0); }}
@@ -546,13 +546,16 @@
 							{checking ? 'Checking…' : 'Add'}
 						</button>
 					</div>
+					{#if isGithubRepo(mainLink)}
+						<button type="button" class="btn" disabled={fetching || saving || form.images.length >= MAX_IMAGES} onclick={fetchReadmeImages}>{fetching ? 'Fetching images...' : 'Fetch README images'}</button>
+					{/if}
 					<p class={['hint', imageNote.startsWith('That link') && 'text-danger']}>
 						{fetching
 							? 'Reading the README…'
 							: imageNote ||
 								(auth.isAdmin
-									? 'Images from a GitHub README are added automatically. You can also paste a link to an image.'
-									: `Images from a GitHub README are added automatically. You can also paste a link to an image kept on one of: ${hostNames('image')}.`)}
+									? 'Use the button to fetch images from a GitHub README. You can also paste a link to an image.'
+									: `Use the button to fetch images from a GitHub README. You can also paste a link to an image kept on one of: ${hostNames('image')}.`)}
 					</p>
 				</div>
 			</fieldset>

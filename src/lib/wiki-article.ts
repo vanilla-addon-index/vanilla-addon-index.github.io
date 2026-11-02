@@ -1,4 +1,4 @@
-import { linkKey } from './links.ts';
+import { linkKey, repositoryLink } from './links.ts';
 import { hostAllowed } from './hosts.ts';
 import { WIKI } from './wiki.ts';
 
@@ -10,7 +10,7 @@ export function repositoryUrl(value: string): string | null {
 		if (url.protocol !== 'https:' || url.username || url.password || !hostAllowed(url.href, 'link')) return null;
 		if (url.pathname.split('/').filter(Boolean).length < 2) return null;
 		url.hash = '';
-		return url.href;
+		return repositoryLink(url.href);
 	} catch { return null; }
 }
 
