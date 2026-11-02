@@ -56,6 +56,7 @@
 	}
 	let error = $state('');
 	let saving = $state(false);
+	let communityListing = $state(false);
 	let filled = false;
 	let canPropose = $state(false), reviewReady = $state(false), pending = $state<EditRequest | null>(null);
 	let proposalBase = $state<AddonInput>();
@@ -262,7 +263,7 @@
 				await goto(resolve('/addon/[slug]', {slug:editing.slug}) + '?proposed=1');
 				return;
 			}
-			const addon = editing ? await updateAddon(editing.id, input, since, reviewId) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input);
+			const addon = editing ? await updateAddon(editing.id, input, since, reviewId) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input, auth.isAdmin && !matched && communityListing);
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
 			await goto(resolve('/addon/[slug]', { slug: addon.slug }));
@@ -577,6 +578,15 @@
 
 			</div>
 			<div class="shrink-0 pt-2">
+				{#if auth.isAdmin && !editSlug && !matched}
+					<div class="mb-3">
+						<label class="flex cursor-pointer items-center gap-2">
+							<input type="checkbox" bind:checked={communityListing} class="accent-accent" aria-describedby="addon-account-help" />
+							<span>Post as a community listing</span>
+						</label>
+						<p id="addon-account-help" class="mt-1 text-sm text-muted italic">Admin only · This addon won’t appear under Your addons.</p>
+					</div>
+				{/if}
 				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
 			<div class="flex gap-2">
 				<button class="btn btn-primary" disabled={saving || fetching || checking}>
