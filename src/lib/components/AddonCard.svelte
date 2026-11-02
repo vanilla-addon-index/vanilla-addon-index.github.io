@@ -8,6 +8,7 @@
 		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url'>;
 		// Renders the row without links, for the live preview on the submit page.
 		preview?: boolean;
+		searchHint?: string;
 		// Let the desktop catalogue skip layout for rows outside its scroll viewport.
 		defer?: boolean;
 		// Who hosts it, shown when another addon in the list has the same name or it is in a group.
@@ -16,7 +17,7 @@
 		// the indent joining them.
 		minor?: boolean;
 	};
-	let { addon, preview = false, defer = false, owner, minor = false }: Props = $props();
+	let { addon, preview = false, searchHint = '', defer = false, owner, minor = false }: Props = $props();
 
 	// The row shows where the description starts.
 	const blurb = $derived(addon.description.trim().split('\n')[0]);
@@ -47,8 +48,9 @@
 		</svelte:element>
 		<!-- Punctuation between the two, fainter than either; a phone stacks them instead. -->
 		{#if blurb}<span class="hidden text-muted/50 sm:inline" aria-hidden="true">–</span>{/if}
-		<span class="col-span-2 row-start-2 min-w-0 truncate text-muted">
-			{blurb}
+		<span class="col-span-2 row-start-2 flex min-w-0 items-center gap-2 text-muted">
+			<span class="min-w-0 truncate">{blurb}</span>
+			{#if searchHint}<span class="max-w-40 shrink-0 truncate text-xs text-muted" title={`Similar to: ${searchHint}`}>· Similar to {searchHint}</span>{/if}
 		</span>
 	</span>
 	<span class="contents sm:flex sm:items-center sm:justify-end sm:gap-4">

@@ -30,6 +30,7 @@ const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	versions: row.versions ?? (row.repo_url ? [{ url: row.repo_url, note: '' }] : []),
 	repo_url: row.repo_url ?? '',
 	aliases: row.aliases ?? [],
+	similar_addons: row.similar_addons ?? '',
 	source: row.source ?? '',
 	code_update: row.code_update ?? null,
 	link_code_updates: row.link_code_updates ?? {},
@@ -297,7 +298,7 @@ export async function createAddon(input: AddonInput) {
  * "updated_at" then. If someone else has edited it in the meantime, nothing is saved, so
  * their edit is not quietly overwritten by a form that never showed it.
  */
-export async function updateAddon(id: number, input: AddonInput, since: string, reviewId?: number) {
+export async function updateAddon(id: number, input: AddonInput | Pick<Addon, 'similar_addons'>, since: string, reviewId?: number) {
 	if (!supabase) throw new Error('Database is not configured.');
 	if (reviewId) {
 		const { error } = await supabase.rpc('resolve_log_edit', { log_id: reviewId, input, expected_updated: since });

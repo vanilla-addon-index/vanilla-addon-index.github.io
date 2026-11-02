@@ -14,6 +14,7 @@ export interface Addon {
 	slug: string;
 	name: string;
 	description: string;
+	similar_addons: string;
 	category: string;
 	author: string;
 	// Versions (forks) of one addon share a group; one of them is its main version.

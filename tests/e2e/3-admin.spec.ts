@@ -172,12 +172,14 @@ test('admins can merge links, pin the leader and restore a merged page from tras
  await loginAs(page, 'admin');
  const one=unique('Shared'), two=unique('Fork');
  await postAddon(page,two); const address=await postAddon(page,one);
+ await page.locator('[data-merge-settings] summary').click();
  const picker=page.getByPlaceholder('Merge another addon’s links here…');
  await picker.fill(two); await page.getByRole('option',{name:new RegExp('^'+two)}).click();
  const links=page.locator('aside ol li'); await expect(links).toHaveCount(2);
  const controls=page.getByRole('region',{name:'Admin controls'});
  await expect(controls.getByRole('link',{name:'History',exact:true})).toBeVisible();
  await expect(links.getByRole('button',{name:'Pin',exact:true})).toHaveCount(0);
+ await controls.locator('[data-download-settings] summary').click();
  await controls.locator('[data-link-controls]').nth(1).getByRole('button',{name:'Pin',exact:true}).click();
  await expect(links.first()).toContainText('Pinned');
  await controls.getByRole('button',{name:'Unpin',exact:true}).click();

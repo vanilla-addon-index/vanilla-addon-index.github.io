@@ -11,6 +11,7 @@
 	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddAddonLink from '#lib/components/AddAddonLink.svelte';
+	import SimilarAddonEditor from '#lib/components/SimilarAddonEditor.svelte';
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import FavoriteButton from '#lib/components/FavoriteButton.svelte';
 	import ReportDialog from '#lib/components/ReportDialog.svelte';
@@ -215,6 +216,9 @@
 					{/each}
 				</ul>
 			{/if}
+			{#if addon.similar_addons}
+				<p class="mt-4 text-sm text-muted break-words">{addon.similar_addons}</p>
+			{/if}
 		</div>
 
 
@@ -297,38 +301,72 @@
 				</p>
 			{/if}
 			{#if auth.isAdmin}
-				<section aria-label="Admin controls" class="mt-4 space-y-2 border-t border-border pt-3">
-					<h2 class="label">Admin controls</h2>
-					{#if addon.owner_name}
-						<dl class="flex justify-between gap-4 text-sm"><dt class="text-muted">Posted by</dt><dd class="truncate"><UserLink name={addon.owner_name} /></dd></dl>
-					{/if}
-					{#if canEdit(addon.owner)}{@render editControls()}{/if}
-					<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn w-full">History</a>
-					<AddonPicker
-						placeholder="Merge another addon’s links here…"
-						exclude={(other) => other.id === addon.id}
-						onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
-					/>
-					{#each addon.versions as version (version.url)}
-						<div class="space-y-1 border-t border-border pt-2" data-link-controls>
-							<p class="break-all text-sm text-muted">{version.url}</p>
-							<div class="flex flex-wrap gap-2">
-								<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
-								{#if addon.versions.length > 1}<button class="btn px-2 py-0.5 text-sm" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>{/if}
-							</div>
-							{#if renameLink === version.url}
-								<form class="space-y-2 pt-2" onsubmit={(event) => { event.preventDefault(); void separate(version.url, separateName); }}>
-									<label class="field-label" for="separate-name">New addon name</label>
-									<p class="text-sm text-muted">Matching names stay grouped. Give this addon a different name to separate it.</p>
-									<input id="separate-name" class="input" bind:value={separateName} required minlength="2" maxlength="60" disabled={separating} />
-									<div class="flex gap-2">
-										<button class="btn" disabled={separating}>{separating ? 'Separating…' : 'Separate addon'}</button>
-										<button type="button" class="btn" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; error = ''; }}>Cancel</button>
-									</div>
-								</form>
-							{/if}
+				<section aria-label="Admin controls" class="panel mt-4">
+					<div class="space-y-3 p-3">
+						<div class="flex items-center justify-between gap-3">
+							<h2 class="label mb-0">Admin controls</h2>
+							{#if addon.owner_name}<span class="min-w-0 truncate text-sm text-muted">Posted by <UserLink name={addon.owner_name} /></span>{/if}
 						</div>
-					{/each}
+						<div class="grid grid-cols-2 gap-2">
+							{#if canEdit(addon.owner)}<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn">Edit</a>{/if}
+							<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn">History</a>
+						</div>
+					</div>
+					<div class="space-y-2 border-t border-border p-3">
+						<h3 class="label mb-0">Search discovery</h3>
+						{#key addon.id}<SimilarAddonEditor {addon} />{/key}
+					</div>
+					{#if addon.versions.length}
+						<details class="group border-t border-border" data-download-settings>
+							<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
+								<span>Manage links</span>
+								<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
+							</summary>
+							<div class="px-3 pb-3">
+								<p class="mb-3 text-sm text-muted">Pin a download to show it first.{#if addon.versions.length > 1} Separate a link to give it its own addon page.{/if}</p>
+								{#each addon.versions as version (version.url)}
+									<div class="space-y-2 border-t border-border/50 py-3 first:border-t-0 first:pt-0 last:pb-0" data-link-controls>
+										<p class="truncate text-sm text-muted" title={version.url}>{version.url.replace(/^https?:\/\//, '')}</p>
+										<div class="flex flex-wrap gap-2">
+											<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
+											{#if addon.pinned_link === version.url}<span class="self-center text-xs text-accent">Main download</span>{/if}
+											{#if addon.versions.length > 1}<button class="btn px-2 py-0.5 text-sm" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>{/if}
+										</div>
+										{#if renameLink === version.url}
+											<form class="space-y-2 pt-2" onsubmit={(event) => { event.preventDefault(); void separate(version.url, separateName); }}>
+												<label class="field-label" for="separate-name">New addon name</label>
+												<p class="text-sm text-muted">Matching names stay grouped. Give this addon a different name to separate it.</p>
+												<input id="separate-name" class="input" bind:value={separateName} required minlength="2" maxlength="60" disabled={separating} />
+												<div class="flex gap-2">
+													<button class="btn" disabled={separating}>{separating ? 'Separating…' : 'Separate addon'}</button>
+													<button type="button" class="btn" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; error = ''; }}>Cancel</button>
+												</div>
+											</form>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						</details>
+					{/if}
+					<details class="group border-t border-border" data-merge-settings>
+						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
+							<span>Merge another addon</span>
+							<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
+						</summary>
+						<div class="space-y-2 px-3 pb-3">
+							<p class="text-sm text-muted">Move another addon's download links here. Its old address will lead to this page.</p>
+							<AddonPicker
+								placeholder="Merge another addon’s links here…"
+								exclude={(other) => other.id === addon.id}
+								onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
+							/>
+						</div>
+					</details>
+					{#if canEdit(addon.owner)}
+						<div class="flex justify-end border-t border-border p-3">
+							<button class="btn btn-danger px-3 py-1 text-sm" onclick={remove}>Delete</button>
+						</div>
+					{/if}
 				</section>
 			{/if}
 			{#if success}<p role="status">{success}</p>{/if}
