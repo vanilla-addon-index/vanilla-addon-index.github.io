@@ -280,10 +280,10 @@ function explain(error: { code?: string; message: string }) {
 	return error.message;
 }
 
-export async function createAddon(input: AddonInput) {
+export async function createAddon(input: AddonInput, withoutOwner = false) {
 	if (!supabase) throw new Error('Database is not configured.');
 	// The database makes the address from the name; see the slugs migration.
-	const { data: id, error } = await supabase.rpc('submit_addon', { input });
+	const { data: id, error } = await supabase.rpc('submit_addon', { input: withoutOwner ? { ...input, without_owner: true } : input });
 	if (error) throw new Error(explain(error));
 	const { data, error: readError } = await supabase.from('addons').select('*, profiles:profiles!addons_owner_fkey(username)').eq('id', id).single();
 	if (readError) throw new Error(explain(readError));
