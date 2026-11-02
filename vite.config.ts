@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
 					mode: 'hash',
 					directives: {
 						'default-src': ['self'],
-						'script-src': ['self'],
+						'script-src': ['self', 'https://static.cloudflareinsights.com/beacon.min.js'],
 						'style-src': ['self'],
 						// No style="…" in the pages, with one exception that is the framework's own: the
 						// hidden line that tells a screen reader which page was opened. This is the hash
@@ -43,8 +43,14 @@ export default defineConfig(({ mode }) => {
 						'font-src': ['self'],
 						// Screenshots are loaded from wherever the poster keeps them.
 						'img-src': ['self', 'https:', 'data:'],
-						// The database and login service, and the README the submit form reads.
-						'connect-src': ['self', database, 'https://api.github.com', 'https://turtle-wow.fandom.com'],
+						// The database and login service, README lookups, and Cloudflare analytics.
+						'connect-src': [
+							'self',
+							database,
+							'https://api.github.com',
+							'https://turtle-wow.fandom.com',
+							'https://cloudflareinsights.com/cdn-cgi/rum'
+						],
 						'object-src': ['none'],
 						'base-uri': ['self'],
 						'form-action': ['self']

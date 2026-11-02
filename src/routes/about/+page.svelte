@@ -92,15 +92,19 @@
 	<section class="panel p-4" id="privacy">
 		<h2 class="section-title">Privacy</h2>
 		<p class="mt-3">
-			Browsing needs no account, and the site uses no analytics, no ads and no tracking cookies.
+			Browsing needs no account, and the site uses no ads and no tracking cookies.
 			What follows is everything it keeps.
 		</p>
 
 		<h3 class="field-label mt-5">If you only browse</h3>
 		<ul class="list-disc space-y-1 pl-5">
 			<li>
-				Nothing about you is stored by the site. Your browser keeps a copy of the addon list so the
-				next visit loads at once.
+				Your browser keeps a copy of the addon list so the next visit loads at once.
+			</li>
+			<li>
+				The site uses Cloudflare Web Analytics to measure visits and page performance.
+				{@render out('https://www.cloudflare.com/web-analytics/', 'Cloudflare Web Analytics')}
+				does not use cookies.
 			</li>
 			<li>
 				The pages are served by GitHub Pages, and screenshots are loaded straight from wherever
