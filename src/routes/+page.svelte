@@ -240,12 +240,11 @@
 					{/if}
 					<AddonCard
 						addon={main}
-						searchHint={addonSearch(main, query).hint}
 						defer
 						owner={others.length > 0 ? creditFor(main, true) : ''}
 					/>
 					{#each others as other (other.id)}
-						<AddonCard searchHint={addonSearch(other, query).hint} addon={other} owner={creditFor(other, true)} minor defer />
+						<AddonCard addon={other} owner={creditFor(other, true)} minor defer />
 					{/each}
 				{/each}
 			{:else}

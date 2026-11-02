@@ -21,9 +21,9 @@ test('admins edit similar addons inline; visitors and members never see the tool
  await page.goto('/?q=weak%20auras');
  const row=page.locator('.addon-list > div').filter({has:page.getByRole('link',{name,exact:true})});
  await expect(row).toContainText('Tracks buffs with customizable icons.');
- await expect(row.getByText(/Similar to WeakAuras$/)).toBeVisible();
+ await expect(row).not.toContainText('WeakAuras');
  await page.setViewportSize({width:390,height:844});
- await expect(row.getByText(/Similar to WeakAuras$/)).toBeVisible();
+ await expect(row).not.toContainText('WeakAuras');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true);
  await page.goto(path);
  await page.getByRole('button',{name:'Edit similar addons',exact:true}).click();
