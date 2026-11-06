@@ -252,11 +252,11 @@
 					{/if}
 					<AddonCard
 						addon={main}
-						defer
+						catalogue
 						owner={others.length > 0 ? creditFor(main, true) : ''}
 					/>
 					{#each others as other (other.id)}
-						<AddonCard addon={other} owner={creditFor(other, true)} minor defer />
+						<AddonCard addon={other} owner={creditFor(other, true)} minor catalogue />
 					{/each}
 				{/each}
 			{:else}

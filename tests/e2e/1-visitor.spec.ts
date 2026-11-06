@@ -65,7 +65,19 @@ test('a large catalogue reuses rows when sorting and keeps groups searchable', a
 	const first = list.locator('a[href="/addon/sample-0"]');
 	const node = await first.elementHandle();
 	const row = first.locator('..').locator('..');
-	await expect(row).toHaveCSS('content-visibility', 'auto');
+	await expect(row).toHaveCSS('content-visibility', 'visible');
+	// Password managers inspect link geometry and rendered text even off screen.
+	// These reads must not repeatedly activate/deactivate skipped row layouts.
+	const inspection = await list.evaluate(element => {
+		const start = performance.now();
+		const labels = Array.from(element.querySelectorAll('a')).map(link => {
+			link.getClientRects();
+			return link.innerText;
+		});
+		return { labels, duration: performance.now() - start };
+	});
+	expect(inspection.labels).toContain('ZSample0899');
+	expect(inspection.duration).toBeLessThan(1500);
 	const nameBox = await first.boundingBox();
 	const categoryBox = await row.getByText('Combat', { exact: true }).boundingBox();
 	expect(Math.abs(nameBox!.y - categoryBox!.y)).toBeLessThan(5);
