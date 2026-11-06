@@ -52,9 +52,11 @@
 		</span>
 	</span>
 	<span class="contents sm:flex sm:items-center sm:justify-end sm:gap-4">
-		<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
-			{addon.category}
-		</span>
+		{#if addon.entry_type !== 'dll'}
+			<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
+				{addon.category}
+			</span>
+		{/if}
 		<span class="col-span-2 row-start-3 flex min-w-0 items-center sm:col-span-1 sm:row-start-auto sm:justify-end">
 			{#if host}
 				<svelte:element

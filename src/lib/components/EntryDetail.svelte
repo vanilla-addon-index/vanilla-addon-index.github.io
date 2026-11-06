@@ -190,11 +190,13 @@
 		<div class="panel min-w-0 p-4">
 			<h1 class="text-3xl font-bold [overflow-wrap:anywhere]">{addon.name}</h1>
 
-			<div class="mt-3 flex flex-wrap gap-1.5">
-				<a href={resolve(`/?${addon.entry_type === 'dll' ? 'type=dll&' : ''}cat=${encodeURIComponent(addon.category)}`)} class="chip">
-					{addon.category}
-				</a>
-			</div>
+			{#if addon.entry_type !== 'dll'}
+				<div class="mt-3 flex flex-wrap gap-1.5">
+					<a href={resolve(`/?cat=${encodeURIComponent(addon.category)}`)} class="chip">
+						{addon.category}
+					</a>
+				</div>
+			{/if}
 
 			{#if addon.description}
 				<p class="mt-4 font-read text-[0.9rem] leading-relaxed break-words whitespace-pre-line">{addon.description}</p>
