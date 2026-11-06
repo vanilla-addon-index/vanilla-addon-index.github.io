@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { CLIENT_KINDS, clientKind } from '#lib/client-kinds.ts';
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
 	import WikiArticleFallback from './WikiArticleFallback.svelte';
 	import AddonPicker from './AddonPicker.svelte';
@@ -118,7 +119,7 @@
 						{
 							name: draft.name.trim(),
 							description: draft.description.trim(),
-							category: into?.category ?? (draft.entry_type === 'dll' ? 'Miscellaneous' : draft.category),
+						category: into?.category ?? (draft.entry_type === 'dll' ? clientKind(draft.category) : draft.category),
 							entry_type: into?.entry_type ?? draft.entry_type,
 							author: draft.author.trim(),
 							versions: [{ url: item.url, note: '' }],
@@ -177,9 +178,9 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select use:commitCategoryOnFocus class={[!nameMatch && !categoryChosen ? missing : quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" aria-required={!destination && entryType.value !== 'dll'} disabled={!!nameMatch || entryType.value === 'dll'} bind:value={category.value}>
-			<option value="" disabled>{entryType.value === 'dll' ? 'Not used for DLL' : forkMatch ? 'Category if separate…' : 'Choose a category…'}</option>
-			{#each CATEGORIES as c (c)}
+		<select use:commitCategoryOnFocus class={[!nameMatch && !categoryChosen ? missing : quiet, 'w-44 flex-none text-sm text-muted']} aria-label={entryType.value === 'dll' ? 'Kind' : 'Category'} aria-required={!destination && entryType.value !== 'dll'} disabled={!!nameMatch} bind:value={category.value}>
+			<option value="" disabled>{entryType.value === 'dll' ? 'DLL (default)' : forkMatch ? 'Category if separate…' : 'Choose a category…'}</option>
+			{#each entryType.value === 'dll' ? CLIENT_KINDS : CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
 			{/each}
 		</select>

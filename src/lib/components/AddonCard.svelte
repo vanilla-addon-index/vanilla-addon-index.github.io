@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { entryHref } from '#lib/entry-href.ts';
+	import { clientKind } from '#lib/client-kinds.ts';
 	import { LINK_HOSTS } from '#lib/config.ts';
 	import { linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
@@ -52,11 +53,9 @@
 		</span>
 	</span>
 	<span class="contents sm:flex sm:items-center sm:justify-end sm:gap-4">
-		{#if addon.entry_type !== 'dll'}
-			<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
-				{addon.category}
-			</span>
-		{/if}
+		<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
+			{addon.entry_type === 'dll' ? clientKind(addon.category) : addon.category}
+		</span>
 		<span class="col-span-2 row-start-3 flex min-w-0 items-center sm:col-span-1 sm:row-start-auto sm:justify-end">
 			{#if host}
 				<svelte:element
