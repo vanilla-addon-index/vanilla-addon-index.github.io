@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { entryHref } from '#lib/entry-href.ts';
+	import { CLIENT_KINDS, clientKind } from '#lib/client-kinds.ts';
 	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
 	import { recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
@@ -11,7 +12,7 @@
 	import { createAddon, fetchAddon, slugify, store, plainName, updateAddon } from '#lib/addons.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
-	import { CATEGORIES, DEFAULT_CATEGORY, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
+	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
 	import { hostAllowed, hostNames } from '#lib/hosts.ts';
 	import { linkError } from '#lib/link-validation.ts';
 	import { repositoryName } from '#lib/repository-name.ts';
@@ -250,7 +251,7 @@
 		const input = {
 			...form,
 			entry_type: inputType,
-			category: inputType === 'dll' ? (form.category || DEFAULT_CATEGORY) : form.category,
+			category: inputType === 'dll' ? clientKind(form.category) : form.category,
 			// Empty rows in the "other versions" list are dropped.
 			versions: form.versions
 				.map((v) => ({ ...v, url: repositoryLink(v.url), note: v.note.trim() }))
@@ -392,11 +393,11 @@
 						<p id="addon-name-hint" class="hint">{editing ? 'The addon’s name.' : 'Suggested from the addon link. You can change it.'}</p>
 					</div>
 					<div>
-						<label class="field-label" for="category">Category</label>
-						<select use:commitCategoryOnFocus id="category" class="input disabled:opacity-40" disabled={!!matched || form.entry_type === 'dll'} required={form.entry_type !== 'dll'} bind:value={form.category}>
+						<label class="field-label" for="category">{form.entry_type === 'dll' ? 'Kind' : 'Category'}</label>
+						<select use:commitCategoryOnFocus id="category" class="input disabled:opacity-40" disabled={!!matched} required={form.entry_type !== 'dll'} bind:value={form.category}>
 							<!-- Placeholder: shown until a category is picked, not offered in the list. -->
-							<option value="" hidden>{form.entry_type === 'dll' ? 'Not used for DLL' : 'Pick the one that fits best'}</option>
-							{#each CATEGORIES as c (c)}
+							<option value="" hidden>{form.entry_type === 'dll' ? 'DLL (default)' : 'Pick the one that fits best'}</option>
+							{#each form.entry_type === 'dll' ? CLIENT_KINDS : CATEGORIES as c (c)}
 								<option value={c}>{c}</option>
 							{/each}
 						</select>

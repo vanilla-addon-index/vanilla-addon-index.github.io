@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { clientKind } from '#lib/client-kinds.ts';
 	import { entryHref } from '#lib/entry-href.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -190,7 +191,9 @@
 		<div class="panel min-w-0 p-4">
 			<h1 class="text-3xl font-bold [overflow-wrap:anywhere]">{addon.name}</h1>
 
-			{#if addon.entry_type !== 'dll'}
+			{#if addon.entry_type === 'dll'}
+				<div class="mt-3"><span class="chip">{clientKind(addon.category)}</span></div>
+			{:else}
 				<div class="mt-3 flex flex-wrap gap-1.5">
 					<a href={resolve(`/?cat=${encodeURIComponent(addon.category)}`)} class="chip">
 						{addon.category}

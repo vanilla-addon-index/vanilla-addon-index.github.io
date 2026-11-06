@@ -7,7 +7,9 @@ for (const width of [1280, 390]) {
   const rows = [
    {id:99001,slug:'regular-sample',name:'RegularSample',description:'An ordinary addon.',category:'Combat',entry_type:'addon',versions:[],images:[],group_id:null,is_main:false},
    {id:99002,slug:'dll-sample',name:'ClientSample',description:'A client extension.',category:'Miscellaneous',entry_type:'dll',versions:[],images:[],group_id:null,is_main:false},
-   {id:99003,slug:'legacy-sample',name:'LegacySample',description:'An older snapshot addon.',category:'Combat',versions:[],images:[],group_id:null,is_main:false}
+   {id:99003,slug:'legacy-sample',name:'LegacySample',description:'An older snapshot addon.',category:'Combat',versions:[],images:[],group_id:null,is_main:false},
+   {id:99005,slug:'utility-sample',name:'UtilitySample',description:'A client utility.',category:'Util',entry_type:'dll',versions:[],images:[],group_id:null,is_main:false},
+   {id:99006,slug:'patch-sample',name:'PatchSample',description:'An MPQ patch.',category:'MPQ',entry_type:'dll',versions:[],images:[],group_id:null,is_main:false}
   ];
   await page.route('**/rest/v1/addons?*',route => route.fulfill({json:rows}));
   await page.goto('/');
@@ -22,6 +24,9 @@ for (const width of [1280, 390]) {
   await expect(page.getByRole('link',{name:'ClientSample',exact:true})).toHaveAttribute('href','/dll/dll-sample');
   await expect(page.getByRole('link',{name:'RegularSample',exact:true})).toHaveCount(0);
   await expect(page.getByRole('searchbox',{name:'Search DLL mods',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'DLL mod list',exact:true}).getByText('DLL',{exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'DLL mod list',exact:true}).getByText('Util',{exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'DLL mod list',exact:true}).getByText('MPQ',{exact:true})).toBeVisible();
   await expect(page.getByRole('region',{name:'DLL mod list',exact:true}).getByText('Miscellaneous',{exact:true})).toHaveCount(0);
   if (width >= 768) {
    await expect(page.locator('aside .panel button:enabled')).toHaveCount(0);
@@ -58,8 +63,8 @@ test('admins classify DLL mods with the normal submit and edit forms', async ({p
  await page.getByLabel('Type',{exact:true}).selectOption('dll');
  await page.getByLabel('Addon name',{exact:true}).fill(name);
  await page.getByLabel('Link to the addon').fill(`https://gitlab.com/e2e/${name.replace(/\W+/g,'-')}`);
- await expect(page.getByLabel('Category',{exact:true})).toBeDisabled();
- await expect(page.getByLabel('Category',{exact:true})).toHaveValue('');
+ await expect(page.getByLabel('Kind',{exact:true})).toBeEnabled();
+ await page.getByLabel('Kind',{exact:true}).selectOption('MPQ');
  await page.getByLabel('Description',{exact:true}).fill('A local browser test of the DLL collection.');
  await page.getByRole('button',{name:'Post addon',exact:true}).click();
  await expect(page.getByRole('heading',{level:1,name})).toBeVisible();
@@ -74,9 +79,10 @@ test('admins classify DLL mods with the normal submit and edit forms', async ({p
  await page.goto(detail);
  await page.getByRole('link',{name:'Edit',exact:true}).click();
  await expect(page.getByLabel('Type',{exact:true})).toHaveValue('dll');
+ await expect(page.getByLabel('Kind',{exact:true})).toHaveValue('MPQ');
  await page.getByLabel('Type',{exact:true}).selectOption('addon');
  await expect(page.getByLabel('Category',{exact:true})).toBeEnabled();
- await expect(page.getByLabel('Category',{exact:true})).toHaveValue('Miscellaneous');
+ await page.getByLabel('Category',{exact:true}).selectOption('Miscellaneous');
  await page.getByRole('button',{name:'Save changes',exact:true}).click();
  await expect(page.getByRole('link',{name:/All addons/})).toBeVisible();
  await page.goto('/');
@@ -99,7 +105,8 @@ test('the shared import queue filters types and offers classification in each en
  await expect(entry).toHaveCount(1);
  await expect(entry.getByLabel('Publish to',{exact:true})).toHaveValue('dll');
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toBeEnabled();
- await expect(entry.getByLabel('Category',{exact:true})).toBeDisabled();
+ await expect(entry.getByLabel('Kind',{exact:true})).toBeEnabled();
+ await entry.getByLabel('Kind',{exact:true}).selectOption('Util');
  const filter=page.getByLabel('Type',{exact:true}).filter({has:page.locator('option[value=""]')});
  await filter.selectOption('addon');
  await expect(entry).toHaveCount(0);
@@ -109,6 +116,7 @@ test('the shared import queue filters types and offers classification in each en
  await expect(entry.getByLabel('Publish to',{exact:true})).toHaveValue('addon');
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toBeDisabled();
  await entry.getByLabel('Publish to',{exact:true}).selectOption('dll');
+ await entry.getByLabel('Kind',{exact:true}).selectOption('Util');
  let submitted: {input: {entry_type: string; category: string}} | undefined;
  await page.route('**/rest/v1/rpc/publish_import',async route=>{
   submitted=route.request().postDataJSON();
@@ -116,7 +124,7 @@ test('the shared import queue filters types and offers classification in each en
  });
  await entry.getByRole('button',{name:'Approve',exact:true}).click();
  await expect.poll(()=>submitted?.input.entry_type).toBe('dll');
- expect(submitted?.input.category).toBe('Miscellaneous');
+ expect(submitted?.input.category).toBe('Util');
  await expect(entry).toHaveCount(0);
 });
 
@@ -129,6 +137,7 @@ test('DLL detail addresses and old links resolve to the right collection', async
  await page.route('**/rest/v1/addons?*',route=>route.fulfill({json:rows}));
  await page.goto('/dll/client-route');
  await expect(page.getByRole('heading',{level:1,name:'ClientRoute'})).toBeVisible();
+ await expect(page.locator('article .chip')).toHaveText('DLL');
  await expect(page.locator('article a.chip')).toHaveCount(0);
  await expect(page).toHaveURL(/\/dll\/client-route$/);
  await page.reload();
