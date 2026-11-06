@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { entryHref } from '#lib/entry-href.ts';
 	import HistoryGrouping from '#lib/components/HistoryGrouping.svelte';
 	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
 	import { fieldLabel, changeSummary } from '#lib/history.ts';
@@ -431,7 +432,7 @@
 						{#if entry.action === 'user.autosuspend'}
 							{entry.details?.reason}
 						{:else if addon}
-							<a href={resolve('/addon/[slug]', { slug: addon.slug })} class="text-accent hover:underline">
+							<a href={entryHref(addon)} class="text-accent hover:underline">
 								{entry.subject}
 							</a>
 						{:else if entry.action.startsWith('user.')}
@@ -497,7 +498,7 @@
 
 				{#if entry.details?.groups_before?.length}
 					<details data-comparison class="mt-2 text-sm"><summary class="cursor-pointer text-muted">View grouping changes</summary><HistoryGrouping {entry} addons={store.addons} /></details>
-					{#if addon && recoveries[entry.id]?.reason}<a class="btn mt-2 text-sm" href={resolve('/addon/[slug]',{slug:addon.slug})}>Review current grouping</a>{/if}
+					{#if addon && recoveries[entry.id]?.reason}<a class="btn mt-2 text-sm" href={entryHref(addon)}>Review current grouping</a>{/if}
 				{/if}
 
 				{#if entry.details?.changed && entry.details.before}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { entryHref } from '#lib/entry-href.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { supabase } from '#lib/supabase.ts';
@@ -37,7 +37,7 @@
 			<ul>
 				{#each matching as addon (addon.id)}
 					<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 py-2 last:border-b-0">
-						<a class="font-bold hover:text-accent" href={resolve('/addon/[slug]', {slug: addon.slug})}>{addon.name}</a>
+						<a class="font-bold hover:text-accent" href={entryHref(addon)}>{addon.name}</a>
 						<span class="text-sm text-muted">Last update:
 							{#if addon.code_update}
 								<time class="text-fg" datetime={addon.code_update.date}>{date(addon.code_update.date)}</time>

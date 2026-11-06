@@ -1,7 +1,7 @@
 <script lang="ts">
+	import { entryHref } from '#lib/entry-href.ts';
 	import { onMount } from 'svelte';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
-	import { resolve } from '$app/paths';
 	import { similarAddon, publishedForkParent, isWikiPage, type ReviewNote } from '#lib/import-review.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
@@ -32,6 +32,7 @@
 
 	let view = $state<View>('all');
 	let query = $state('');
+	let entryType = $state('');
 	let shown = $state(PAGE);
 	// Position of the entry the keyboard shortcuts act on.
 	let current = $state(0);
@@ -118,9 +119,9 @@
 		if (item.group_key && (!wikiMain || wikiMain !== sameName)) notes.push({ label: 'Wiki version', value: wikiMain?.name ?? `${item.group_key} (not live)` });
 		if (forkParent || stats?.fork_of) notes.push({
 			label: 'Fork of', value: forkParent?.name ?? stats!.fork_of!,
-			href: forkParent ? resolve('/addon/[slug]', {slug: forkParent.slug}) : `https://${stats!.fork_of!}`
+			href: forkParent ? entryHref(forkParent) : `https://${stats!.fork_of!}`
 		});
-		if (similar) notes.push({ label: 'Name variant of', value: similar.name, tone: 'warning', href: resolve('/addon/[slug]', {slug: similar.slug}) });
+		if (similar) notes.push({ label: 'Name variant of', value: similar.name, tone: 'warning', href: entryHref(similar) });
 		if ((queuedNames.get(name) ?? 0) > 1) notes.push({ label: 'Queue', value: 'Same name twice', tone: 'warning' });
 		if (movedTo) notes.push({ label: 'Moved to', value: movedTo });
 		if (item.parent) notes.push({ label: 'Extends', value: item.parent });
@@ -145,7 +146,7 @@
 	const matches = (item: QueueItem) => {
 		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 		const haystack = `${item.name} ${item.description} ${item.url} ${item.category}`.toLowerCase();
-		return words.every((w) => haystack.includes(w));
+		return (!entryType || (item.entry_type ?? 'addon') === entryType) && words.every((w) => haystack.includes(w));
 	};
 	const incomplete = $derived(totals.incomplete?.length ?? 0);
 	const visible = $derived(
@@ -334,8 +335,9 @@
 		</aside>
 
 		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
+			<div class="flex gap-2">
 			<input
-				class="input shrink-0"
+				class="input min-w-0 flex-1"
 				type="search"
 				placeholder={view === 'dead' ? 'Search dead links' : view === 'rejected' ? 'Search the rejected entries' : 'Search the queue'}
 				aria-label="Search"
@@ -346,6 +348,10 @@
 					entries?.scrollTo(0, 0);
 				}}
 			/>
+				<select class="input w-auto shrink-0" aria-label="Type" bind:value={entryType} onchange={() => { shown = PAGE; current = 0; }}>
+					<option value="">All types</option><option value="addon">Addons</option><option value="dll">DLL mods</option>
+				</select>
+			</div>
 			<AdminNavigation />
 
 			<div aria-live="polite">

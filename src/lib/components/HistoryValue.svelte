@@ -16,6 +16,8 @@
  <div class="flex flex-wrap gap-2">{#each links as url,index (index)}
   {#if safeHistoryUrl(url)}<a href={safeHistoryUrl(url)} target="_blank" rel="noopener noreferrer" class="max-w-full text-accent underline"><img class="h-24 max-w-full object-contain" src={safeHistoryUrl(url)} alt={`Screenshot ${index+1}`} loading="lazy" referrerpolicy="no-referrer" /><span class="block max-w-56 truncate text-xs">{url}</span></a>{:else}<span class="break-words">{String(url)}</span>{/if}
  {:else}<p class="text-muted">No screenshots.</p>{/each}</div>
+{:else if field === 'entry_type'}
+ <p>{value === 'dll' ? 'DLL mod' : 'Addon'}</p>
 {:else if typeof value === 'boolean'}
  <p>{value?'Yes':'No'}</p>
 {:else if field === 'description' && typeof value === 'string' && typeof against === 'string' && mode !== 'current'}

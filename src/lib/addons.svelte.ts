@@ -27,6 +27,7 @@ const columns = () => (auth.session ? '*, profiles:profiles!addons_owner_fkey(us
 // Rows saved before versions existed carry only the single link.
 const withVersions = <T extends Partial<Addon>>(row: T) => ({
 	...row,
+	entry_type: row.entry_type ?? 'addon',
 	versions: row.versions ?? (row.repo_url ? [{ url: row.repo_url, note: '' }] : []),
 	repo_url: row.repo_url ?? '',
 	aliases: row.aliases ?? [],

@@ -1,8 +1,8 @@
 <script lang="ts">
+	import { entryHref } from '#lib/entry-href.ts';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
-	import { resolve } from '$app/paths';
 	import { store } from '#lib/addons.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
@@ -76,7 +76,7 @@
 			<div class="border-b border-border px-3 py-2 last:border-b-0">
 				<div class="flex flex-wrap items-baseline gap-x-3">
 					{#if addon}
-						<a href={resolve('/addon/[slug]', { slug: addon.slug })} class="font-bold hover:text-accent hover:underline">
+						<a href={entryHref(addon)} class="font-bold hover:text-accent hover:underline">
 							{addon.name}
 						</a>
 						<span class="text-sm text-muted">{addon.category}</span>
@@ -101,7 +101,7 @@
 				{/if}
 				<div class="mt-1.5 flex flex-wrap gap-2">
 					{#if addon}
-						<a href={resolve('/addon/[slug]', { slug: addon.slug })} class="btn py-1">Open the addon</a>
+						<a href={entryHref(addon)} class="btn py-1">Open the addon</a>
 					{/if}
 					<button class="btn btn-primary py-1" onclick={() => close(report, 'handled')}>Handled</button>
 					<button class="btn py-1" onclick={() => close(report, 'dismissed')}>Dismiss</button>

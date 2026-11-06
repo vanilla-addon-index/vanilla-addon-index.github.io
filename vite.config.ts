@@ -10,6 +10,10 @@ export default defineConfig(({ mode }) => {
 		.origin as `https://${string}.${string}`;
 
 	return {
+		server: {
+			// Prepare the front page before the first browser visit triggers its imports.
+			warmup: { clientFiles: ['./src/routes/+layout.svelte', './src/routes/+page.svelte'] }
+		},
 		plugins: [
 			tailwindcss(),
 			sveltekit({

@@ -12,6 +12,7 @@ import { execSync, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { CATEGORIES } from '../src/lib/config.ts';
 import { LOCAL_ACCOUNTS, LOCAL_PASSWORD } from '../src/lib/local-accounts.ts';
+import { dllDemoSql } from './local-dll-demo.mjs';
 
 // The site only needs the database, the API and the login service.
 const LEFT_OUT = 'realtime,storage-api,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor';
@@ -125,6 +126,8 @@ where key = ${quote(queued[1].key)};
 update public.import_queue set name = 'BagHelper' where key = ${quote(queued[2].key)};
 
 -- Seeding is not something that happened on the site.
+${dllDemoSql()}
+
 insert into public.repo_code_updates (url, committed_at, history_url)
 select repo_url, '2024-06-14T14:00:48Z', repo_url || '/commits/HEAD' from public.addons where name = 'RaidHelper';
 update public.addons set code_update = null where name = 'RaidHelper';
@@ -159,7 +162,10 @@ if (command === 'up') {
 	await fill();
 } else if (command === 'down') {
 	supabase('stop');
+} else if (command === 'demo-dll') {
+	sql(dllDemoSql(), 'adding local DLL demo entries');
+	console.log('Local DLL demo entries added. Existing data was preserved.');
 } else {
-	console.log('Usage: node scripts/local.mjs up | reset | down');
+	console.log('Usage: node scripts/local.mjs up | reset | down | demo-dll');
 	process.exit(1);
 }

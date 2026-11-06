@@ -1,5 +1,5 @@
 export const visibleHistoryFields = (fields: string[]) => fields.filter(field => !['unavailable_links','slug','aliases','link_code_updates'].includes(field));
-export const HISTORY_LABELS: Record<string,string> = {name:'Name',description:'Description',similar_addons:'Similar addons',category:'Category',author:'Author',unavailable_links:'Unavailable download links',versions:'Download links',images:'Screenshots',shared:'Shared page',pinned_link:'Main download link',separate_name:'Separate addon name'};
+export const HISTORY_LABELS: Record<string,string> = {name:'Name',description:'Description',similar_addons:'Similar addons',entry_type:'Type',category:'Category',author:'Author',unavailable_links:'Unavailable download links',versions:'Download links',images:'Screenshots',shared:'Shared page',pinned_link:'Main download link',separate_name:'Separate addon name'};
 export const fieldLabel = (field: string) => HISTORY_LABELS[field] ?? field.replaceAll('_',' ');
 export const safeHistoryUrl = (value: unknown) => typeof value === 'string' && /^https:\/\/[^\s]+$/i.test(value) ? value : undefined;
 export function textParts(value: string, other: string) {
