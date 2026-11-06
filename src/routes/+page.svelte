@@ -6,6 +6,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { store } from '#lib/addons.svelte.ts';
+	import CollectionSwitch from '#lib/components/CollectionSwitch.svelte';
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { CATEGORIES } from '#lib/config.ts';
 	import { HOME_TITLE } from '#lib/seo.ts';
@@ -16,15 +17,19 @@
 
 	let query = $state('');
 	let category = $state('');
+	let entryType = $state<'addon' | 'dll'>('addon');
+	const collectionLabel = $derived(entryType === 'dll' ? 'DLL mods' : 'addons');
+	function switchCollection(next: 'addon' | 'dll') { entryType = next; category = ''; }
 	let sort = $state<Sort>('name');
 	onMount(() => {
 		loadPreferences();
 	});
-	const visibleAddons = $derived(store.addons.filter((a) => !preferences.hideOlder || !isOlderAddon(a.code_update?.date)));
+	const visibleAddons = $derived(store.addons.filter((a) => (a.entry_type ?? 'addon') === entryType && (!preferences.hideOlder || !isOlderAddon(a.code_update?.date))));
 
 	function readUrl(params: Pick<URLSearchParams, 'get'>) {
+		entryType = params.get('type') === 'dll' ? 'dll' : 'addon';
 		query = params.get('q') ?? '';
-		category = params.get('cat') ?? '';
+		category = entryType === 'dll' ? '' : (params.get('cat') ?? '');
 		sort = readSort(params.get('sort'));
 	}
 	readUrl((page.shallow?.url ?? page.url).searchParams);
@@ -108,7 +113,7 @@
 		track();
 	});
 	$effect(() => {
-		void query; void category; void sort;
+		void query; void category; void sort; void entryType;
 		if (list) list.scrollTop = 0;
 	});
 
@@ -133,6 +138,7 @@
 	// Keep the URL shareable without adding a history entry per keystroke.
 	$effect(() => {
 		const next = new URLSearchParams();
+		if (entryType === 'dll') next.set('type', 'dll');
 		if (query) next.set('q', query);
 		if (category) next.set('cat', category);
 		if (sort !== 'name') next.set('sort', sort);
@@ -152,28 +158,33 @@
 {#snippet categoryButton(value: string, label: string, count: number)}
 	<button
 		class={[
-			'flex w-full cursor-pointer justify-between border-l-2 px-3 py-0.5 text-left transition-colors duration-100 hover:bg-raised',
-			category === value ? 'border-accent text-accent' : 'border-transparent',
+			'flex w-full justify-between border-l-2 px-3 py-0.5 text-left transition-colors duration-100',
+			entryType === 'dll' ? 'cursor-default border-transparent text-muted' : 'cursor-pointer hover:bg-raised',
+			entryType !== 'dll' && category === value ? 'border-accent text-accent' : 'border-transparent',
 			!count && category !== value && 'text-muted'
 		]}
-		aria-pressed={category === value}
+		disabled={entryType === 'dll'}
+		aria-pressed={entryType !== 'dll' && category === value}
 		onclick={() => (category = value)}
 	>
 		<span>{label}</span>
-		<span class="text-sm leading-7 text-muted">{count}</span>
+		<span class="text-sm leading-7 text-muted">{entryType === 'dll' ? 0 : count}</span>
 	</button>
 {/snippet}
 
 <div class="grid items-start gap-4 md:h-[calc(100dvh-var(--header-h)-var(--footer-h)-1.25rem)] md:min-h-0 md:grid-cols-[13rem_minmax(0,1fr)]">
-	<!-- Stays where it is beside the list; on a window too short for it, it scrolls by itself. -->
-	<aside
-		class="panel hidden max-h-full overflow-y-auto py-1 md:block"
-	>
-		<h2 class="label px-3 pt-2">Categories</h2>
-		{@render categoryButton('', 'All addons', visibleAddons.length)}
-		{#each CATEGORIES as c (c)}
-			{@render categoryButton(c, c, counts[c]?.length ?? 0)}
-		{/each}
+	<!-- The collection switch stays above the independently scrolling categories. -->
+	<aside class="hidden max-h-full min-h-0 flex-col gap-2 md:flex">
+		<div class="shrink-0"><CollectionSwitch value={entryType} onchange={switchCollection} /></div>
+		<div class={['panel min-h-0 overflow-y-auto py-1', entryType === 'dll' && 'bg-bg/70']}>
+			<div class={entryType === 'dll' ? 'opacity-40' : undefined}>
+			<h2 class="label px-3 pt-2">Categories</h2>
+			{@render categoryButton('', 'All addons', visibleAddons.length)}
+			{#each CATEGORIES as c (c)}
+				{@render categoryButton(c, c, counts[c]?.length ?? 0)}
+			{/each}
+			</div>
+		</div>
 	</aside>
 
 	<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
@@ -181,18 +192,19 @@
 		     bring the gaps around them along, painted like the page, so rows vanish at the lower
 		     edge of the gap under them and never show above or between them. -->
 		<div bind:this={controls} class="backdrop -mt-5 pt-5 pb-2 sm:sticky sm:top-(--header-h) sm:z-10">
+			<div class="mb-2 md:hidden"><CollectionSwitch value={entryType} onchange={switchCollection} /></div>
 			<div class="flex flex-wrap gap-2">
 				<input
 					class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
 					type="search"
-					placeholder="Search {store.addons.length || ''} addons by name, description, author or link"
-					aria-label="Search addons"
+					placeholder="Search {visibleAddons.length || ''} {collectionLabel} by name, description, author or link"
+					aria-label="Search {collectionLabel}"
 					bind:value={query}
 				/>
-				<select class="input min-w-0 w-auto flex-1 sm:flex-none md:hidden" aria-label="Category" bind:value={category}>
-					<option value="">All categories</option>
+				<select class="input min-w-0 w-auto flex-1 disabled:opacity-40 sm:flex-none md:hidden" disabled={entryType === 'dll'} aria-label="Category" bind:value={category}>
+					<option value="">{entryType === 'dll' ? 'Categories unavailable' : 'All categories'}</option>
 					{#each CATEGORIES as c (c)}
-						<option value={c}>{c} ({counts[c]?.length ?? 0})</option>
+						<option value={c}>{c} ({entryType === 'dll' ? 0 : (counts[c]?.length ?? 0)})</option>
 					{/each}
 				</select>
 				<select class="input min-w-0 w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort}>
@@ -225,7 +237,7 @@
 
 		<!-- This scroll region is focusable so keyboard users can scroll it directly. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-		<div class="panel addon-list md:min-h-0 md:flex-1 md:content-start md:overflow-y-auto md:overscroll-contain" bind:this={list} onscroll={track} role="region" aria-label="Addon list" tabindex="0">
+		<div class="panel addon-list md:min-h-0 md:flex-1 md:content-start md:overflow-y-auto md:overscroll-contain" bind:this={list} onscroll={track} role="region" aria-label={entryType === 'dll' ? 'DLL mod list' : 'Addon list'} tabindex="0">
 			{#if !store.loaded}
 				<p class="px-3 py-8 text-center text-muted">Loading addons…</p>
 			{:else if blocks.length}
@@ -249,7 +261,7 @@
 				{/each}
 			{:else}
 				<p class="px-3 py-8 text-center text-muted">
-					{store.addons.length ? 'No addons match your search.' : 'No addons have been posted yet.'}
+					{visibleAddons.length ? `No ${collectionLabel} match your search.` : `No ${collectionLabel} to show yet.`}
 				</p>
 			{/if}
 		</div>

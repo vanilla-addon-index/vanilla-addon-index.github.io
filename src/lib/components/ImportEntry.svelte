@@ -31,6 +31,7 @@
 	const original = $derived({
 		name: item.name.slice(0, 60),
 		category: '',
+		entry_type: (item.entry_type ?? 'addon') as 'addon' | 'dll',
 		author: linkAuthor(item.url),
 		description: item.description,
 		images: item.images.slice(0, MAX_IMAGES)
@@ -44,7 +45,7 @@
 	const addedPictures = $derived(destination ? Math.max(0, new Set([...destination.images, ...draft.images]).size - destination.images.length) : 0);
 	const pictureSlots = $derived(destination ? Math.max(0, MAX_IMAGES - destination.images.length) : 0);
 	const edited = $derived(Object.keys(edits).length > 0);
-	const categoryChosen = $derived((CATEGORIES as readonly string[]).includes(draft.category));
+	const categoryChosen = $derived(draft.entry_type === 'dll' || (CATEGORIES as readonly string[]).includes(draft.category));
 	const descriptionProvided = $derived(!!draft.description.trim());
 	const statusLabels = new Set(['Missing', 'Queue', 'Publish failed']);
 	const facts = $derived(notes.filter(note => !statusLabels.has(note.label)));
@@ -72,6 +73,7 @@
 				name: mergeTarget.name,
 				description: draft.description.trim(),
 				category: mergeTarget.category,
+				entry_type: mergeTarget.entry_type ?? 'addon',
 				author: mergeTarget.author,
 				versions: [{ url: item.url, note: '' }],
 				images: draft.images
@@ -93,6 +95,10 @@
 		get value() { return nameMatch?.category ?? draft.category; },
 		set value(next: string) { edits.category = next; }
 	};
+	const entryType = {
+		get value() { return nameMatch?.entry_type ?? draft.entry_type; },
+		set value(next: 'addon' | 'dll') { edits.entry_type = next; }
+	};
 	const author = field('author');
 	const description = field('description');
 
@@ -104,7 +110,7 @@
 			into = into === undefined ? destination : into;
 			if (!into && !categoryChosen) throw new Error('Choose a category before approving this import.');
 			if (!into && !descriptionProvided) throw new Error('Add a description before approving this import.');
-			if (edited || destination || draft.category !== item.category) {
+			if (edited || destination || draft.category !== item.category || draft.entry_type === 'dll') {
 				saving = true;
 				try {
 					await publishEdited(
@@ -112,7 +118,8 @@
 						{
 							name: draft.name.trim(),
 							description: draft.description.trim(),
-							category: into?.category ?? draft.category,
+							category: into?.category ?? (draft.entry_type === 'dll' ? 'Miscellaneous' : draft.category),
+							entry_type: into?.entry_type ?? draft.entry_type,
 							author: draft.author.trim(),
 							versions: [{ url: item.url, note: '' }],
 							images: draft.images
@@ -170,8 +177,8 @@
 			aria-label="Name"
 			bind:value={name.value}
 		/>
-		<select use:commitCategoryOnFocus class={[!nameMatch && !categoryChosen ? missing : quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" aria-required={!destination} disabled={!!nameMatch} bind:value={category.value}>
-			<option value="" disabled>{forkMatch ? 'Category if separate…' : 'Choose a category…'}</option>
+		<select use:commitCategoryOnFocus class={[!nameMatch && !categoryChosen ? missing : quiet, 'w-44 flex-none text-sm text-muted']} aria-label="Category" aria-required={!destination && entryType.value !== 'dll'} disabled={!!nameMatch || entryType.value === 'dll'} bind:value={category.value}>
+			<option value="" disabled>{entryType.value === 'dll' ? 'Not used for DLL' : forkMatch ? 'Category if separate…' : 'Choose a category…'}</option>
 			{#each CATEGORIES as c (c)}
 				<option value={c}>{c}</option>
 			{/each}
@@ -250,6 +257,12 @@
 		</dl>
 		<div class="mt-1.5 flex flex-wrap items-center gap-2">
 			{#if verdict !== 'wiki'}
+			<label class="flex items-center gap-2 text-sm">
+				<span class="font-bold">Publish to</span>
+				<select aria-label="Publish to" class="input w-28 py-1 text-sm disabled:opacity-40" disabled={saving || !!nameMatch} bind:value={entryType.value}>
+					<option value="addon">Addons</option><option value="dll">DLL</option>
+				</select>
+			</label>
 			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || (!destination && (!categoryChosen || !descriptionProvided))} onclick={() => publish()}>
 				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>

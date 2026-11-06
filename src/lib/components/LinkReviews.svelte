@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { entryHref } from '#lib/entry-href.ts';
 	import { store } from '#lib/addons.svelte.ts';
 	import { loadLinkRequests, decideLink, type LinkRequest } from '#lib/link-reviews.svelte.ts';
 	let { query = '', oncount }: { query?: string; oncount: (count: number) => void } = $props();
@@ -20,7 +20,7 @@
 	{#each matching as request (request.id)}
 		{@const addon = store.addons.find(a => a.id === request.addon_id)}
 		<div class="panel mb-4 p-4">
-			<h2 class="font-bold">New link for {#if addon}<a class="text-accent" href={resolve('/addon/[slug]', { slug: addon.slug })}>{addon.name}</a>{:else}unavailable addon{/if}</h2>
+			<h2 class="font-bold">New link for {#if addon}<a class="text-accent" href={entryHref(addon)}>{addon.name}</a>{:else}unavailable addon{/if}</h2>
 			<p class="mt-1 text-sm text-muted">Suggested by {request.proposer?.username ?? 'a member'}</p>
 			<a class="mt-2 block break-all text-accent hover:underline" href={request.url} target="_blank" rel="noopener noreferrer">{request.url}</a>
 			{#if request.images?.length}

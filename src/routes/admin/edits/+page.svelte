@@ -1,9 +1,9 @@
 <script lang="ts">
+	import { entryHref } from '#lib/entry-href.ts';
 	import LinkReviews from '#lib/components/LinkReviews.svelte';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
- import { resolve } from '$app/paths';
  import { store } from '#lib/addons.svelte.ts';
  import { FIELD_LABELS, displayEditValue as value, loadEditReviews, decideEdit, type EditField, type EditRequest } from '#lib/edit-reviews.svelte.ts';
  import { SITE_NAME } from '#lib/config.ts';
@@ -41,7 +41,7 @@
  {#each matching as request(request.id)}
   {@const addon=store.addons.find(a=>a.id===request.addon_id)}
   <section class="panel mb-4 p-4" aria-label={'Edit proposal for '+(addon?.name??'addon')}>
-   <h2 class="font-bold">{#if addon}<a class="text-accent" href={resolve('/addon/[slug]',{slug:addon.slug})}>{addon.name}</a>{:else}Addon no longer available{/if}</h2>
+   <h2 class="font-bold">{#if addon}<a class="text-accent" href={entryHref(addon)}>{addon.name}</a>{:else}Addon no longer available{/if}</h2>
    <p class="mb-3 text-sm text-muted">Proposed by {request.proposer?.username??'a contributor'}</p>
    {#each Object.keys(request.changes) as field}
     {@const key=field as EditField}

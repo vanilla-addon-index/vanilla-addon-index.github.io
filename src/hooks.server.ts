@@ -2,7 +2,10 @@ import type { Handle } from '@sveltejs/kit/hooks';
 import { SITE_NAME, SITE_URL } from '#lib/config.ts';
 import { ABOUT_DESCRIPTION, ABOUT_TITLE, HOME_DESCRIPTION, HOME_TITLE, HOME_PREVIEW_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
 import { readSnapshot } from '#lib/snapshot.server.ts';
+import { entryPath } from '#lib/entry-path.ts';
 import type { Addon } from '#lib/types.ts';
+import narrowRegular from '@fontsource/pt-sans-narrow/files/pt-sans-narrow-latin-400-normal.woff2?url';
+import narrowBold from '@fontsource/pt-sans-narrow/files/pt-sans-narrow-latin-700-normal.woff2?url';
 
 // Runs at build time only, while the pages are written out. The site draws itself in the
 // browser, so without this every page would reach search engines and link previews empty.
@@ -60,7 +63,7 @@ function addonPage(addon: Addon) {
 		head: head({
 			title: addonTitle(addon),
 			description: addonDescription(addon),
-			path: `/addon/${addon.slug}`,
+			path: entryPath(addon),
 			previewTitle: `${addon.name} – WoW 1.12.1 addon`
 		}),
 		body: noscript(
@@ -75,7 +78,7 @@ function addonPage(addon: Addon) {
 
 function homePage() {
 	const list = addons
-		.map((a) => `<li><a href="/addon/${esc(a.slug)}">${esc(a.name)}</a></li>`)
+		.map((a) => `<li><a href="${esc(entryPath(a))}">${esc(a.name)}</a></li>`)
 		.join('');
 	return {
 		head: head({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: '/', previewTitle: HOME_PREVIEW_TITLE }),
@@ -102,6 +105,9 @@ export const handle: Handle = ({ event, resolve }) => {
 		// this a first visit shows the fallback font for a moment.
 		preload: ({ type, path }) => type === 'js' || type === 'css' || path.endsWith('.woff2'),
 		transformPageChunk: ({ html }) =>
-			html.replace('</head>', () => `${page.head}</head>`).replace(/<body[^>]*>/, (body) => body + page.body)
+			html.replace('</head>', () => `${page.head}` +
+				`<link rel="preload" href="${esc(narrowRegular)}" as="font" type="font/woff2" crossorigin="anonymous">` +
+				`<link rel="preload" href="${esc(narrowBold)}" as="font" type="font/woff2" crossorigin="anonymous"></head>`)
+				.replace(/<body[^>]*>/, (body) => body + page.body)
 	});
 };

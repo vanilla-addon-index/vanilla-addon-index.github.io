@@ -1,0 +1,4 @@
+/* Paint the site's background before the client app and its stylesheet arrive. */
+body {
+	background-color: #100c08;
+}

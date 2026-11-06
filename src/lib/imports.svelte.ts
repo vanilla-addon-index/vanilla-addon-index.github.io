@@ -7,6 +7,7 @@ import { readArticle, type ArticleLink } from './wiki-article.ts';
 import { isWikiPage } from './import-review.ts';
 
 export interface QueueItem extends Candidate {
+	entry_type?: 'addon' | 'dll';
 	source?: string;
 	id: number;
 	rejected_by_owner: boolean;

@@ -9,7 +9,11 @@ export interface Version {
 	note: string;
 }
 
+export type EntryType = 'addon' | 'dll';
+
 export interface Addon {
+	/** Older snapshots omit this and are treated as addons. */
+	entry_type?: EntryType;
 	id: number;
 	slug: string;
 	name: string;
@@ -50,6 +54,7 @@ export type AddonInput = Pick<
 	| 'name'
 	| 'description'
 	| 'category'
+	| 'entry_type'
 	| 'author'
 	| 'versions'
 	| 'images'

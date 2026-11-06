@@ -2,9 +2,9 @@
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
-	import { resolve } from '$app/paths';
+	import { entryHref } from '#lib/entry-href.ts';
 	import { TRASH_DAYS, loadTrash, purgeTrash, restoreAddon, type TrashEntry } from '#lib/admin.ts';
-	import { loadAddons } from '#lib/addons.svelte.ts';
+	import { store, loadAddons } from '#lib/addons.svelte.ts';
 	import { auth } from '#lib/auth.svelte.ts';
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
@@ -135,7 +135,7 @@
 <p class={['mb-2 truncate', error ? 'text-danger' : 'text-accent']}>
 	{error || notice}
 	{#if restored}
-		<a href={resolve('/addon/[slug]', { slug: restored })} class="underline">Open it</a>
+		<a href={entryHref(store.addons.find(a => a.slug === restored) ?? {slug: restored})} class="underline">Open it</a>
 	{/if}
 </p>
 {/if}

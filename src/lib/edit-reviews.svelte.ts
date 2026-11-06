@@ -3,10 +3,10 @@ import { loadAddons } from './addons.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
 
-export const EDIT_FIELDS = ['name', 'description', 'category', 'author', 'images', 'versions'] as const;
+export const EDIT_FIELDS = ['name', 'description', 'entry_type', 'category', 'author', 'images', 'versions'] as const;
 export type EditField = (typeof EDIT_FIELDS)[number];
-export const FIELD_LABELS: Record<EditField, string> = {name:'Name', description:'Description', category:'Category', author:'Author', images:'Screenshots', versions:'Download links'};
-export const contentOf = (addon: Addon): AddonInput => ({name:addon.name, description:addon.description, category:addon.category, author:addon.author, images:[...addon.images], versions:addon.versions.map(v => ({...v}))});
+export const FIELD_LABELS: Record<EditField, string> = {name:'Name', description:'Description', entry_type:'Type', category:'Category', author:'Author', images:'Screenshots', versions:'Download links'};
+export const contentOf = (addon: Addon): AddonInput => ({name:addon.name, description:addon.description, entry_type:addon.entry_type ?? 'addon', category:addon.category, author:addon.author, images:[...addon.images], versions:addon.versions.map(v => ({...v}))});
 export interface EditRequest {
  id: number;
  addon_id: number;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { entryHref } from '#lib/entry-href.ts';
 	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
 	import { recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
@@ -10,7 +11,7 @@
 	import { createAddon, fetchAddon, slugify, store, plainName, updateAddon } from '#lib/addons.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
 	import AddonCard from '#lib/components/AddonCard.svelte';
-	import { CATEGORIES, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
+	import { CATEGORIES, DEFAULT_CATEGORY, MAX_IMAGES, MAX_VERSIONS, SITE_NAME } from '#lib/config.ts';
 	import { hostAllowed, hostNames } from '#lib/hosts.ts';
 	import { linkError } from '#lib/link-validation.ts';
 	import { repositoryName } from '#lib/repository-name.ts';
@@ -45,10 +46,15 @@
 	let form = $state<AddonInput>({
 		name: page.url.searchParams.get('name') ?? '',
 		description: '',
+		entry_type: 'addon',
 		category: '',
 		author: '',
 		versions: [{ url: '', note: '' }],
 		images: []
+	});
+	// A DLL deep link never grants members access to the staff-only type choice.
+	$effect(() => {
+		if (auth.ready && !auth.isAdmin && !editing) form.entry_type = 'addon';
 	});
 	let nameEdited = !!page.url.searchParams.get('name')?.trim();
 	function suggestName(value: string) {
@@ -97,11 +103,12 @@
 		since = editing.updated_at;
 		proposalBase = contentOf(editing);
 		const cleanPending = pending && Object.keys(pending.base).every(field => JSON.stringify(pending!.base[field as EditField]) === JSON.stringify(proposalBase![field as EditField]));
-		const { name, description, category, author, versions, images } = { ...editing, ...(cleanPending ? pending?.changes : {}) };
+		const { name, description, category, author, versions, images, entry_type = 'addon' } = { ...editing, ...(cleanPending ? pending?.changes : {}) };
 		form = {
 			name,
 			description,
 			category,
+			entry_type,
 			author,
 			versions: versions.length ? versions.map((v) => ({ ...v })) : [{url:'',note:''}],
 			images: [...images]
@@ -239,8 +246,11 @@
 			await addImageLink();
 			if (imageLink.trim()) return;
 		}
+		const inputType = auth.isAdmin ? form.entry_type : (editing?.entry_type ?? 'addon');
 		const input = {
 			...form,
+			entry_type: inputType,
+			category: inputType === 'dll' ? (form.category || DEFAULT_CATEGORY) : form.category,
 			// Empty rows in the "other versions" list are dropped.
 			versions: form.versions
 				.map((v) => ({ ...v, url: repositoryLink(v.url), note: v.note.trim() }))
@@ -260,13 +270,13 @@
 		try {
 			if (proposing && editing && proposalBase) {
 				await proposeEdit(editing.id, input, proposalBase);
-				await goto(resolve('/addon/[slug]', {slug:editing.slug}) + '?proposed=1');
+				await goto(entryHref(editing) + '?proposed=1');
 				return;
 			}
 			const addon = editing ? await updateAddon(editing.id, input, since, reviewId) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input, auth.isAdmin && !matched && communityListing);
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
-			await goto(resolve('/addon/[slug]', { slug: addon.slug }));
+			await goto(entryHref(addon));
 			if (showWikiHelper) wikiThanks.addon = $state.snapshot(input);
 		} catch (e) {
 			error = (e as Error).message;
@@ -383,9 +393,9 @@
 					</div>
 					<div>
 						<label class="field-label" for="category">Category</label>
-						<select use:commitCategoryOnFocus id="category" class="input disabled:opacity-40" disabled={!!matched} required bind:value={form.category}>
+						<select use:commitCategoryOnFocus id="category" class="input disabled:opacity-40" disabled={!!matched || form.entry_type === 'dll'} required={form.entry_type !== 'dll'} bind:value={form.category}>
 							<!-- Placeholder: shown until a category is picked, not offered in the list. -->
-							<option value="" hidden>Pick the one that fits best</option>
+							<option value="" hidden>{form.entry_type === 'dll' ? 'Not used for DLL' : 'Pick the one that fits best'}</option>
 							{#each CATEGORIES as c (c)}
 								<option value={c}>{c}</option>
 							{/each}
@@ -395,7 +405,7 @@
 				{#if clash}
 					<p class="text-danger">
 						This link is already listed as
-						<a href={resolve('/addon/[slug]', { slug: clash.slug })} class="underline">{clash.name}</a>.
+						<a href={entryHref(clash)} class="underline">{clash.name}</a>.
 					</p>
 				{/if}
 				<div>
@@ -571,6 +581,7 @@
 						name: form.name,
 						description: matched?.description ?? form.description,
 						category: matched?.category ?? form.category,
+						entry_type: matched?.entry_type ?? form.entry_type,
 						repo_url: mainLink
 					}}
 				/>
@@ -578,21 +589,36 @@
 
 			</div>
 			<div class="shrink-0 pt-2">
-				{#if auth.isAdmin && !editSlug && !matched}
-					<div class="mb-3">
-						<label class="flex cursor-pointer items-center gap-2">
-							<input type="checkbox" bind:checked={communityListing} class="accent-accent" aria-describedby="addon-account-help" />
-							<span>Post as a community listing</span>
-						</label>
-						<p id="addon-account-help" class="mt-1 text-sm text-muted italic">Admin only · This addon won’t appear under Your addons.</p>
-					</div>
+				{#if auth.isAdmin}
+					<section class="panel mb-3 p-3" aria-labelledby="admin-options-heading">
+						<h2 id="admin-options-heading" class="label mb-3">Admin options</h2>
+						<div class="grid gap-4 sm:grid-cols-2">
+							<div>
+								<label class="field-label" for="entry-type">Type</label>
+								<select id="entry-type" class="input disabled:opacity-40" disabled={!!matched} bind:value={form.entry_type} aria-describedby="entry-type-help">
+									<option value="addon">Addon</option><option value="dll">DLL mod</option>
+								</select>
+								<p id="entry-type-help" class="hint">Choose which list this entry appears in.</p>
+							</div>
+							{#if !editSlug && !matched}
+								<div>
+									<label class="field-label" for="listing-ownership">Ownership</label>
+									<select id="listing-ownership" class="input" bind:value={communityListing} aria-describedby="addon-account-help">
+										<option value={false}>Your addons</option>
+										<option value={true}>Community listing</option>
+									</select>
+									<p id="addon-account-help" class="hint">This entry {communityListing ? 'won’t' : 'will'} appear under Your addons.</p>
+								</div>
+							{/if}
+						</div>
+					</section>
 				{/if}
 				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
 			<div class="flex gap-2">
 				<button class="btn btn-primary" disabled={saving || fetching || checking}>
 					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? (auth.isAdmin ? 'Add link' : 'Submit for review') : 'Post addon'}
 				</button>
-				<a href={editing ? resolve('/addon/[slug]', { slug: editing.slug }) : resolve('/')} class="btn">
+				<a href={editing ? entryHref(editing) : resolve('/')} class="btn">
 					Cancel
 				</a>
 			</div>

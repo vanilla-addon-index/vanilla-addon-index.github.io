@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { entryHref } from '#lib/entry-href.ts';
 	import { LINK_HOSTS } from '#lib/config.ts';
 	import { linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 
 	type Props = {
-		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url'>;
+		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url' | 'entry_type'>;
 		// Renders the row without links, for the live preview on the submit page.
 		preview?: boolean;
 		// Let the desktop catalogue skip layout for rows outside its scroll viewport.
@@ -40,7 +40,7 @@
 		<!-- The name's link is stretched over the whole row; the addon link sits above it. -->
 		<svelte:element
 			this={preview ? 'span' : 'a'}
-			href={preview ? undefined : resolve('/addon/[slug]', { slug: addon.slug })}
+			href={preview ? undefined : entryHref(addon)}
 			class="min-h-[1lh] truncate after:absolute after:inset-0 sm:max-w-64 sm:shrink-0"
 		>
 			{addon.name}{#if owner}&nbsp;<span class="ml-1 text-muted">{owner}</span>{/if}

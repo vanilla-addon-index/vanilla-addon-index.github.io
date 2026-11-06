@@ -1,3 +1,4 @@
+import { entryPath } from '#lib/entry-path.ts';
 import { SITE_URL } from '#lib/config.ts';
 import { readSnapshot } from '#lib/snapshot.server.ts';
 
@@ -10,7 +11,7 @@ export function GET() {
 		`<url><loc>${SITE_URL}/</loc></url>`,
 		`<url><loc>${SITE_URL}/about</loc></url>`,
 		...addons.map(
-			(a) => `<url><loc>${SITE_URL}/addon/${a.slug}</loc><lastmod>${a.updated_at.slice(0, 10)}</lastmod></url>`
+			(a) => `<url><loc>${SITE_URL}${entryPath(a)}</loc><lastmod>${a.updated_at.slice(0, 10)}</lastmod></url>`
 		)
 	];
 	return new Response(
