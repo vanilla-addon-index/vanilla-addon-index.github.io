@@ -48,7 +48,8 @@ for (const width of [1280, 390]) {
 }
 
 test('admins classify DLL mods with the normal submit and edit forms', async ({page}) => {
- await loginAs(page,'admin');
+ // Leave the primary admin's shared edit budget for the existing moderation journeys.
+ await loginAs(page,'admin2');
  const name=unique('DLL Preview');
  await page.goto('/submit?type=dll');
  await expect(page.getByLabel('Type',{exact:true})).toHaveValue('addon');
