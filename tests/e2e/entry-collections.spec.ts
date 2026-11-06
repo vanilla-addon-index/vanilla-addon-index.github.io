@@ -22,6 +22,7 @@ for (const width of [1280, 390]) {
   await expect(page.getByRole('link',{name:'ClientSample',exact:true})).toHaveAttribute('href','/dll/dll-sample');
   await expect(page.getByRole('link',{name:'RegularSample',exact:true})).toHaveCount(0);
   await expect(page.getByRole('searchbox',{name:'Search DLL mods',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'DLL mod list',exact:true}).getByText('Miscellaneous',{exact:true})).toHaveCount(0);
   if (width >= 768) {
    await expect(page.locator('aside .panel button:enabled')).toHaveCount(0);
    await expect(page.locator('aside .panel button[aria-pressed="true"]')).toHaveCount(0);
@@ -128,6 +129,7 @@ test('DLL detail addresses and old links resolve to the right collection', async
  await page.route('**/rest/v1/addons?*',route=>route.fulfill({json:rows}));
  await page.goto('/dll/client-route');
  await expect(page.getByRole('heading',{level:1,name:'ClientRoute'})).toBeVisible();
+ await expect(page.locator('article a.chip')).toHaveCount(0);
  await expect(page).toHaveURL(/\/dll\/client-route$/);
  await page.reload();
  await expect(page.getByRole('heading',{level:1,name:'ClientRoute'})).toBeVisible();
@@ -136,6 +138,7 @@ test('DLL detail addresses and old links resolve to the right collection', async
  await page.goto('/dll/addon-route');
  await expect(page).toHaveURL(/\/addon\/addon-route$/);
  await expect(page.getByRole('heading',{level:1,name:'AddonRoute'})).toBeVisible();
+ await expect(page.locator('article a.chip')).toHaveText('Combat');
 });
 
 
