@@ -39,7 +39,7 @@ link the replacement project, and apply the bundled migrations:
 ```sh
 supabase login
 supabase link --project-ref <replacement-project-id>
-supabase db push --linked
+supabase db push --remote --yes
 psql "$REPLACEMENT_DATABASE_URL" -v ON_ERROR_STOP=1 -f backup.sql
 ```
 

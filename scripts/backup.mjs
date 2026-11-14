@@ -46,7 +46,7 @@ const TABLES = ['auth.users', 'auth.identities', 'profiles', 'addons', 'import_q
 
 function dump(file) {
 	mkdirSync(dirname(file), { recursive: true });
-	execSync(`${CLI} db dump --linked --data-only --use-copy --schema ${SCHEMAS} --exclude ${LEFT_OUT} --file "${file}"`, {
+	execSync(`${CLI} db dump --remote --data-only --use-copy --schema ${SCHEMAS} --exclude ${LEFT_OUT} --file "${file}"`, {
 		stdio: ['ignore', 'ignore', 'inherit']
 	});
 	const { size } = statSync(file);

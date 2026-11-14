@@ -115,4 +115,4 @@ jobs:
             exit 1
           fi
           supabase link --project-ref mefmmugajnbbotioplfw
-          supabase db push --linked
+          supabase db push --remote --yes
