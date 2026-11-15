@@ -17,7 +17,7 @@ test('long addon names fit mobile catalogue and detail pages without sideways sc
 	}
 });
 
-test('loading mirrors does not move the next download link', async ({ page }) => {
+test('mirrors have their own collapsed row below the source metadata', async ({ page }) => {
 	const source = 'https://github.com/example/FirstDownload';
 	const other = 'https://github.com/example/SecondDownload';
 	const mirror = 'https://octowow.st/git/example/FirstDownload';
@@ -35,16 +35,15 @@ test('loading mirrors does not move the next download link', async ({ page }) =>
 		await route.fulfill({ json: [{ url: mirror, source }] });
 	});
 	await page.goto('/addon/mirror-layout-addon');
-	const first = page.getByRole('link', { name: source, exact: true });
 	const next = page.getByRole('link', { name: other, exact: true });
 	await expect(next).toBeVisible();
-	await page.evaluate(() => document.fonts.ready);
-	const distance = async () => (await next.boundingBox())!.y - (await first.boundingBox())!.y;
-	const before = await distance();
 	response.resolve();
-	const toggle = page.getByRole('button', { name: 'Mirrors (1)', exact: true });
+	const toggle = page.getByText('Mirrors (1)', { exact: true });
 	await expect(toggle).toBeVisible();
-	expect(await distance()).toBe(before);
+	const firstDownload = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: source, exact: true }) });
+	const updated = await firstDownload.getByText('Last update', { exact: true }).boundingBox();
+	expect((await toggle.boundingBox())!.y).toBeGreaterThan(updated!.y + updated!.height);
+	await expect(page.getByRole('link', { name: mirror, exact: true })).toBeHidden();
 	await toggle.click();
 	await expect(page.getByRole('link', { name: mirror, exact: true })).toBeVisible();
 });
