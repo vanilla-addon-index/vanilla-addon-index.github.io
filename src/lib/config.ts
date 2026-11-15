@@ -67,7 +67,7 @@ export const LINK_HOSTS = [
 	'gitea.com',
 	'octowow.st/git'
 ];
-export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co', 'octowow.st/git'];
+export const IMAGE_HOSTS = ['github.com', '*.githubusercontent.com', 'gitlab.com', 'codeberg.org', 'gitea.com', 'i.imgur.com', 'i.postimg.cc', 'i.ibb.co', 'octowow.st/git'];
 
 // Must match addons_screenshots() and screenshot_candidates() in the database.
 export const MAX_IMAGES = 5;

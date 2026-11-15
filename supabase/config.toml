@@ -171,6 +171,10 @@ policy = "per_worker"
 inspector_port = 8083
 deno_version = 2
 
+[functions.octowow-readme]
+# The function validates the caller with Auth so it also supports newer signing keys.
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

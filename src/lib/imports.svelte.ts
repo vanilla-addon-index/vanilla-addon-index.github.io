@@ -14,6 +14,7 @@ export interface QueueItem extends Candidate {
 	status: 'pending' | 'approved' | 'rejected' | 'submitted' | 'dead';
 	// Why the last approval attempt failed, if it did.
 	problem: string | null;
+	readme_checked_at?: string | null;
 	wiki_source?: string | null;
 	wiki_recommended?: boolean;
 }

@@ -5,7 +5,7 @@
 //   npm test
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { askForge, forgePlace } from '../../src/lib/forges.ts';
+import { askForge, forgePlace, forgeReadme, forgeRepositoryEndpoint } from '../../src/lib/forges.ts';
 import { imagesIn } from '../../src/lib/github.ts';
 import { hostAllowed } from '../../src/lib/hosts.ts';
 
@@ -21,6 +21,33 @@ const site = (answers) => {
 	};
 	return { ask, asked };
 };
+
+for (const host of ['gitlab.com', 'codeberg.org', 'gitea.com', 'octowow.st/git']) {
+	test(`README-only lookup on ${host} resolves relative screenshots without checking history or .toc files`, async () => {
+		const place = forgePlace(`https://${host}/team/addon`);
+		const repo = forgeRepositoryEndpoint(place);
+		const gitlab = place.kind === 'gitlab';
+		const listing = gitlab
+			? 'https://gitlab.com/api/v4/projects/42/repository/tree?per_page=100&ref=main'
+			: `${repo}/contents/?ref=main`;
+		const file = gitlab
+			? 'https://gitlab.com/api/v4/projects/42/repository/files/README.md/raw?ref=main'
+			: `${repo}/raw/README.md?ref=main`;
+		const { ask, asked } = site({
+			[repo]: gitlab
+				? { id: 42, path_with_namespace: 'team/addon', default_branch: 'main' }
+				: { full_name: 'team/addon', default_branch: 'main' },
+			[listing]: [{ name: 'README.md', type: gitlab ? 'blob' : 'file' }, { name: 'addon.toc', type: gitlab ? 'blob' : 'file' }],
+			[file]: '![Screenshot](images/shot.png)'
+		});
+		const readme = await forgeReadme(place, ask);
+		const raw = gitlab ? '-/raw/main' : 'raw/branch/main';
+		const images = imagesIn(readme.text, readme.base);
+		assert.deepEqual(images, [`https://${host}/team/addon/${raw}/images/shot.png`]);
+		assert.ok(hostAllowed(images[0], 'image'));
+		assert.deepEqual(asked, [repo, listing, file]);
+	});
+}
 
 describe('where a link to GitLab, Codeberg or gitea.com points', () => {
 	const place = (url) => {

@@ -8,6 +8,8 @@
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
 	import { approve, approveInto, publishEdited, reject, type QueueItem } from '#lib/imports.svelte.ts';
 	import { linkAuthor } from '#lib/links.ts';
+	import { hostAllowed } from '#lib/hosts.ts';
+	import { readmeRepository, repositoryImages } from '#lib/repository-images.ts';
 	import type { Addon } from '#lib/types.ts';
 
 	type Props = {
@@ -28,6 +30,18 @@
 	};
 	let { item, index, selected, verdict, advice, notes, match, forkMatch, onselect, run }: Props = $props();
 
+	let readmeImages = $state<string[]>([]);
+	let readmeRequest: Promise<void> | undefined;
+	function findReadmeImages() {
+		if (verdict === 'wiki' || item.readme_checked_at || item.images.length >= MAX_IMAGES || !readmeRepository(item.url)) return;
+		return readmeRequest ??= repositoryImages(item.url, AbortSignal.timeout(5000))
+			.then((found) => { readmeImages = found.filter((url) => url.length <= 500 && hostAllowed(url, 'image')); })
+			.catch(() => { readmeRequest = undefined; });
+	}
+	$effect(() => {
+		if (selected) void findReadmeImages();
+	});
+
 	// New pages always start without a category, including older queued guesses.
 	const original = $derived({
 		name: item.name.slice(0, 60),
@@ -35,7 +49,7 @@
 		entry_type: (item.entry_type ?? 'addon') as 'addon' | 'dll',
 		author: linkAuthor(item.url),
 		description: item.description,
-		images: item.images.slice(0, MAX_IMAGES)
+		images: [...new Set([...item.images, ...readmeImages])].slice(0, MAX_IMAGES)
 	});
 	type Draft = typeof original;
 	// Only what the admin changed. It lasts while the entry is on the page.
@@ -70,6 +84,7 @@
 		if (saving || verdict === 'wiki') return '';
 		saving = true;
 		try {
+			await findReadmeImages();
 			await publishEdited(item, {
 				name: mergeTarget.name,
 				description: draft.description.trim(),
@@ -107,19 +122,21 @@
 	// once. An edited one is posted the way the submit form does, then marked as imported.
 	const publish = (into?: Addon | null) =>
 		run(async () => {
+			if (saving) return '';
 			if (verdict === 'wiki') throw new Error('Find the download links before approving this wiki article.');
 			into = into === undefined ? destination : into;
 			if (!into && !categoryChosen) throw new Error('Choose a category before approving this import.');
 			if (!into && !descriptionProvided) throw new Error('Add a description before approving this import.');
-			if (edited || destination || draft.category !== item.category || draft.entry_type === 'dll') {
-				saving = true;
-				try {
+			saving = true;
+			try {
+				await findReadmeImages();
+				if (edited || readmeImages.length || destination || draft.category !== item.category || draft.entry_type === 'dll') {
 					await publishEdited(
 						item,
 						{
 							name: draft.name.trim(),
 							description: draft.description.trim(),
-						category: into?.category ?? (draft.entry_type === 'dll' ? clientKind(draft.category) : draft.category),
+							category: into?.category ?? (draft.entry_type === 'dll' ? clientKind(draft.category) : draft.category),
 							entry_type: into?.entry_type ?? draft.entry_type,
 							author: draft.author.trim(),
 							versions: [{ url: item.url, note: '' }],
@@ -127,16 +144,16 @@
 						},
 						into ?? undefined
 					);
-				} finally {
-					saving = false;
+					return '';
 				}
-				return '';
+				if (into) {
+					await approveInto(item, into);
+					return '';
+				}
+				return (await approve([item.id])) ? '' : `"${item.name}" could not be published; the reason is on the entry.`;
+			} finally {
+				saving = false;
 			}
-			if (into) {
-				await approveInto(item, into);
-				return '';
-			}
-			return (await approve([item.id])) ? '' : `"${item.name}" could not be published; the reason is on the entry.`;
 		});
 
 	const turnDown = () =>

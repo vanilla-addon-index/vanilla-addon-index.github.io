@@ -9,6 +9,9 @@ export const test = base.extend<{ policy: void }>({
 	policy: [
 		async ({ page }, use) => {
 			const refused: string[] = [];
+			// Test repositories are synthetic. A test that needs a README supplies its own response.
+			await page.route(/^https:\/\/(?:api\.github\.com\/repos\/|gitlab\.com\/api\/v4\/projects\/|(?:codeberg\.org|gitea\.com)\/api\/v1\/repos\/)/,
+				route => route.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' } }));
 			page.on('console', (message) => {
 				if (/Content Security Policy/i.test(message.text())) refused.push(message.text());
 			});

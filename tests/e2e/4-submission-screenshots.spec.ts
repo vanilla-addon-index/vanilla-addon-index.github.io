@@ -47,7 +47,7 @@ for (const who of ['admin', 'member'] as const) test(`same-name ${who} submissio
 });
 
 
-test('a matching submission still fetches screenshots from its repository README', async ({ page }) => {
+test('a matching submission automatically fetches screenshots from its repository README', async ({ page }) => {
  const name = unique('Readme screenshots');
  const repository = 'ScreenshotFork-' + name.replace(/\W+/g, '-');
  await page.route('https://github.com/user-attachments/assets/**', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') }));
@@ -60,7 +60,7 @@ test('a matching submission still fetches screenshots from its repository README
  await page.goto('/submit');
  await page.getByLabel('Addon name', { exact: true }).fill(name);
  await page.getByLabel('Link to the addon', { exact: true }).fill(`https://github.com/e2e/${repository}`);
- await page.getByRole('button', { name: 'Fetch README images', exact: true }).click();
+ await page.getByLabel('Link to the addon', { exact: true }).press('Tab');
  await expect(page.locator('fieldset img')).toHaveAttribute('src', stable);
  await page.getByRole('button', { name: 'Add link', exact: true }).click();
  await expect(page).toHaveURL(address);
@@ -81,4 +81,27 @@ test('editing a release URL saves on the first click without fetching images', a
  expect(reads).toBe(0);
  await page.getByRole('link', { name: 'Edit', exact: true }).click();
  await expect(page.getByLabel('Link to the addon', { exact: true })).toHaveValue(`https://github.com/e2e/${name.replace(/\W+/g, '-')}`);
+});
+
+test('a member can post a relative README screenshot hosted on Gitea', async ({ page }) => {
+ const name = unique('Gitea screenshots');
+ const repository = `e2e/${name.replace(/\W+/g, '-')}`;
+ const api = `https://gitea.com/api/v1/repos/${repository}`;
+ const image = `https://gitea.com/${repository}/raw/branch/main/shot.png`;
+ const headers = { 'Access-Control-Allow-Origin': '*' };
+ await page.route(api, route => route.fulfill({ headers, json: { full_name: repository, default_branch: 'main' } }));
+ await page.route(url => url.href === `${api}/contents/?ref=main`, route => route.fulfill({
+  headers, json: [{ name: 'README.md', type: 'file' }]
+ }));
+ await page.route(url => url.href === `${api}/raw/README.md?ref=main`, route => route.fulfill({ headers, body: '![Screenshot](shot.png)' }));
+ await page.route(image, route => route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') }));
+ await loginAs(page, 'member');
+ await page.goto('/submit');
+ await page.getByLabel('Addon name', { exact: true }).fill(name);
+ await page.getByLabel('Link to the addon', { exact: true }).fill(`https://gitea.com/${repository}`);
+ await page.getByLabel('Category', { exact: true }).selectOption('Combat');
+ await page.getByLabel('Description', { exact: true }).fill('An add-on with a README screenshot hosted by Gitea.');
+ await expect(page.locator('fieldset img')).toHaveAttribute('src', image);
+ await page.getByRole('button', { name: 'Post addon' }).click();
+ await expect(page.getByRole('button', { name: /^View screenshot/ }).locator('img')).toHaveAttribute('src', image);
 });

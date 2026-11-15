@@ -166,6 +166,42 @@ const SITES = {
 
 export const forgeRepositoryEndpoint = (place: ForgePlace): string => SITES[place.kind].repo(place);
 
+type ForgeSite = (typeof SITES)[ForgePlace['kind']];
+
+function repositoryApi(place: ForgePlace, repo: ReturnType<ForgeSite['read']>) {
+	return place.kind === 'gitlab' ? `https://${place.host}/api/v4/projects/${encodeURIComponent(repo.id)}` : `https://${forgeHostPath(place.host)}/api/v1/repos/${encodePath(repo.project)}`;
+}
+
+async function fileText(site: ForgeSite, api: string, ref: string, path: string, ask: Ask) {
+	const file = await ask(site.file(api, ref, path), 'text');
+	return file?.status === 404 ? '' : file?.status === 200 && typeof file.body === 'string' ? file.body : null;
+}
+
+async function readmeFromEntries(place: ForgePlace, project: string, ref: string, entries: Entry[], read: (path: string) => Promise<string | null>) {
+	const name = entries.find((e) => !e.folder && /^readme(\.(md|markdown|mdown|txt|rst))?$/i.test(e.name))?.name;
+	if (!name) return null;
+	const path = place.path ? `${place.path}/${name}` : name;
+	const text = await read(path);
+	return text === null ? undefined : { text, base: SITES[place.kind].raw(place, project, ref, path) };
+}
+
+/** Just the README, without the nightly job's history and game-version lookups. */
+export async function forgeReadme(place: ForgePlace, ask: Ask) {
+	const site = SITES[place.kind];
+	const answer = await ask(site.repo(place), 'json');
+	if (answer?.status === 404) return null;
+	if (answer?.status !== 200 || !answer.body || typeof answer.body !== 'object') return undefined;
+	const repo = site.read(answer.body as Record<string, any>);
+	if (!repo.project) return undefined;
+	const ref = place.ref || repo.branch;
+	if (!ref) return null;
+	const api = repositoryApi(place, repo);
+	const listing = await ask(site.list(api, ref, place.path), 'json');
+	if (listing?.status === 404 && place.path) return null;
+	if (listing?.status !== 200 || !Array.isArray(listing.body)) return undefined;
+	return readmeFromEntries(place, repo.project, ref, listing.body.map(site.entry), (path) => fileText(site, api, ref, path, ask));
+}
+
 /**
  * Asks a site about one repository. Nothing when the site gave no usable answer about the
  * repository itself, so that what is known from last time can stay as it is; a repository
@@ -184,7 +220,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 	const repo = site.read(answer.body as Record<string, any>);
 	if (!repo.project) return null;
 	// GitLab's other addresses go by the project's number, Gitea's by its current name.
-	const api = place.kind === 'gitlab' ? `https://${place.host}/api/v4/projects/${repo.id}` : `https://${forgeHostPath(place.host)}/api/v1/repos/${encodePath(repo.project)}`;
+	const api = repositoryApi(place, repo);
 	const facts: ForgeFacts = {
 		project: repo.project,
 		stars: repo.stars,
@@ -252,11 +288,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 	const listing = await ask(site.list(api, readRef, place.path), 'json');
 	if (listing?.status !== 200 || !Array.isArray(listing.body)) return finish();
 	const entries = listing.body.map(site.entry);
-	const within = place.path ? `${place.path}/` : '';
-	const text = async (path: string): Promise<string | null> => {
-		const file = await ask(site.file(api, readRef, path), 'text');
-		return file?.status === 404 ? '' : file?.status === 200 && typeof file.body === 'string' ? file.body : null;
-	};
+	const text = (path: string) => fileText(site, api, readRef, path, ask);
 
 	// An addon's .toc is at the top of what the link points to, or one folder down in a
 	// folder of the same name.
@@ -282,10 +314,9 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 	}
 
 	if (wantReadme && !facts.readme_checked) {
-		const name = entries.find((e) => !e.folder && /^readme(\.(md|markdown|mdown|txt|rst))?$/i.test(e.name))?.name;
-		const content = name ? await text(`${within}${name}`) : '';
-		facts.readme_checked = content !== null;
-		if (name && content !== null) facts.readme = { text: content, base: site.raw(place, repo.project, ref, `${within}${name}`) };
+		const readme = await readmeFromEntries(place, repo.project, ref, entries, text);
+		facts.readme_checked = readme !== undefined;
+		facts.readme = readme ?? null;
 		// Bound cached text; long READMEs can be checked again without risking a failed save.
 		if (state && facts.readme_checked && (!facts.readme || facts.readme.text.length <= 8000)) state.readme = facts.readme;
 	}

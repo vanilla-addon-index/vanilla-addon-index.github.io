@@ -1,6 +1,6 @@
 import { MAX_IMAGES } from './config.ts';
 
-const REPO = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i;
+const REPO = /^https:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i;
 // Markdown ![alt](url) and HTML <img src="url">.
 const IMAGE = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?[^)]*\)|<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/gi;
 // Build badges, donation buttons and the like are not screenshots.
@@ -59,12 +59,13 @@ export function imagesIn(readme: string, base: string): string[] {
 }
 
 /** Image links found in the README of a GitHub repository, in document order. */
-export async function readmeImages(repoUrl: string): Promise<string[]> {
+export async function readmeImages(repoUrl: string, signal?: AbortSignal): Promise<string[]> {
 	const match = REPO.exec(repoUrl.trim());
 	if (!match) return [];
 
 	const res = await fetch(`https://api.github.com/repos/${match[1]}/${match[2]}/readme`, {
-		headers: { Accept: 'application/vnd.github+json' }
+		headers: { Accept: 'application/vnd.github+json' },
+		signal
 	});
 	if (res.status === 404) return [];
 	if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
