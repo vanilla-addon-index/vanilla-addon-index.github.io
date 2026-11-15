@@ -52,6 +52,9 @@ export default defineConfig(({ mode }) => {
 							'self',
 							database,
 							'https://api.github.com',
+							'https://gitlab.com',
+							'https://codeberg.org',
+							'https://gitea.com',
 							'https://turtle-wow.fandom.com',
 							'https://cloudflareinsights.com/cdn-cgi/rum'
 						],

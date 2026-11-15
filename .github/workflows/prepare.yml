@@ -79,14 +79,12 @@ jobs:
           key: ${{ steps.identity.outputs.key }}
 
   migrate:
-    # Brings the hosted database up to supabase/migrations before the site that needs it
-    # goes out. A failure stops the deploy, so the site is never ahead of its database.
-    # This job installs the Supabase tool and nothing else.
+    # Applies migrations and deploys the README function before publishing the site.
     #
     # From main only. A run started by hand on another branch would otherwise apply that
     # branch's migrations, which nobody has merged, to the hosted database. There it stops
     # after the checks: this job is skipped, and the deploy that needs it with it.
-    name: Database migrations
+    name: Prepare Supabase
     needs: check
     if: github.ref == 'refs/heads/main'
     # The secrets are kept in this environment, which only main may use, so a workflow
@@ -104,7 +102,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The version the lockfile names, so it is the tool the migrations were tested with.
       - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
-      - name: Apply database migrations
+      - name: Apply migrations and deploy README function
         # Missing credentials fail before any dependent import or build can start.
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -116,3 +114,4 @@ jobs:
           fi
           supabase link --project-ref mefmmugajnbbotioplfw
           supabase db push --remote --yes
+          supabase functions deploy octowow-readme --project-ref mefmmugajnbbotioplfw --use-api

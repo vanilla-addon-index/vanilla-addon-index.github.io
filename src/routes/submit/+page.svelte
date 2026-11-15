@@ -18,7 +18,8 @@
 	import { repositoryName } from '#lib/repository-name.ts';
 	import { linkKey, repositoryLink } from '#lib/links.ts';
 	import { loginHref } from '#lib/return.ts';
-	import { isGithubRepo, readmeImages, screenshotUrl } from '#lib/github.ts';
+	import { screenshotUrl } from '#lib/github.ts';
+	import { readmeRepository, repositoryImages } from '#lib/repository-images.ts';
 	import { contributionAccess, contentOf, ownPendingEdit, proposeEdit, withdrawEdit, displayEditValue, FIELD_LABELS, type EditRequest, type EditField } from '#lib/edit-reviews.svelte.ts';
 	import type { Addon, AddonInput } from '#lib/types.ts';
 
@@ -137,6 +138,10 @@
 	let imageNote = $state('');
 	let fetching = $state(false);
 	let checking = $state(false);
+	let readmeNote = $state('');
+	let readmeFailed = $state(false);
+	let readmeRequest: { repository: string; controller: AbortController; done: Promise<void> } | undefined;
+	let importedImages: string[] = [];
 	// Images the poster removed stay removed when the README is read again.
 	const removed = new Set<string>();
 	// Screenshots already on the addon whose link no longer shows a picture.
@@ -151,9 +156,9 @@
 		(kind === 'link' ? editing?.versions.some((v) => v.url === url) : editing?.images.includes(url)) === true;
 
 	function addImages(urls: string[]) {
-		const fresh = [...new Set(urls.map(screenshotUrl))].filter((u) => !form.images.includes(u) && !removed.has(u) && mayUse(u, 'image')).slice(0, Math.max(0, MAX_IMAGES - form.images.length));
+		const fresh = [...new Set(urls.map(screenshotUrl))].filter((u) => u.length <= 500 && !form.images.includes(u) && !removed.has(u) && mayUse(u, 'image')).slice(0, Math.max(0, MAX_IMAGES - form.images.length));
 		form.images = [...form.images, ...fresh];
-		return fresh.length;
+		return fresh;
 	}
 
 	function removeImage(url: string) {
@@ -188,28 +193,49 @@
 				'That link opens a web page or album, not an image. Right-click the image, choose "Copy image address" and paste that.');
 		}
 		removed.delete(url);
+		importedImages = importedImages.filter((image) => image !== url);
 		addImages([url]);
 		imageLink = '';
 		imageNote = '';
 	}
 
-	async function fetchReadmeImages() {
-		if (!isGithubRepo(mainLink) || fetching) return;
-		fetching = true;
-		imageNote = '';
-		try {
-			const found = await readmeImages(mainLink);
-			const added = addImages(found);
-			imageNote = !found.length
-				? 'No images found in the README.'
-				: added
-					? `Added ${added} from the README. Remove any you do not want.`
-					: '';
-		} catch {
-			imageNote = 'Could not read the README from GitHub. Try again in a moment.';
-		} finally {
+	function fetchReadmeImages(retry = false) {
+		const url = mainLink;
+		const repository = readmeRepository(url);
+		if (readmeRequest && readmeRequest.repository !== repository) {
+			readmeRequest.controller.abort();
+			readmeRequest = undefined;
+			form.images = form.images.filter((image) => !importedImages.includes(image));
+			importedImages = [];
+			readmeNote = '';
+			readmeFailed = false;
 			fetching = false;
 		}
+		if (!repository || form.images.length >= MAX_IMAGES) return;
+		if (readmeRequest && (!retry || fetching)) return readmeRequest.done;
+
+		const controller = new AbortController();
+		fetching = true;
+		readmeNote = '';
+		readmeFailed = false;
+		const done = repositoryImages(url, AbortSignal.any([controller.signal, AbortSignal.timeout(5000)])).then((found) => {
+			if (controller.signal.aborted) return;
+			const added = addImages(found);
+			if (!editSlug) importedImages.push(...added);
+			readmeNote = !found.length
+				? 'No images found in the README.'
+				: added.length
+					? `Added ${added.length} from the README. Remove any you do not want.`
+					: '';
+		}).catch(() => {
+			if (controller.signal.aborted) return;
+			readmeFailed = true;
+			readmeNote = 'Could not read the repository README.';
+		}).finally(() => {
+			if (!controller.signal.aborted) fetching = false;
+		});
+		readmeRequest = { repository, controller, done };
+		return done;
 	}
 
 	const descriptionLength = $derived(form.description.trim().length);
@@ -235,7 +261,7 @@
 
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
-		if (fetching || checking) return;
+		if (saving || (editSlug && fetching) || checking) return;
 		error = '';
 		for (let index = 0; index < form.versions.length; index++) {
 			if (matched && index > 0) continue;
@@ -269,6 +295,10 @@
 		saving = true;
 		const showWikiHelper = !editing && !matched;
 		try {
+			if (!editSlug) {
+				await fetchReadmeImages();
+				input.images = [...form.images];
+			}
 			if (proposing && editing && proposalBase) {
 				await proposeEdit(editing.id, input, proposalBase);
 				await goto(entryHref(editing) + '?proposed=1');
@@ -369,7 +399,11 @@
 							pattern="https://.*"
 							placeholder="https://github.com/author/addon"
 							bind:value={form.versions[0].url}
-							onchange={() => { form.versions[0].url = repositoryLink(mainLink); }}
+							onchange={() => {
+								form.versions[0].url = repositoryLink(mainLink);
+								if (!editSlug) void fetchReadmeImages();
+							}}
+							disabled={saving}
 							aria-invalid={!!linkErrors[0]} aria-describedby={linkErrors[0] ? 'repo-error' : undefined}
 							oninvalid={(event) => { event.preventDefault(); validateLink(0); event.currentTarget.focus(); }}
 							onblur={() => { if (form.versions[0].url.trim()) validateLink(0); }}
@@ -558,17 +592,15 @@
 							{checking ? 'Checking…' : 'Add'}
 						</button>
 					</div>
-					{#if isGithubRepo(mainLink)}
-						<button type="button" class="btn" disabled={fetching || saving || form.images.length >= MAX_IMAGES} onclick={fetchReadmeImages}>{fetching ? 'Fetching images...' : 'Fetch README images'}</button>
+					{#if readmeRepository(mainLink) && (editSlug || readmeFailed)}
+						<button type="button" class="btn" disabled={fetching || saving || form.images.length >= MAX_IMAGES} onclick={() => fetchReadmeImages(true)}>{editSlug ? 'Fetch README images' : 'Retry README images'}</button>
 					{/if}
 					<p class={['hint', imageNote.startsWith('That link') && 'text-danger']}>
-						{fetching
-							? 'Reading the README…'
-							: imageNote ||
-								(auth.isAdmin
-									? 'Use the button to fetch images from a GitHub README. You can also paste a link to an image.'
-									: `Use the button to fetch images from a GitHub README. You can also paste a link to an image kept on one of: ${hostNames('image')}.`)}
+						{imageNote || (auth.isAdmin
+							? 'You can paste a direct image link.'
+							: `You can paste a direct image link from ${hostNames('image')}.`)}
 					</p>
+					<p class="hint" aria-live="polite">{fetching ? 'Reading the README…' : readmeNote}</p>
 				</div>
 			</fieldset>
 
@@ -616,7 +648,7 @@
 				{/if}
 				<div aria-live="polite">{#if error}<p class="mb-2 text-danger">{error}</p>{/if}</div>
 			<div class="flex gap-2">
-				<button class="btn btn-primary" disabled={saving || fetching || checking}>
+				<button class="btn btn-primary" disabled={saving || (editSlug && fetching) || checking}>
 					{saving ? 'Saving…' : proposing ? 'Submit for review' : editing ? 'Save changes' : matched ? (auth.isAdmin ? 'Add link' : 'Submit for review') : 'Post addon'}
 				</button>
 				<a href={editing ? entryHref(editing) : resolve('/')} class="btn">

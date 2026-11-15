@@ -37,18 +37,22 @@ test('a member submission clears its pending import without an admin approval', 
 });
 
 // import screenshots
-test('importing a same-name link adds reviewed screenshots to the existing page', async ({page}) => {
+test('importing an unchecked same-name link fetches README screenshots for review', async ({page}) => {
  const name = unique('Import screenshots');
  await loginAs(page,'admin');
  const address = await postAddon(page,name);
  let candidateId: number | undefined;
  const keep = 'https://i.imgur.com/import-keep.png';
  const remove = 'https://i.imgur.com/import-remove.png';
+ await page.route(/^https:\/\/api\.github\.com\/repos\/wiki\d+\/[^/]+\/readme$/, route => route.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: {
+  content: Buffer.from(`![Keep](${keep})\n![Remove](${remove})`).toString('base64'),
+  download_url: 'https://raw.githubusercontent.com/e2e/import/main/README.md'
+ } }));
  await page.route('https://i.imgur.com/import-*.png', route => route.fulfill({
   contentType:'image/png', body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jq1kAAAAASUVORK5CYII=','base64')
  }));
  // Use a remaining pending candidate, rather than a seed entry another test
- // may have approved. Give its preview our fresh page's name and two pictures.
+ // may have approved. Give its preview our fresh page's name and no checked README.
  // Approval sends these reviewed fields through the real database function.
  await page.route('**/rest/v1/import_queue?*',async route => {
   if (route.request().method() !== 'GET') return route.continue();
@@ -58,7 +62,8 @@ test('importing a same-name link adds reviewed screenshots to the existing page'
    candidateId ??= body.find(row => row.status === 'pending')?.id;
    for (const row of body) if(row.id === candidateId) {
     row.name = name;
-    row.images = [keep,remove];
+    row.images = [];
+    row.readme_checked_at = null;
    }
   }
   await route.fulfill({response,json:body});
@@ -66,6 +71,7 @@ test('importing a same-name link adds reviewed screenshots to the existing page'
  await page.goto('/admin/import');
  const entry=page.locator('[data-entry]').filter({has:page.getByRole('button',{name:`Add link to ${name}`,exact:true})});
  await expect(entry).toBeVisible();
+ await entry.getByLabel('Name', { exact: true }).click();
  await expect(entry.getByText(/\+2 pictures/)).toBeVisible();
  await entry.getByRole('button',{name:'Remove this screenshot'}).last().click();
  await chooseImportCategory(entry);

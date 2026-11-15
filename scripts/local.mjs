@@ -15,7 +15,7 @@ import { LOCAL_ACCOUNTS, LOCAL_PASSWORD } from '../src/lib/local-accounts.ts';
 import { dllDemoSql } from './local-dll-demo.mjs';
 
 // The site only needs the database, the API and the login service.
-const LEFT_OUT = 'realtime,storage-api,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor';
+const LEFT_OUT = 'realtime,storage-api,imgproxy,mailpit,logflare,vector,supavisor';
 const DB_CONTAINER = 'supabase_db_vanilla-addon-index';
 const ENV_FILE = '.env.localdb';
 
