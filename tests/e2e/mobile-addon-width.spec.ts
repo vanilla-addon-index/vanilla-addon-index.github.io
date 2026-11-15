@@ -16,3 +16,35 @@ test('long addon names fit mobile catalogue and detail pages without sideways sc
 		expect(await heading.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 	}
 });
+
+test('loading mirrors does not move the next download link', async ({ page }) => {
+	const source = 'https://github.com/example/FirstDownload';
+	const other = 'https://github.com/example/SecondDownload';
+	const mirror = 'https://octowow.st/git/example/FirstDownload';
+	const addon = {
+		id: 99002, slug: 'mirror-layout-addon', name: 'Mirror layout addon', description: 'An addon with two downloads.',
+		category: 'UI & Appearance', author: 'Example', versions: [source, other].map(url => ({ url, note: '' })),
+		repo_url: source, images: [], aliases: [], source: '', is_main: true, shared: true,
+		created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z'
+	};
+	await page.setViewportSize({ width: 320, height: 844 });
+	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: [addon] }));
+	const response = Promise.withResolvers<void>();
+	await page.route('**/rest/v1/rpc/addon_mirrors', async route => {
+		await response.promise;
+		await route.fulfill({ json: [{ url: mirror, source }] });
+	});
+	await page.goto('/addon/mirror-layout-addon');
+	const first = page.getByRole('link', { name: source, exact: true });
+	const next = page.getByRole('link', { name: other, exact: true });
+	await expect(next).toBeVisible();
+	await page.evaluate(() => document.fonts.ready);
+	const distance = async () => (await next.boundingBox())!.y - (await first.boundingBox())!.y;
+	const before = await distance();
+	response.resolve();
+	const toggle = page.getByRole('button', { name: 'Mirrors (1)', exact: true });
+	await expect(toggle).toBeVisible();
+	expect(await distance()).toBe(before);
+	await toggle.click();
+	await expect(page.getByRole('link', { name: mirror, exact: true })).toBeVisible();
+});
