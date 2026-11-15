@@ -86,7 +86,7 @@ export async function countImports() {
 
 export async function loadQueue() {
 	const [items, stats, pending, approved, rejected, submitted, dead] = await Promise.all([
-		all<QueueItem>('pending_imports'),
+		all<QueueItem>('pending_imports', ['status', 'pending']),
 		all<RepoStats>('repo_stats_current'),
 		count('pending'),
 		count('approved'),

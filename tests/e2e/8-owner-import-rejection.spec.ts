@@ -4,7 +4,7 @@ import { loginAs } from './helpers.ts';
 for (const who of ['admin', 'owner'] as const) {
  test(`${who} restore controls respect owner rejections`, async ({ page }) => {
   await loginAs(page, who);
-  await page.route('**/rest/v1/import_queue?*', async route => {
+  await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
    if (route.request().method() !== 'GET' || !route.request().url().includes('status=eq.rejected')) return route.continue();
    const response = await route.fetch();
    const rows = await response.json();

@@ -26,7 +26,7 @@ for (const who of ['member', 'admin'] as const) {
 
 test('import review keeps letter-key choices after closing and publishes that category', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		await route.fulfill({response,json:[{...rows[0],name:'UnknownWidget',description:'Does useful things',category:''}]});

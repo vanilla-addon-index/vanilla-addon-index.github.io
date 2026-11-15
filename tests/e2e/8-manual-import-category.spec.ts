@@ -7,7 +7,7 @@ test('same-name imports inherit the existing category and keyboard approval need
 		const response = await route.fetch(), rows = await response.json();
 		await route.fulfill({response, json:rows.map(row => row.id === 1 ? {...row, name:'OpaqueWidget', category:'Professions'} : row)});
 	});
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/opaquewidget', url:'https://github.com/a/OpaqueWidget', name:'OpaqueWidget', category:'', description:''}]});
@@ -35,7 +35,7 @@ test('same-name imports inherit the existing category and keyboard approval need
 
 test('repository evidence and old guesses do not preselect a category', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
@@ -71,7 +71,7 @@ test('old archived imports stay quiet, omit the obsolete filter and preserve adm
 		key:'github.com/a/chatmonitor', pushed_at:'2010-01-01T00:00:00Z', stars:1,
 		missing:false, archived:true, interface:11200, fork_of:null, canonical:null
 	}]}));
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
@@ -94,7 +94,7 @@ test('old archived imports stay quiet, omit the obsolete filter and preserve adm
 
 test('new imports have a blank category and cannot be approved until an admin chooses', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
