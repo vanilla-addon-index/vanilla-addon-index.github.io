@@ -71,7 +71,8 @@ where q.status = 'pending'
   or not exists (
    select 1 from public.addons a
    cross join lateral jsonb_array_elements(a.versions) v
-   where a.link_keys @> array[public.link_key(m.source)]
+   where a.entry_type = q.entry_type
+    and a.link_keys @> array[public.link_key(m.source)]
     and public.mirror_repository_root(v->>'url') = m.source
     and not exists (
      select 1 from public.repo_stats r where r.key = public.link_key(m.source) and r.missing
