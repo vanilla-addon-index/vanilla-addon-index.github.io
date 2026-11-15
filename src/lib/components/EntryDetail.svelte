@@ -44,7 +44,6 @@
 	let success = $state('');
 	let mirrorResult = $state.raw<{ id: number; rows: { url: string; source: string | null }[] }>();
 	const mirrors = $derived(mirrorResult && mirrorResult.id === addon?.id ? mirrorResult.rows : []);
-	let expandedMirrorSources = $state<Record<string, boolean>>({});
 	const mirrorVersions = $derived(addon?.versions.map(version => version.url).sort().join('\n'));
 	let inactiveMirrors = $state<{ url: string; decision: 'independent' | 'removed' }[]>([]);
 	let mirrorUrl = $state('');
@@ -303,10 +302,9 @@
 				<!-- Pinned link first, otherwise newest known code update. -->
 				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
 				<ol>
-					{#each addon.versions as version, index (version.url)}
+					{#each addon.versions as version (version.url)}
 						{@const update = addon.link_code_updates?.[version.url] ?? (version.url === addon.repo_url ? addon.code_update : null)}
 						{@const sourceMirrors = mirrors.filter(mirror => mirror.source === version.url)}
-						{@const mirrorListId = `download-mirrors-${addon.id}-${index}`}
 						<li class="border-b border-border px-3 py-3 last:border-b-0">
 							<a
 								href={version.url}
@@ -320,33 +318,21 @@
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
                             <dl class="mt-2 space-y-1 text-sm">
                                 <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Author</dt><dd class="min-w-0 break-words text-right">{(!addon.shared ? addon.author : '') || linkAuthor(version.url) || 'Unknown'}</dd></div>
-								<div class="flex items-baseline justify-between gap-2">
-									<dt class="shrink-0 text-muted">Last update</dt>
-									<dd class="grid min-w-0 flex-1 grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-2">
-										<span>
-											{#if sourceMirrors.length}
-												<button class="cursor-pointer whitespace-nowrap text-muted hover:text-accent hover:underline"
-													aria-expanded={Boolean(expandedMirrorSources[version.url])}
-													aria-controls={mirrorListId}
-													onclick={() => (expandedMirrorSources[version.url] = !expandedMirrorSources[version.url])}>
-													Mirrors ({sourceMirrors.length})
-												</button>
-											{/if}
-										</span>
-										<span class="truncate text-right">
-											{#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title={`${date(update.date)} · View commit history`}><time datetime={update.date}>{date(update.date)}</time></a>
-											{:else}<span class="text-muted">Unknown</span>{/if}
-										</span>
-									</dd>
-								</div>
+								<div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Last update</dt><dd>
+									{#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history"><time datetime={update.date}>{date(update.date)}</time></a>
+									{:else}<span class="text-muted">Unknown</span>{/if}
+								</dd></div>
                             </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
 							{#if sourceMirrors.length}
-								<ul id={mirrorListId} hidden={!expandedMirrorSources[version.url]} class="space-y-1 pl-4 pt-1 text-sm">
-									{#each sourceMirrors as mirror (mirror.url)}
-										<li><a class="break-all text-accent hover:underline" href={mirror.url} target="_blank" rel="noopener nofollow">{mirror.url}</a></li>
-									{/each}
-								</ul>
+								<details class="mt-2 text-sm text-muted">
+									<summary class="cursor-pointer hover:text-accent">Mirrors ({sourceMirrors.length})</summary>
+									<ul class="space-y-1 pl-4 pt-1">
+										{#each sourceMirrors as mirror (mirror.url)}
+											<li><a class="break-all text-accent hover:underline" href={mirror.url} target="_blank" rel="noopener nofollow">{mirror.url}</a></li>
+										{/each}
+									</ul>
+								</details>
 							{/if}
                             {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
