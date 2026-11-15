@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { readOctowow } from '../../src/lib/octowow.ts';
+import { repositoryRoot } from '../../src/lib/mirrors.ts';
 
 const original = globalThis.fetch;
 afterEach(() => { globalThis.fetch = original; });
@@ -37,4 +38,29 @@ test('invalid responses and repeating pagination fail before returning candidate
 	await assert.rejects(readOctowow());
 	globalThis.fetch = async () => json({ok:true,data:[{full_name:'Ade/AdeAlts',name:'AdeAlts'}]});
 	await assert.rejects(readOctowow(), /repeated/);
+});
+
+test('discovery reports explicit mirrors without dropping any candidate', async () => {
+	const repos = [
+		{full_name:'lightblade/CombatLedger', name:'CombatLedger', mirror:true, original_url:'https://github.com/akzkak/CombatLedger.git'},
+		{full_name:'someone/Fork', name:'Fork', fork:true, original_url:'https://github.com/akzkak/CombatLedger'},
+		{full_name:'someone/Unknown', name:'Unknown', mirror:true, original_url:'https://github.com/akzkak/CombatLedger/tree/main'}
+	];
+	globalThis.fetch = async url => json({ok:true, data: new URL(url).searchParams.get('page') === '1' ? repos : []});
+	assert.deepEqual((await readOctowow()).map(candidate => candidate.mirror_source), [
+		'https://github.com/akzkak/CombatLedger', null, null
+	]);
+});
+
+test('mirror identity requires a supported repository root', () => {
+	assert.equal(repositoryRoot('https://gitlab.com/group/subgroup/project'), 'https://gitlab.com/group/subgroup/project');
+	assert.equal(repositoryRoot('https://octowow.st/git/lightblade/CombatLedger'), 'https://octowow.st/git/lightblade/CombatLedger');
+	for (const url of [
+		'https://gitlab.com/group/project/-/tree/main',
+		'https://github.com/akzkak/CombatLedger/tree/main/Addon',
+		'https://github.com/akzkak/CombatLedger?ref=main',
+		'https://github.com/akzkak/CombatLedger/../Other',
+		'https://codeberg.org/owner/repo/src/branch/main',
+		'https://unknown.example/owner/repo'
+	]) assert.equal(repositoryRoot(url), null, url);
 });

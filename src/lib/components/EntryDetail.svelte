@@ -21,6 +21,8 @@
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
 	import { linkAuthor } from '#lib/links.ts';
+	import { repositoryRoot } from '#lib/mirrors.ts';
+	import { confirmedMirrorLinks, retireMirrorLink } from '#lib/admin.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
@@ -40,6 +42,39 @@
 
 	let error = $state('');
 	let success = $state('');
+	let mirrorSources = $state<Record<string, string>>({});
+	let retiringMirror = $state(false);
+	$effect(() => {
+		mirrorSources = {};
+		if (!auth.isAdmin || auth.banned || !addon || addon.versions.length < 2) return;
+		const urls = addon.versions.map(version => repositoryRoot(version.url)).filter(url => url !== null);
+		let current = true;
+		confirmedMirrorLinks(urls).then(rows => {
+			if (!current) return;
+			const mirrors = new Set(rows.map(row => row.url));
+			mirrorSources = Object.fromEntries(rows.filter(row => urls.includes(row.source) && !mirrors.has(row.source))
+				.map(row => [row.url, row.source]));
+		}).catch(e => { if (current) error = e.message; });
+		return () => { current = false; };
+	});
+	async function retireMirror(link: string, source: string) {
+		if (!addon || retiringMirror) return;
+		const { id, slug } = addon;
+		retiringMirror = true;
+		try {
+			if (!await ask({
+				title: 'Remove confirmed mirror?',
+				body: `This removes the mirror link from this page. Its source ${source} remains listed.`,
+				action: 'Remove mirror',
+				danger: true
+			})) return;
+			await change(async () => {
+				await retireMirrorLink(id, link, source);
+				await fetchAddon(slug);
+				success = 'Mirror link removed.';
+			});
+		} finally { retiringMirror = false; }
+	}
 	let separating = $state(false);
 	let renameLink = $state('');
 	let separateName = $state('');
@@ -254,6 +289,7 @@
 				<ol>
 					{#each addon.versions as version (version.url)}
 						{@const update = addon.link_code_updates?.[version.url] ?? (version.url === addon.repo_url ? addon.code_update : null)}
+						{@const mirrorSource = mirrorSources[repositoryRoot(version.url) ?? '']}
 						<li class="border-b border-border px-3 py-3 last:border-b-0">
 							<a
 								href={version.url}
@@ -273,6 +309,10 @@
                                 </dd></div>
                             </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
+							{#if auth.isAdmin && !auth.banned && mirrorSource && !addon.unavailable_links?.some(url => repositoryRoot(url) === mirrorSource)}
+								<button class="btn mt-1 px-2 py-0.5 text-sm" disabled={retiringMirror}
+									onclick={() => retireMirror(version.url, mirrorSource)}>Remove mirror</button>
+							{/if}
                             {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
 					{/each}

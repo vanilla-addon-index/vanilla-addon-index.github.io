@@ -4,6 +4,7 @@
 // job decides about timeouts and manners, and a test can answer in a site's place.
 
 import type { CodeUpdate } from './types.ts';
+import { declaredMirrorSource } from './mirrors.ts';
 import { CHECK_CACHE_VERSION, forgeCache, gitOid, githubFiles, type ForgeCacheControl, type ForgeCheckCache } from './nightly-cache.ts';
 
 const GITEA_HOSTS = ['codeberg.org', 'gitea.com', 'octowow.st'];
@@ -39,6 +40,7 @@ export interface ForgeFacts {
 	archived: boolean;
 	/** "owner/repo" of the repository this one was forked from. */
 	fork_of: string | null;
+	mirror_source?: string | null;
 	interface: number | null;
 	/** False means a partial check: preserve the previously known game version. */
 	interface_checked: boolean;
@@ -125,6 +127,7 @@ const SITES = {
 			stars: Number(r.star_count ?? 0),
 			active: (r.last_activity_at as string | undefined) ?? null,
 			archived: r.archived === true,
+			mirrorSource: declaredMirrorSource(r.mirror, r.import_url),
 			branch: (r.default_branch as string | undefined) ?? '',
 			parent: (r.forked_from_project?.path_with_namespace as string | undefined) ?? null
 		}),
@@ -148,6 +151,7 @@ const SITES = {
 			stars: Number(r.stars_count ?? 0),
 			active: (r.updated_at as string | undefined) ?? null,
 			archived: r.archived === true,
+			mirrorSource: declaredMirrorSource(r.mirror, r.original_url),
 			branch: (r.default_branch as string | undefined) ?? '',
 			parent: (r.parent?.full_name as string | undefined) ?? null
 		}),
@@ -228,6 +232,7 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 		code_update: null,
 		archived: repo.archived,
 		fork_of: repo.parent,
+		...(repo.mirrorSource !== undefined ? { mirror_source: repo.mirrorSource } : {}),
 		interface: null,
 		interface_checked: false,
 		missing: false,

@@ -1,13 +1,18 @@
 // Public OctoWoW repositories become review candidates, never published addons.
 import { linkKey } from './links.ts';
+import { repositoryRoot } from './mirrors.ts';
 import { request, type RequestMetrics } from './request.ts';
 import type { Candidate } from './wiki.ts';
 
 export const OCTOWOW = 'https://octowow.st/git';
 export const OCTOWOW_NAME = 'OctoWoW';
 
-export async function readOctowow(observe?: (metrics: RequestMetrics) => void): Promise<Candidate[]> {
-	const candidates = new Map<string, Candidate>();
+export interface OctowowCandidate extends Candidate {
+	mirror_source: string | null;
+}
+
+export async function readOctowow(observe?: (metrics: RequestMetrics) => void): Promise<OctowowCandidate[]> {
+	const candidates = new Map<string, OctowowCandidate>();
 	const pages = new Set<string>();
 	for (let page = 1; page <= 200; page++) {
 		const data = await request<{ ok: boolean; data: Record<string, unknown>[] }>(
@@ -32,7 +37,8 @@ export async function readOctowow(observe?: (metrics: RequestMetrics) => void): 
 			const url = `${OCTOWOW}/${repo.full_name.split('/').map(encodeURIComponent).join('/')}`;
 			const key = linkKey(url);
 			candidates.set(key, { key, url, name: repo.name, description: typeof repo.description === 'string' ? repo.description : '',
-				images: [], alts: [], category: '', obsolete: repo.archived === true, parent: null, group_key: null });
+				images: [], alts: [], category: '', obsolete: repo.archived === true, parent: null, group_key: null,
+				mirror_source: repo.mirror === true ? repositoryRoot(repo.original_url) : null });
 		}
 	}
 	throw new Error('OctoWoW exceeded the listing page limit. Nothing was queued.');

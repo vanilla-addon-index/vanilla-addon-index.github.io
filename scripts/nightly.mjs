@@ -26,6 +26,7 @@ import { forgeHostPath, askForge, forgePlace, forgeRepositoryEndpoint } from '..
 import { imagesIn, uncamo } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
+import { declaredMirrorSource, repositoryRoot } from '../src/lib/mirrors.ts';
 import { readOctowow } from '../src/lib/octowow.ts';
 import { readWiki } from '../src/lib/wiki.ts';
 import { askGithub, fieldFailed, groupChecks, githubRepositoryKey, sharedGithubChecks } from '../src/lib/nightly-github.ts';
@@ -237,8 +238,9 @@ const codeUpdates = [];
 // One review row per key, as before; every exact branch/folder URL keeps its own date.
 const reviewStats = new Map();
 const pendingStats = [];
-const saved = { stats: 0, dates: 0, pictures: 0, cache: 0 };
+const saved = { stats: 0, dates: 0, pictures: 0, cache: 0, mirrors: 0 };
 const pendingCache = [];
+const pendingMirrors = [];
 const savedDates = new Set();
 metrics.count('commit_dates_left_unchanged', new Set([...repos, ...elsewhere].map((r) => r.url)).size);
 
@@ -255,6 +257,7 @@ function saveProgress() {
 async function flushProgress() {
 	for (const [name, field, pending, count] of [
 		['store_repo_stats', 'stats', pendingStats, 'stats'],
+		['store_repository_mirrors', 'items', pendingMirrors, 'mirrors'],
 		['store_code_updates', 'updates', codeUpdates, 'dates'],
 		['store_queue_images', 'items', pictures, 'pictures'],
 		['store_repo_check_cache', 'items', pendingCache, 'cache']
@@ -356,7 +359,7 @@ async function checkGithub() {
 		const answer = await sharedGithubChecks(batch, githubRepositoryKey, (members) => {
 			const refs = [...new Set(members.map((r) => r.ref))];
 			for (const r of members) r.headField = refs.indexOf(r.ref) ? `head${refs.indexOf(r.ref)}` : 'head';
-			return `id nameWithOwner stargazerCount pushedAt isArchived parent { nameWithOwner } ${refs.map((ref, n) => `${n ? `head${n}` : 'head'}: object(expression: ${JSON.stringify(ref)}) { ... on Commit { oid } }`).join(' ')}`;
+			return `id nameWithOwner stargazerCount pushedAt isArchived isMirror mirrorUrl parent { nameWithOwner } ${refs.map((ref, n) => `${n ? `head${n}` : 'head'}: object(expression: ${JSON.stringify(ref)}) { ... on Commit { oid } }`).join(' ')}`;
 		}, (query) => github(query, 'GitHub metadata'), (saved) => metrics.count('github_metadata_fields_shared', saved));
 		if (!answer) {
 			unanswered += batch.length;
@@ -372,6 +375,11 @@ async function checkGithub() {
 			const repo = data[alias];
 			if (!repo && !gone.has(alias)) { metrics.count('github_metadata_checks_failed'); return unanswered++; }
 			if (repo) {
+				const url = repositoryRoot(r.url);
+				if (url && !['isMirror', 'mirrorUrl'].some(field => fieldFailed(errors, [alias, field]))) {
+					const mirror_source = declaredMirrorSource(repo.isMirror, repo.mirrorUrl);
+					if (mirror_source !== undefined) pendingMirrors.push({ url, mirror_source });
+				}
 				r.state = !fieldFailed(errors, [alias, r.headField]) ? advanceGithubCache(r.previous, r.scope, repo.id, repo.nameWithOwner, repo[r.headField]?.oid) : undefined;
 				r.readRef = r.state?.head ?? r.ref;
 			}
@@ -544,6 +552,10 @@ async function checkOtherHosts() {
 				if (!facts) {
 					metrics.count('other_host_metadata_checks_failed');
 					return silent++;
+				}
+				const mirrorUrl = repositoryRoot(url);
+				if (mirrorUrl && facts.mirror_source !== undefined) {
+					pendingMirrors.push({ url: mirrorUrl, mirror_source: facts.mirror_source });
 				}
 				if (!facts.code_update) metrics.count('other_host_history_checks_without_result');
 				if (!facts.interface_checked) metrics.count('other_host_toc_checks_failed');

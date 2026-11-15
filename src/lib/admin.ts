@@ -115,6 +115,16 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 	return data as T;
 }
 
+export async function confirmedMirrorLinks(urls: string[]) {
+	if (!urls.length) return [];
+	const { data, error } = await client().from('repository_mirrors').select('url,source').in('url', urls);
+	if (error) throw new Error(error.message);
+	return data as { url: string; source: string }[];
+}
+
+export const retireMirrorLink = (target: number, mirrorUrl: string, sourceUrl: string) =>
+	call<null>('retire_repository_mirror', { target, mirror_url: mirrorUrl, source_url: sourceUrl });
+
 /** What narrows the log down. The database does the searching, so it covers every line ever written. */
 export interface LogFilter {
 	// An exact entry view ignores list filters and pagination.
