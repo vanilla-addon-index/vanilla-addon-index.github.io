@@ -22,7 +22,7 @@
 	import { ask } from '#lib/confirm.svelte.ts';
 	import { linkAuthor } from '#lib/links.ts';
 	import { repositoryRoot } from '#lib/mirrors.ts';
-	import { confirmedMirrorLinks, retireMirrorLink } from '#lib/admin.ts';
+	import { listAddonMirrors, listInactiveMirrorDecisions, decideAddonMirror } from '#lib/admin.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
@@ -42,38 +42,37 @@
 
 	let error = $state('');
 	let success = $state('');
-	let mirrorSources = $state<Record<string, string>>({});
-	let retiringMirror = $state(false);
+	let mirrors = $state<{ url: string; source: string | null }[]>([]);
+	let inactiveMirrors = $state<{ url: string; decision: 'independent' | 'removed' }[]>([]);
+	let mirrorUrl = $state('');
+	let mirrorSource = $state('');
+	let savingMirror = $state(false);
 	$effect(() => {
-		mirrorSources = {};
-		if (!auth.isAdmin || auth.banned || !addon || addon.versions.length < 2) return;
-		const urls = addon.versions.map(version => repositoryRoot(version.url)).filter(url => url !== null);
+		const id = addon?.id;
+		const versions = addon?.versions;
+		const admin = auth.isAdmin && !auth.banned;
+		mirrors = []; mirrorUrl = ''; mirrorSource = '';
+		inactiveMirrors = [];
+		if (!id || !versions) return;
 		let current = true;
-		confirmedMirrorLinks(urls).then(rows => {
-			if (!current) return;
-			const mirrors = new Set(rows.map(row => row.url));
-			mirrorSources = Object.fromEntries(rows.filter(row => urls.includes(row.source) && !mirrors.has(row.source))
-				.map(row => [row.url, row.source]));
-		}).catch(e => { if (current) error = e.message; });
+		listAddonMirrors(id).then(rows => { if (current) mirrors = rows; })
+			.catch(e => { if (current) error = e.message; });
+		if (admin) listInactiveMirrorDecisions(id).then(rows => { if (current) inactiveMirrors = rows; })
+			.catch(e => { if (current) error = e.message; });
 		return () => { current = false; };
 	});
-	async function retireMirror(link: string, source: string) {
-		if (!addon || retiringMirror) return;
+	async function saveMirror(url: string, source: string | null, decision: 'mirror' | 'independent' | 'removed') {
+		if (!addon || savingMirror) return;
 		const { id, slug } = addon;
-		retiringMirror = true;
+		savingMirror = true;
 		try {
-			if (!await ask({
-				title: 'Remove confirmed mirror?',
-				body: `This removes the mirror link from this page. Its source ${source} remains listed.`,
-				action: 'Remove mirror',
-				danger: true
-			})) return;
 			await change(async () => {
-				await retireMirrorLink(id, link, source);
+				await decideAddonMirror(id, url, source, decision);
 				await fetchAddon(slug);
-				success = 'Mirror link removed.';
+				if (addon?.id === id) mirrors = await listAddonMirrors(id);
+				success = 'Mirror decision saved.';
 			});
-		} finally { retiringMirror = false; }
+		} finally { savingMirror = false; }
 	}
 	let separating = $state(false);
 	let renameLink = $state('');
@@ -289,7 +288,6 @@
 				<ol>
 					{#each addon.versions as version (version.url)}
 						{@const update = addon.link_code_updates?.[version.url] ?? (version.url === addon.repo_url ? addon.code_update : null)}
-						{@const mirrorSource = mirrorSources[repositoryRoot(version.url) ?? '']}
 						<li class="border-b border-border px-3 py-3 last:border-b-0">
 							<a
 								href={version.url}
@@ -309,12 +307,22 @@
                                 </dd></div>
                             </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
-							{#if auth.isAdmin && !auth.banned && mirrorSource && !addon.unavailable_links?.some(url => repositoryRoot(url) === mirrorSource)}
-								<button class="btn mt-1 px-2 py-0.5 text-sm" disabled={retiringMirror}
-									onclick={() => retireMirror(version.url, mirrorSource)}>Remove mirror</button>
+							{#if mirrors.some(mirror => mirror.source === version.url)}
+								<details class="mt-2 text-sm text-muted">
+									<summary class="cursor-pointer">Mirrors ({mirrors.filter(mirror => mirror.source === version.url).length})</summary>
+									<ul class="space-y-1 pl-4 pt-1">
+										{#each mirrors.filter(mirror => mirror.source === version.url) as mirror (mirror.url)}
+											<li><a class="break-all text-accent hover:underline" href={mirror.url} target="_blank" rel="noopener nofollow">{mirror.url}</a></li>
+										{/each}
+									</ul>
+								</details>
 							{/if}
                             {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
+					{/each}
+					{#each mirrors.filter(mirror => !mirror.source) as mirror (mirror.url)}
+						<li class="px-3 py-3 text-sm"><a href={mirror.url} target="_blank" rel="noopener nofollow" class="break-all text-accent hover:underline">{mirror.url}</a>
+							<span class="block text-muted">Mirror link</span></li>
 					{/each}
 				</ol>
 			</div>
@@ -394,6 +402,48 @@
 							</div>
 						</details>
 					{/if}
+					<details class="border-t border-border">
+						<summary class="cursor-pointer p-3">Manage mirrors</summary>
+						<div class="space-y-3 px-3 pb-3">
+							{#each mirrors as mirror (mirror.url)}
+								<div class="space-y-2 border-b border-border pb-2">
+									<p class="break-all text-sm">{mirror.url}</p>
+									<label class="field-label">Mirror source
+										<select class="input w-full" value={mirror.source ?? ''} disabled={savingMirror}
+											onchange={(event) => { if (event.currentTarget.value) void saveMirror(mirror.url, event.currentTarget.value, 'mirror'); }}>
+											<option value="">Choose a source</option>
+											{#each addon.versions.filter(version => repositoryRoot(version.url)) as version (version.url)}
+												<option value={version.url}>{version.url}</option>
+											{/each}
+										</select>
+									</label>
+									<div class="flex flex-wrap gap-2">
+										<button class="btn" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'independent')}>List as version</button>
+										<button class="btn" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'removed')}>Unlink mirror</button>
+									</div>
+								</div>
+							{/each}
+							{#each inactiveMirrors as decision (decision.url)}
+								<div class="space-y-1 border-b border-border pb-2 text-sm">
+									<p class="break-all">{decision.url}</p>
+									<p class="text-muted">{decision.decision === 'removed' ? 'Unlinked' : 'Listed as a version'}</p>
+									<button class="btn" disabled={savingMirror} onclick={() => { mirrorUrl = decision.url; mirrorSource = ''; }}>Change decision</button>
+								</div>
+							{/each}
+							<form class="space-y-2" onsubmit={(event) => { event.preventDefault(); void saveMirror(mirrorUrl, mirrorSource, 'mirror'); }}>
+								<label class="field-label">Mirror repository URL <input type="url" class="input w-full" bind:value={mirrorUrl} required /></label>
+								<label class="field-label">Source repository
+									<select class="input w-full" bind:value={mirrorSource} required>
+										<option value="">Choose a source</option>
+										{#each addon.versions.filter(version => repositoryRoot(version.url)) as version (version.url)}
+											<option value={version.url}>{version.url}</option>
+										{/each}
+									</select>
+								</label>
+								<button class="btn" disabled={savingMirror}>Attach mirror</button>
+							</form>
+						</div>
+					</details>
 					<details class="group border-t border-border" data-merge-settings>
 						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
 							<span>Merge another addon</span>

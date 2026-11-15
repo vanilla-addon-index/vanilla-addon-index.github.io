@@ -71,6 +71,7 @@ export const remembered: { log?: LogEntry[]; users?: UserRow[] } = {};
 export const ACTION_TEXT: Record<string, string> = {
 	'addon.create': 'posted',
 	'addon.update': 'edited',
+	'addon.mirror': 'changed mirror links for',
 	'addon.revert': 'reverted an edit of',
 	'addon.recovery': 'recovered an edit of',
 	'addon.delete': 'deleted',
@@ -115,15 +116,19 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 	return data as T;
 }
 
-export async function confirmedMirrorLinks(urls: string[]) {
-	if (!urls.length) return [];
-	const { data, error } = await client().from('repository_mirrors').select('url,source').in('url', urls);
+export const listAddonMirrors = (target: number) =>
+	call<{ url: string; source: string | null }[]>('addon_mirrors', { target });
+
+export async function listInactiveMirrorDecisions(target: number) {
+	const { data, error } = await client().from('addon_mirror_decisions')
+		.select('url,decision').eq('addon_id', target).neq('decision', 'mirror').order('url');
 	if (error) throw new Error(error.message);
-	return data as { url: string; source: string }[];
+	return data as { url: string; decision: 'independent' | 'removed' }[];
 }
 
-export const retireMirrorLink = (target: number, mirrorUrl: string, sourceUrl: string) =>
-	call<null>('retire_repository_mirror', { target, mirror_url: mirrorUrl, source_url: sourceUrl });
+export const decideAddonMirror = (target: number, mirrorUrl: string, sourceUrl: string | null,
+	choice: 'mirror' | 'independent' | 'removed', queueId?: number) =>
+	call<null>('decide_addon_mirror', { target, mirror_url: mirrorUrl, source_url: sourceUrl, choice, queue_id: queueId });
 
 /** What narrows the log down. The database does the searching, so it covers every line ever written. */
 export interface LogFilter {

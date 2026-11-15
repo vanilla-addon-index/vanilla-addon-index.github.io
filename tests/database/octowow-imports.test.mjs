@@ -52,7 +52,7 @@ test('screenshot repair retries only empty pending OctoWoW imports and stores th
 	} finally { await db.close(); }
 });
 
-test('pending mirror imports are hidden only while the exact source is published', async () => {
+test('pending mirrors stay visible and recommend an exact published source', async () => {
 	const db = await createDb();
 	try {
 		const admin = await db.addUser('mirror-admin', 'admin');
@@ -73,7 +73,8 @@ test('pending mirror imports are hidden only while the exact source is published
 		assert.equal((await visible()).some(row => row.url === mirror.url), true);
 		await db.sql('delete from public.addons where id = $1', [branch.id]);
 		const published = await post(db, admin, addon('Published', source));
-		assert.equal((await visible()).some(row => row.url === mirror.url), false);
+		let [recommendation] = await db.as(admin, q => q('select mirror_source, mirror_addon_id from public.pending_imports where url = $1', [mirror.url]));
+		assert.deepEqual(recommendation, { mirror_source: source, mirror_addon_id: published.id });
 		const [waiting] = await db.asVisitor(q => q('select public.nightly_waiting($1) as counts', [NIGHTLY_TOKEN]));
 		assert.equal(waiting.counts.imports, (await visible()).length);
 		assert.deepEqual(await db.as(member, q => q('select url from public.pending_imports')), []);
@@ -82,6 +83,8 @@ test('pending mirror imports are hidden only while the exact source is published
 		await queue([{ ...mirror, mirror_source: source }]);
 		await db.sql('delete from public.addons where id = $1', [published.id]);
 		assert.equal((await visible()).some(row => row.url === mirror.url), true);
+		[recommendation] = await db.as(admin, q => q('select mirror_source, mirror_addon_id from public.pending_imports where url = $1', [mirror.url]));
+		assert.deepEqual(recommendation, { mirror_source: source, mirror_addon_id: null });
 	} finally {
 		await db.close();
 	}
@@ -114,9 +117,47 @@ test('reviewed cleanup removes only the mirror version and keeps it available fo
 		assert.equal(remaining.slug, published.slug);
 		assert.equal(remaining.pinned_link, source);
 		assert.deepEqual(remaining.versions, versions.slice(0, 2));
-		assert.deepEqual(await db.as(admin, q => q('select url from public.pending_imports')), []);
+		assert.deepEqual(await db.as(admin, q => q('select url from public.pending_imports')), [{ url: mirror }]);
 		await db.sql('update public.addons set versions = $2 where id = $1', [published.id, JSON.stringify(versions.slice(1, 2))]);
 		assert.deepEqual(await db.as(admin, q => q('select url from public.pending_imports')), [{ url: mirror }]);
+	} finally {
+		await db.close();
+	}
+});
+
+test('admins can attach a queued mirror, correct its source, restore it as a version and unlink it', async () => {
+	const db = await createDb();
+	try {
+		const admin = await db.addUser('attach-admin', 'admin');
+		const member = await db.addUser('attach-member');
+		const source = 'https://github.com/akzkak/CombatLedger';
+		const other = 'https://github.com/linkandzelda91/CombatLedger';
+		const mirror = 'https://octowow.st/git/lightblade/CombatLedger';
+		const versions = [source, other].map(url => ({ url, note: '' }));
+		const a = await post(db, admin, addon('CombatLedger', source, { versions: JSON.stringify(versions) }));
+		await db.asVisitor(q => q('select public.queue_octowow_imports($1, $2::jsonb)', [
+			NIGHTLY_TOKEN, JSON.stringify([{ name: 'CombatLedger', url: mirror, mirror_source: source }])
+		]));
+		const [queued] = await db.sql('select id from public.import_queue');
+		const decide = (user, url, choice = 'mirror', queueId = null) => db.as(user, q =>
+			q('select public.decide_addon_mirror($1,$2,$3,$4,$5)', [a.id, mirror, url, choice, queueId]));
+		const displayed = () => db.asVisitor(q => q('select * from public.addon_mirrors($1)', [a.id]));
+		await assert.rejects(decide(member, source), /Only admins/);
+		await assert.rejects(decide(admin, other, 'mirror', queued.id), /evidence changed/);
+		await decide(admin, source, 'mirror', queued.id);
+		assert.deepEqual(await displayed(), [{ url: mirror, source }]);
+		assert.deepEqual((await db.sql('select versions from public.addons'))[0].versions, versions);
+		assert.deepEqual(await db.sql('select url from public.pending_imports'), []);
+
+		await decide(admin, other);
+		assert.deepEqual(await displayed(), [{ url: mirror, source: other }]);
+		await decide(admin, null, 'independent');
+		assert.deepEqual(await displayed(), []);
+		assert.ok((await db.sql('select versions from public.addons'))[0].versions.some(v => v.url === mirror));
+		await decide(admin, source);
+		await decide(admin, null, 'removed');
+		assert.deepEqual(await displayed(), []);
+		assert.deepEqual((await db.sql('select versions from public.addons'))[0].versions, versions);
 	} finally {
 		await db.close();
 	}

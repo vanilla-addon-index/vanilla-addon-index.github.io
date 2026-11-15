@@ -6,7 +6,9 @@
 	import type { ReviewNote } from '#lib/import-review.ts';
 	import { store, plainName } from '#lib/addons.svelte.ts';
 	import { CATEGORIES, MAX_IMAGES } from '#lib/config.ts';
-	import { approve, approveInto, publishEdited, reject, type QueueItem } from '#lib/imports.svelte.ts';
+	import { approve, approveInto, loadQueue, publishEdited, reject, type QueueItem } from '#lib/imports.svelte.ts';
+	import { decideAddonMirror } from '#lib/admin.ts';
+	import { entryHref } from '#lib/entry-href.ts';
 	import { linkAuthor } from '#lib/links.ts';
 	import { hostAllowed } from '#lib/hosts.ts';
 	import { readmeRepository, repositoryImages } from '#lib/repository-images.ts';
@@ -29,6 +31,19 @@
 		run: (action: () => Promise<string>) => Promise<void>;
 	};
 	let { item, index, selected, verdict, advice, notes, match, forkMatch, onselect, run }: Props = $props();
+	const mirrorAddon = $derived(store.addons.find(addon => addon.id === item.mirror_addon_id));
+	let attachingMirror = $state(false);
+	async function attachMirror() {
+		if (!item.mirror_source || !item.mirror_addon_id || attachingMirror) return;
+		attachingMirror = true;
+		try {
+			await run(async () => {
+				await decideAddonMirror(item.mirror_addon_id!, item.url, item.mirror_source!, 'mirror', item.id);
+				await loadQueue();
+				return 'Mirror attached.';
+			});
+		} finally { attachingMirror = false; }
+	}
 
 	let readmeImages = $state<string[]>([]);
 	let readmeRequest: Promise<void> | undefined;
@@ -219,6 +234,17 @@
 	></textarea>
 
 	<div class="px-1.5">
+		{#if item.mirror_source}
+			<div class="my-2 space-y-1 border-l-2 border-accent pl-2 text-sm">
+				<p>Mirror of <a href={item.mirror_source} target="_blank" rel="noopener noreferrer" class="break-all text-accent hover:underline">{item.mirror_source}</a></p>
+				{#if item.mirror_addon_id}
+					{#if mirrorAddon}<p>Published on <a href={entryHref(mirrorAddon)} class="text-accent hover:underline">{mirrorAddon.name}</a></p>{/if}
+					<button class="btn btn-primary" disabled={attachingMirror} onclick={attachMirror}>Attach as mirror</button>
+				{:else}
+					<p class="text-muted">{item.mirror_source_unavailable ? 'Source unavailable' : 'Exact source not listed'}</p>
+				{/if}
+			</div>
+		{/if}
 		<p class="text-sm text-muted">Source: {item.source ?? 'Turtle WoW Wiki'}</p>
 		{#if item.wiki_source}
 			<p class="text-sm text-muted"><a href={item.wiki_source} target="_blank" rel="noopener noreferrer" class="underline">Wiki source</a>{item.wiki_recommended ? ' · Wiki recommended · pins on approval' : ''}</p>
@@ -281,8 +307,8 @@
 					<option value="addon">Addons</option><option value="dll">DLL</option>
 				</select>
 			</label>
-			<button data-act="approve" class="btn btn-primary py-1" disabled={saving || (!destination && (!categoryChosen || !descriptionProvided))} onclick={() => publish()}>
-				{saving ? 'Publishing…' : destination ? 'Add link to ' + destination.name : 'Approve'}
+			<button data-act="approve" class={['btn py-1', !item.mirror_addon_id && 'btn-primary']} disabled={saving || attachingMirror || (!destination && (!categoryChosen || !descriptionProvided))} onclick={() => publish()}>
+				{saving ? 'Publishing…' : item.mirror_addon_id ? 'Approve as version' : destination ? 'Add link to ' + destination.name : 'Approve'}
 			</button>
 			{#if match && !destination}
 				<button data-act="version" class="btn py-1" disabled={saving} onclick={() => publish(match)}>

@@ -24,7 +24,7 @@
 	// Review buckets are exclusive: missing details and repository issues need review
 	// before an entry can be treated as fine or as a possible version.
 	// Decided lists are separate: manual rejections and automatically filed dead links.
-	type View = keyof typeof FILTERS | 'incomplete' | 'rejected' | 'dead';
+	type View = keyof typeof FILTERS | 'mirrors' | 'incomplete' | 'rejected' | 'dead';
 
 	// The interface number a 1.12 addon declares in its .toc file.
 	const VANILLA_INTERFACE = 11200;
@@ -152,7 +152,7 @@
 	const visible = $derived(
 		reviewed.filter(
 			({ item, verdict }) =>
-				(view === 'all' || verdict === view) && matches(item)
+				(view === 'all' || (view === 'mirrors' ? Boolean(item.mirror_source) : verdict === view)) && matches(item)
 		)
 	);
 	const decided = $derived(view === 'dead' ? deadEntries : imports.rejected);
@@ -309,6 +309,7 @@
 						value === 'all' ? reviewed.length : (totals[value as Verdict]?.length ?? 0)
 					)}
 				{/each}
+				{@render choice('mirrors', 'Confirmed mirrors', reviewed.filter(({ item }) => item.mirror_source).length)}
 				{@render choice('incomplete', 'Needs review', incomplete)}
 				<h2 class="label mt-2 border-t border-border px-3 pt-3">Decided</h2>
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}

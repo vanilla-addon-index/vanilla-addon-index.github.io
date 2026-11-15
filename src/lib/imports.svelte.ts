@@ -17,6 +17,9 @@ export interface QueueItem extends Candidate {
 	readme_checked_at?: string | null;
 	wiki_source?: string | null;
 	wiki_recommended?: boolean;
+	mirror_source?: string | null;
+	mirror_addon_id?: number | null;
+	mirror_source_unavailable?: boolean;
 }
 
 
