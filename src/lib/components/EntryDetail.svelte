@@ -44,10 +44,13 @@
 	let success = $state('');
 	let mirrorResult = $state.raw<{ id: number; rows: { url: string; source: string | null }[] }>();
 	const mirrors = $derived(mirrorResult && mirrorResult.id === addon?.id ? mirrorResult.rows : []);
+	let expandedMirrorSources = $state<Record<string, boolean>>({});
 	const mirrorVersions = $derived(addon?.versions.map(version => version.url).sort().join('\n'));
 	let inactiveMirrors = $state<{ url: string; decision: 'independent' | 'removed' }[]>([]);
 	let mirrorUrl = $state('');
 	let mirrorSource = $state('');
+	let mirrorFormOpen = $state(false);
+	let editingMirror = $state('');
 	let savingMirror = $state(false);
 	$effect(() => {
 		const id = addon?.id;
@@ -62,6 +65,7 @@
 	$effect(() => {
 		const id = addon?.id;
 		inactiveMirrors = []; mirrorUrl = ''; mirrorSource = '';
+		mirrorFormOpen = false; editingMirror = '';
 		if (!id || !auth.isAdmin || auth.banned) return;
 		let current = true;
 		listInactiveMirrorDecisions(id).then(rows => { if (current) inactiveMirrors = rows; })
@@ -81,6 +85,7 @@
 					mirrorResult = { id, rows };
 					inactiveMirrors = decisions;
 					mirrorUrl = ''; mirrorSource = '';
+					mirrorFormOpen = false; editingMirror = '';
 				}
 				success = 'Mirror decision saved.';
 			});
@@ -298,8 +303,10 @@
 				<!-- Pinned link first, otherwise newest known code update. -->
 				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
 				<ol>
-					{#each addon.versions as version (version.url)}
+					{#each addon.versions as version, index (version.url)}
 						{@const update = addon.link_code_updates?.[version.url] ?? (version.url === addon.repo_url ? addon.code_update : null)}
+						{@const sourceMirrors = mirrors.filter(mirror => mirror.source === version.url)}
+						{@const mirrorListId = `download-mirrors-${addon.id}-${index}`}
 						<li class="border-b border-border px-3 py-3 last:border-b-0">
 							<a
 								href={version.url}
@@ -313,21 +320,33 @@
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
                             <dl class="mt-2 space-y-1 text-sm">
                                 <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Author</dt><dd class="min-w-0 break-words text-right">{(!addon.shared ? addon.author : '') || linkAuthor(version.url) || 'Unknown'}</dd></div>
-                                <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Last update</dt><dd>
-                                    {#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history"><time datetime={update.date}>{date(update.date)}</time></a>
-                                    {:else}<span class="text-muted">Unknown</span>{/if}
-                                </dd></div>
+								<div class="flex items-baseline justify-between gap-2">
+									<dt class="shrink-0 text-muted">Last update</dt>
+									<dd class="grid min-w-0 flex-1 grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-2">
+										<span>
+											{#if sourceMirrors.length}
+												<button class="cursor-pointer whitespace-nowrap text-muted hover:text-accent hover:underline"
+													aria-expanded={Boolean(expandedMirrorSources[version.url])}
+													aria-controls={mirrorListId}
+													onclick={() => (expandedMirrorSources[version.url] = !expandedMirrorSources[version.url])}>
+													Mirrors ({sourceMirrors.length})
+												</button>
+											{/if}
+										</span>
+										<span class="truncate text-right">
+											{#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title={`${date(update.date)} · View commit history`}><time datetime={update.date}>{date(update.date)}</time></a>
+											{:else}<span class="text-muted">Unknown</span>{/if}
+										</span>
+									</dd>
+								</div>
                             </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
-							{#if mirrors.some(mirror => mirror.source === version.url)}
-								<details class="mt-2 text-sm text-muted">
-									<summary class="cursor-pointer">Mirrors ({mirrors.filter(mirror => mirror.source === version.url).length})</summary>
-									<ul class="space-y-1 pl-4 pt-1">
-										{#each mirrors.filter(mirror => mirror.source === version.url) as mirror (mirror.url)}
-											<li><a class="break-all text-accent hover:underline" href={mirror.url} target="_blank" rel="noopener nofollow">{mirror.url}</a></li>
-										{/each}
-									</ul>
-								</details>
+							{#if sourceMirrors.length}
+								<ul id={mirrorListId} hidden={!expandedMirrorSources[version.url]} class="space-y-1 pl-4 pt-1 text-sm">
+									{#each sourceMirrors as mirror (mirror.url)}
+										<li><a class="break-all text-accent hover:underline" href={mirror.url} target="_blank" rel="noopener nofollow">{mirror.url}</a></li>
+									{/each}
+								</ul>
 							{/if}
                             {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
@@ -414,49 +433,67 @@
 							</div>
 						</details>
 					{/if}
-					<details class="group border-t border-border">
+					<details class="group border-t border-border" data-mirror-settings>
 						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
 							<span>Manage mirrors</span>
 							<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
 						</summary>
-						<div class="space-y-3 px-3 pb-3">
+						<div class="px-3 pb-3">
+							<p class="mb-3 text-sm text-muted">Attach a mirror under its source download.</p>
+							{#snippet mirrorSourceOptions()}
+								<option value="">Choose a source</option>
+								{#each addon.versions.filter(version => repositoryRoot(version.url)) as version (version.url)}
+									<option value={version.url}>{version.url.replace(/^https?:\/\//, '')}</option>
+								{/each}
+							{/snippet}
 							{#each mirrors as mirror (mirror.url)}
-								<div class="space-y-2 border-b border-border pb-2">
-									<p class="break-all text-sm">{mirror.url}</p>
-									<label class="field-label">Mirror source
-										<select class="input w-full" value={mirror.source ?? ''} disabled={savingMirror}
-											onchange={(event) => { if (event.currentTarget.value) void saveMirror(mirror.url, event.currentTarget.value, 'mirror'); }}>
-											<option value="">Choose a source</option>
-											{#each addon.versions.filter(version => repositoryRoot(version.url)) as version (version.url)}
-												<option value={version.url}>{version.url}</option>
-											{/each}
-										</select>
-									</label>
+								<div class="space-y-2 border-t border-border/50 py-3">
+									<p class="truncate text-sm text-muted" title={mirror.url}>{mirror.url.replace(/^https?:\/\//, '')}</p>
 									<div class="flex flex-wrap gap-2">
-										<button class="btn" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'independent')}>List as version</button>
-										<button class="btn" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'removed')}>Unlink mirror</button>
+										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror} aria-expanded={editingMirror === mirror.url}
+											onclick={() => (editingMirror = editingMirror === mirror.url ? '' : mirror.url)}>Change source</button>
+										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'independent')}>List as version</button>
+										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'removed')}>Unlink mirror</button>
 									</div>
+									{#if editingMirror === mirror.url}
+										<label class="field-label">Mirror source
+											<select class="input w-full" value={mirror.source ?? ''} disabled={savingMirror}
+												onchange={(event) => { if (event.currentTarget.value) void saveMirror(mirror.url, event.currentTarget.value, 'mirror'); }}>
+												{@render mirrorSourceOptions()}
+											</select>
+										</label>
+									{:else if mirror.source}
+										<p class="truncate text-xs text-muted" title={mirror.source}>Source: {mirror.source.replace(/^https?:\/\//, '')}</p>
+									{/if}
 								</div>
 							{/each}
 							{#each inactiveMirrors as decision (decision.url)}
-								<div class="space-y-1 border-b border-border pb-2 text-sm">
-									<p class="break-all">{decision.url}</p>
-									<p class="text-muted">{decision.decision === 'removed' ? 'Unlinked' : 'Listed as a version'}</p>
-									<button class="btn" disabled={savingMirror} onclick={() => { mirrorUrl = decision.url; mirrorSource = ''; }}>Change decision</button>
+								<div class="space-y-2 border-t border-border/50 py-3">
+									<p class="truncate text-sm text-muted" title={decision.url}>{decision.url.replace(/^https?:\/\//, '')}</p>
+									<div class="flex flex-wrap gap-2">
+										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror}
+											onclick={() => { mirrorUrl = decision.url; mirrorSource = ''; mirrorFormOpen = true; }}>Change decision</button>
+										<span class="self-center text-xs text-muted">{decision.decision === 'removed' ? 'Unlinked' : 'Listed as a version'}</span>
+									</div>
 								</div>
 							{/each}
-							<form class="space-y-2" onsubmit={(event) => { event.preventDefault(); void saveMirror(mirrorUrl, mirrorSource, 'mirror'); }}>
+							{#if mirrorFormOpen}
+							<form class="space-y-2 border-t border-border/50 pt-3" onsubmit={(event) => { event.preventDefault(); void saveMirror(mirrorUrl, mirrorSource, 'mirror'); }}>
 								<label class="field-label">Mirror repository URL <input type="url" class="input w-full" bind:value={mirrorUrl} required /></label>
 								<label class="field-label">Source repository
 									<select class="input w-full" bind:value={mirrorSource} required>
-										<option value="">Choose a source</option>
-										{#each addon.versions.filter(version => repositoryRoot(version.url)) as version (version.url)}
-											<option value={version.url}>{version.url}</option>
-										{/each}
+										{@render mirrorSourceOptions()}
 									</select>
 								</label>
-								<button class="btn" disabled={savingMirror}>Attach mirror</button>
+								<div class="flex gap-2">
+									<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror}>Attach mirror</button>
+									<button type="button" class="btn px-2 py-0.5 text-sm" disabled={savingMirror}
+										onclick={() => { mirrorFormOpen = false; mirrorUrl = ''; mirrorSource = ''; }}>Cancel</button>
+								</div>
 							</form>
+							{:else}
+								<button class="btn px-2 py-0.5 text-sm" onclick={() => (mirrorFormOpen = true)}>Attach mirror</button>
+							{/if}
 						</div>
 					</details>
 					<details class="group border-t border-border" data-merge-settings>
