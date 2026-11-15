@@ -114,4 +114,4 @@ jobs:
           fi
           supabase link --project-ref mefmmugajnbbotioplfw
           supabase db push --remote --yes
-          supabase functions deploy octowow-readme --project-ref mefmmugajnbbotioplfw --use-api
+          supabase functions deploy octowow-readme --remote=mefmmugajnbbotioplfw --use-api --yes
