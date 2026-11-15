@@ -128,7 +128,8 @@ $$;
 revoke all on function public.retire_repository_mirror(bigint, text, text) from public, anon, service_role;
 grant execute on function public.retire_repository_mirror(bigint, text, text) to authenticated;
 
-create or replace function public.nightly_waiting(token text) returns jsonb
+-- The outer nightly_waiting function adds the pending link suggestions.
+create or replace function public.nightly_waiting_before_link_reviews(token text) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 begin
  if not public.is_nightly(token) then raise exception 'Only the nightly job can ask what is waiting.'; end if;
