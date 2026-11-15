@@ -69,7 +69,7 @@ async function all<T>(table: string, filter?: [string, string]): Promise<T[]> {
 
 async function count(status: QueueItem['status']) {
 	let query = client()
-		.from('import_queue')
+		.from(status === 'pending' ? 'pending_imports' : 'import_queue')
 		.select('id', { count: 'exact', head: true })
 		.eq('status', status);
 	if (status === 'approved') query = query.eq('wiki_expanded', false);
@@ -86,7 +86,7 @@ export async function countImports() {
 
 export async function loadQueue() {
 	const [items, stats, pending, approved, rejected, submitted, dead] = await Promise.all([
-		all<QueueItem>('import_queue', ['status', 'pending']),
+		all<QueueItem>('pending_imports', ['status', 'pending']),
 		all<RepoStats>('repo_stats_current'),
 		count('pending'),
 		count('approved'),

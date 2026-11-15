@@ -22,6 +22,21 @@ const site = (answers) => {
 	return { ask, asked };
 };
 
+test('forge metadata confirms mirrors only with an explicit flag and a supported source', async () => {
+	const source = 'https://github.com/team/upstream';
+	for (const host of ['gitlab.com', 'codeberg.org', 'gitea.com', 'octowow.st/git']) {
+		const place = forgePlace(`https://${host}/team/addon`);
+		const repo = forgeRepositoryEndpoint(place);
+		const fields = place.kind === 'gitlab'
+			? { id: 42, path_with_namespace: 'team/addon', import_url: source }
+			: { full_name: 'team/addon', original_url: source, parent: { full_name: 'other/addon' } };
+		for (const [flag, expected] of [[true, source], [false, null], [undefined, undefined]]) {
+			const { ask } = site({ [repo]: { ...fields, mirror: flag } });
+			assert.equal((await askForge(place, ask)).mirror_source, expected, host);
+		}
+	}
+});
+
 for (const host of ['gitlab.com', 'codeberg.org', 'gitea.com', 'octowow.st/git']) {
 	test(`README-only lookup on ${host} resolves relative screenshots without checking history or .toc files`, async () => {
 		const place = forgePlace(`https://${host}/team/addon`);

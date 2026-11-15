@@ -54,7 +54,7 @@ test('importing an unchecked same-name link fetches README screenshots for revie
  // Use a remaining pending candidate, rather than a seed entry another test
  // may have approved. Give its preview our fresh page's name and no checked README.
  // Approval sends these reviewed fields through the real database function.
- await page.route('**/rest/v1/import_queue?*',async route => {
+ await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route => {
   if (route.request().method() !== 'GET') return route.continue();
   const response = await route.fetch();
   const body = await response.json();
@@ -91,7 +91,7 @@ test('renamed forks suggest their published parent and keep separate approval ex
  const parentKey=`gitlab.com/e2e/${name.replace(/\W+/g,'-')}`.toLowerCase();
  let known=false;
  let candidateId:number|undefined;
- await page.route('**/rest/v1/import_queue?*',async route=>{
+ await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route=>{
   if(route.request().method()!=='GET') return route.continue();
   const response=await route.fetch();const rows=await response.json();
   if(Array.isArray(rows)){
@@ -133,7 +133,7 @@ for (const group of [false,true]) {
   const address=await postAddon(page,name);
   const version=`${name}-Revamped-Opaque`;
   let candidateId:number|undefined;
-  await page.route('**/rest/v1/import_queue?*',async route=>{
+  await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route=>{
    if(route.request().method()!=='GET') return route.continue();
    const response=await route.fetch();const rows=await response.json();
    if(Array.isArray(rows)){

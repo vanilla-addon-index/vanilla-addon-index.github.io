@@ -3,7 +3,7 @@ import {loginAs} from './helpers.ts';
 
 test('wiki pages have an exclusive waiting filter even when matching a published addon', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});

@@ -6,7 +6,7 @@ test('admin can search for an unrelated live addon and explicitly merge an impor
  const name=unique('ManualMergeTarget');
  await postAddon(page,name);
  let merged=false;
- await page.route('**/rest/v1/import_queue?*',async route=>{
+ await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route=>{
   const request=route.request();
   if(request.method()!=='GET' || !request.url().includes('status=eq.pending')) return route.continue();
   return route.fulfill({json:merged?[]:[{

@@ -28,7 +28,7 @@ test('wiki download links appear as ordinary import cards and group through norm
 test('unreadable articles remain visible with a paste fallback',async({page})=>{
 	await page.route('https://turtle-wow.fandom.com/api.php?*',route=>route.fulfill({status:403,body:'Unavailable'}));
 	await loginAs(page,'admin');
-	await page.route('**/rest/v1/import_queue?*',async route=>{
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route=>{
 		const url=new URL(route.request().url());
 		if(route.request().method()!=='GET'||url.searchParams.get('status')!=='eq.pending') return route.continue();
 		await route.fulfill({json:[{id:99999,key:'turtle-wow.fandom.com/wiki/lazypig',url:'https://turtle-wow.fandom.com/wiki/LazyPig',name:'LazyPig',description:'An addon for lazy people.',category:'',images:[],alts:[],status:'pending',problem:null}]});

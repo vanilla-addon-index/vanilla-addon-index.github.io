@@ -6,7 +6,7 @@ test('confirmed dead links have an exclusive filter even with missing details an
 	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[{
 		key:'github.com/missing/raidhelper', missing:true, archived:false, stars:0, pushed_at:null, interface:null, fork_of:null, canonical:null
 	}]}));
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
@@ -33,7 +33,7 @@ test('confirmed dead links have an exclusive filter even with missing details an
 test('filed dead links appear under Decided without manual decisions', async ({page}) => {
 	await loginAs(page, 'admin');
 	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[]}));
-	await page.route('**/rest/v1/import_queue?*', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		const url = new URL(route.request().url());
 		if (url.searchParams.get('status') !== 'eq.dead') return route.continue();
 		return route.fulfill({json:[{id:999999,key:'github.com/missing/gone',url:'https://github.com/missing/Gone',name:'GoneAddon',description:'An unavailable repository.',category:'Miscellaneous',images:[],alts:[],status:'dead'}]});

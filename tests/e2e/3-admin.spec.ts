@@ -12,7 +12,7 @@ test('returning to admin refreshes an empty import queue and review counts witho
 	await loginAs(page, 'admin');
 	let fresh = false;
 	let reviewCounts = 0;
-	await page.route('**/rest/v1/import_queue?**', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		const url = new URL(route.request().url());
 		if (!fresh && route.request().method() === 'GET' && url.searchParams.get('status') === 'eq.pending') {
 			await route.fulfill({ json: [] });
@@ -40,7 +40,7 @@ test('only the three moderation queues show tab notifications', async ({ page })
 	await loginAs(page, 'admin');
 	let empty = false;
 	for (const [table, status, count] of [
-		['import_queue', 'pending', 16],
+		['pending_imports', 'pending', 16],
 		['reports', 'open', 3],
 		['addon_edit_requests', 'pending', 7],
 		['addon_link_requests', 'pending', 4]
@@ -68,7 +68,7 @@ test('only the three moderation queues show tab notifications', async ({ page })
 });
 
 test('the report a member sent shows up, with a count on the Admin button, and can be dismissed', async ({ page }) => {
-	await page.route('**/rest/v1/import_queue?**', async route => {
+	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() === 'HEAD') {
 			await route.fulfill({ status: 200, headers: { 'content-range': '*/16', 'access-control-expose-headers': 'content-range' } });
 		} else await route.continue();
