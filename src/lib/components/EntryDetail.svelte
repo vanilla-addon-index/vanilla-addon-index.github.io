@@ -42,22 +42,29 @@
 
 	let error = $state('');
 	let success = $state('');
-	let mirrors = $state<{ url: string; source: string | null }[]>([]);
+	let mirrorResult = $state.raw<{ id: number; rows: { url: string; source: string | null }[] }>();
+	const mirrors = $derived(mirrorResult && mirrorResult.id === addon?.id ? mirrorResult.rows : []);
+	const mirrorVersions = $derived(addon?.versions.map(version => version.url).sort().join('\n'));
 	let inactiveMirrors = $state<{ url: string; decision: 'independent' | 'removed' }[]>([]);
 	let mirrorUrl = $state('');
 	let mirrorSource = $state('');
 	let savingMirror = $state(false);
 	$effect(() => {
 		const id = addon?.id;
-		const versions = addon?.versions;
-		const admin = auth.isAdmin && !auth.banned;
-		mirrors = []; mirrorUrl = ''; mirrorSource = '';
-		inactiveMirrors = [];
-		if (!id || !versions) return;
+		if (!id || mirrorVersions === undefined) return;
 		let current = true;
-		listAddonMirrors(id).then(rows => { if (current) mirrors = rows; })
+		// Cached and live addon rows can arrive in quick succession. Keep the
+		// current result visible while refreshing the same addon.
+		listAddonMirrors(id).then(rows => { if (current) mirrorResult = { id, rows }; })
 			.catch(e => { if (current) error = e.message; });
-		if (admin) listInactiveMirrorDecisions(id).then(rows => { if (current) inactiveMirrors = rows; })
+		return () => { current = false; };
+	});
+	$effect(() => {
+		const id = addon?.id;
+		inactiveMirrors = []; mirrorUrl = ''; mirrorSource = '';
+		if (!id || !auth.isAdmin || auth.banned) return;
+		let current = true;
+		listInactiveMirrorDecisions(id).then(rows => { if (current) inactiveMirrors = rows; })
 			.catch(e => { if (current) error = e.message; });
 		return () => { current = false; };
 	});
@@ -69,7 +76,12 @@
 			await change(async () => {
 				await decideAddonMirror(id, url, source, decision);
 				await fetchAddon(slug);
-				if (addon?.id === id) mirrors = await listAddonMirrors(id);
+				const [rows, decisions] = await Promise.all([listAddonMirrors(id), listInactiveMirrorDecisions(id)]);
+				if (addon?.id === id) {
+					mirrorResult = { id, rows };
+					inactiveMirrors = decisions;
+					mirrorUrl = ''; mirrorSource = '';
+				}
 				success = 'Mirror decision saved.';
 			});
 		} finally { savingMirror = false; }
@@ -402,8 +414,11 @@
 							</div>
 						</details>
 					{/if}
-					<details class="border-t border-border">
-						<summary class="cursor-pointer p-3">Manage mirrors</summary>
+					<details class="group border-t border-border">
+						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
+							<span>Manage mirrors</span>
+							<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
+						</summary>
 						<div class="space-y-3 px-3 pb-3">
 							{#each mirrors as mirror (mirror.url)}
 								<div class="space-y-2 border-b border-border pb-2">
