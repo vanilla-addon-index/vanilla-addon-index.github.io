@@ -19,7 +19,7 @@ test('backup archive decrypts with matching recovery files and checks the extrac
 	const temp = join(dir, 'temp');
 	mkdirSync(work);
 	mkdirSync(temp);
-	for (const file of ['supabase/migrations', 'supabase/functions', 'supabase/config.toml', 'scripts/backup.mjs', 'src/lib/config.ts', 'package.json', 'package-lock.json', 'docs/backup-restore.md']) {
+	for (const file of ['supabase/migrations', 'supabase/functions', 'supabase/config.toml', 'scripts/backup.mjs', 'src/lib', 'package.json', 'package-lock.json', 'docs/backup-restore.md']) {
 		cpSync(new URL(file, root), join(work, file), {recursive:true});
 	}
 	const run = (script) => {
@@ -76,7 +76,7 @@ node() {
   diff -r supabase/migrations "$GITHUB_WORKSPACE/supabase/migrations"
   diff -r supabase/functions "$GITHUB_WORKSPACE/supabase/functions"
   cmp scripts/backup.mjs "$GITHUB_WORKSPACE/scripts/backup.mjs"
-  cmp src/lib/config.ts "$GITHUB_WORKSPACE/src/lib/config.ts"
+  diff -r src/lib "$GITHUB_WORKSPACE/src/lib"
   cmp package-lock.json "$GITHUB_WORKSPACE/package-lock.json"
   cmp README.md "$GITHUB_WORKSPACE/docs/backup-restore.md"
   cp manifest.json "$RUNNER_TEMP/verified-manifest.json"

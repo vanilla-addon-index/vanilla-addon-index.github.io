@@ -68,14 +68,14 @@ jobs:
         run: |
           supabase link --project-ref mefmmugajnbbotioplfw
           recovery="$RUNNER_TEMP/recovery"
-          mkdir -p "$recovery/supabase" "$recovery/scripts" "$recovery/src/lib"
+          mkdir -p "$recovery/supabase" "$recovery/scripts" "$recovery/src"
           trap 'rm -rf "$recovery" "$RUNNER_TEMP/backup.tar.gz"' EXIT
           node scripts/backup.mjs "$recovery/backup.sql"
           cp -R supabase/migrations supabase/functions "$recovery/supabase/"
           cp supabase/config.toml "$recovery/supabase/"
           cp package.json package-lock.json "$recovery/"
           cp scripts/backup.mjs "$recovery/scripts/"
-          cp src/lib/config.ts "$recovery/src/lib/"
+          cp -R src/lib "$recovery/src/"
           cp docs/backup-restore.md "$recovery/README.md"
           export BACKUP_CLI_VERSION="$(supabase --version)"
           node --input-type=module -e '
