@@ -71,7 +71,7 @@ jobs:
           mkdir -p "$recovery/supabase" "$recovery/scripts" "$recovery/src/lib"
           trap 'rm -rf "$recovery" "$RUNNER_TEMP/backup.tar.gz"' EXIT
           node scripts/backup.mjs "$recovery/backup.sql"
-          cp -R supabase/migrations "$recovery/supabase/"
+          cp -R supabase/migrations supabase/functions "$recovery/supabase/"
           cp supabase/config.toml "$recovery/supabase/"
           cp package.json package-lock.json "$recovery/"
           cp scripts/backup.mjs "$recovery/scripts/"
