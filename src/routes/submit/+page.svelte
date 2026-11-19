@@ -2,7 +2,7 @@
 	import { entryHref } from '#lib/entry-href.ts';
 	import { CLIENT_KINDS, clientKind } from '#lib/client-kinds.ts';
 	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
-	import { recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
+	import { makeCommunityListing, recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { wikiThanks } from '#lib/wiki-submission.svelte.ts';
 	import { commitCategoryOnFocus } from '#lib/category-select.ts';
@@ -305,6 +305,12 @@
 				return;
 			}
 			const addon = editing ? await updateAddon(editing.id, input, since, reviewId) : await createAddon(matched ? { ...input, versions: [input.versions[0]] } : input, auth.isAdmin && !matched && communityListing);
+			if (editing && auth.isAdmin && addon.owner === auth.session?.user.id && communityListing) {
+				// Keep retries valid if the ownership change fails after the edit was saved.
+				since = addon.updated_at;
+				await makeCommunityListing(addon.id);
+				await fetchAddon(addon.slug);
+			}
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
 			await goto(entryHref(addon));
@@ -633,7 +639,7 @@
 								</select>
 								<p id="entry-type-help" class="hint">Choose which list this entry appears in.</p>
 							</div>
-							{#if !editSlug && !matched}
+							{#if (!editSlug && !matched) || (editing && editing.owner === auth.session?.user.id)}
 								<div>
 									<label class="field-label" for="listing-ownership">Ownership</label>
 									<select id="listing-ownership" class="input" bind:value={communityListing} aria-describedby="addon-account-help">

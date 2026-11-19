@@ -70,6 +70,7 @@ export const remembered: { log?: LogEntry[]; users?: UserRow[] } = {};
 // What each action reads as, after the name of who did it.
 export const ACTION_TEXT: Record<string, string> = {
 	'addon.create': 'posted',
+	'addon.community': 'made a community listing of',
 	'addon.update': 'edited',
 	'addon.mirror': 'changed mirror links for',
 	'addon.revert': 'reverted an edit of',
@@ -118,6 +119,9 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 
 export const listAddonMirrors = (target: number) =>
 	call<{ url: string; source: string | null }[]>('addon_mirrors', { target });
+
+export const makeCommunityListing = (target: number) =>
+	call<null>('make_community_listing', { target });
 
 export async function listInactiveMirrorDecisions(target: number) {
 	const { data, error } = await client().from('addon_mirror_decisions')
