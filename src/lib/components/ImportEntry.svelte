@@ -40,7 +40,7 @@
 			await run(async () => {
 				await decideAddonMirror(item.mirror_addon_id!, item.url, item.mirror_source!, 'mirror', item.id);
 				await loadQueue();
-				return 'Mirror attached.';
+				return '';
 			});
 		} finally { attachingMirror = false; }
 	}
