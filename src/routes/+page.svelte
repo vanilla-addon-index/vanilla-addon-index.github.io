@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { addonSearch } from '#lib/addon-search.ts';
-	import { isOlderAddon } from '#lib/addon-age.ts';
-	import { preferences, loadPreferences } from '#lib/preferences.svelte.ts';
+	import { isOlderAddon, MAX_UPDATE_AGE } from '#lib/addon-age.ts';
+	import { preferences, loadPreferences, savePreferences } from '#lib/preferences.svelte.ts';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { store } from '#lib/addons.svelte.ts';
@@ -21,10 +21,83 @@
 	const collectionLabel = $derived(entryType === 'dll' ? 'DLL mods' : 'addons');
 	function switchCollection(next: 'addon' | 'dll') { entryType = next; category = ''; }
 	let sort = $state<Sort>('name');
+	let adjustingAge = $state(false);
+	let draftUpdateAge = $state(0);
+	const allUpdateYears = MAX_UPDATE_AGE + 1;
+	let appliedUpdateAge = $state(0);
+	let agePreviewTimer: ReturnType<typeof setTimeout> | undefined;
+	let ageApplyFrame: number | undefined;
+	let lastAgeInputAt = 0;
+	let ageSettlesAt = 0;
+	function cancelAgePreview() {
+		clearTimeout(agePreviewTimer);
+		agePreviewTimer = undefined;
+		if (ageApplyFrame !== undefined) cancelAnimationFrame(ageApplyFrame);
+		ageApplyFrame = undefined;
+	}
+	function beginAgeAdjustment() {
+		if (adjustingAge) return;
+		cancelAgePreview();
+		lastAgeInputAt = performance.now();
+		ageSettlesAt = 0;
+		adjustingAge = true;
+	}
+	// Sample the latest cutoff while dragging rather than rebuilding at every step.
+	function previewUpdateAge() {
+		if (agePreviewTimer !== undefined) return;
+		function preview() {
+			const remaining = ageSettlesAt - performance.now();
+			if (remaining > 0) {
+				agePreviewTimer = setTimeout(preview, remaining);
+				return;
+			}
+			agePreviewTimer = undefined;
+			appliedUpdateAge = draftUpdateAge;
+		}
+		agePreviewTimer = setTimeout(preview, 150);
+	}
+	function applyUpdateAge() {
+		const wasAdjusting = adjustingAge;
+		cancelAgePreview();
+		adjustingAge = false;
+		if (wasAdjusting) {
+			// Paint the released handle and dismiss the tooltip before rebuilding rows.
+			ageApplyFrame = requestAnimationFrame(() => {
+				ageApplyFrame = undefined;
+				agePreviewTimer = setTimeout(() => {
+					agePreviewTimer = undefined;
+					appliedUpdateAge = draftUpdateAge;
+				}, 0);
+			});
+		} else {
+			appliedUpdateAge = draftUpdateAge;
+		}
+		if (preferences.maxUpdateAge === draftUpdateAge) return;
+		preferences.maxUpdateAge = draftUpdateAge;
+		savePreferences();
+	}
+	let ageTooltip = $state<HTMLSpanElement>();
+	let agePointer = $state({ x: 0, y: 0 });
+	function positionAgeTooltip(x: number, y: number) {
+		agePointer = { x: Math.max(70, Math.min(window.innerWidth - 70, x)), y: Math.min(window.innerHeight - 36, y + 16) };
+	}
+	$effect(() => {
+		if (ageTooltip) {
+			ageTooltip.style.left = `${agePointer.x}px`;
+			ageTooltip.style.top = `${agePointer.y}px`;
+		}
+	});
+	const updateCutoffYear = $derived(new Date().getFullYear() - draftUpdateAge + 1);
 	onMount(() => {
 		loadPreferences();
+		draftUpdateAge = preferences.maxUpdateAge;
+		appliedUpdateAge = preferences.maxUpdateAge;
+		return cancelAgePreview;
 	});
-	const visibleAddons = $derived(store.addons.filter((a) => (a.entry_type ?? 'addon') === entryType && (!preferences.hideOlder || !isOlderAddon(a.code_update?.date))));
+	const visibleAddons = $derived.by(() => {
+		const now = new Date();
+		return store.addons.filter((a) => (a.entry_type ?? 'addon') === entryType && (!appliedUpdateAge || !isOlderAddon(a.code_update?.date, now, appliedUpdateAge)));
+	});
 
 	function readUrl(params: Pick<URLSearchParams, 'get'>) {
 		entryType = params.get('type') === 'dll' ? 'dll' : 'addon';
@@ -49,7 +122,8 @@
 	// One block per addon, or per group of versions. A group shows when any of its versions
 	// matches, and is placed in the list by its main version.
 	const filteredBlocks = $derived.by(() => {
-		const matches = (a: Addon) => (!category || a.category === category) && addonSearch(a, query).matches;
+		const hasQuery = Boolean(query.trim());
+		const matches = (a: Addon) => (!category || a.category === category) && (!hasQuery || addonSearch(a, query).matches);
 
 		const groups = new Map<number, Addon[]>();
 		const list: { main: Addon; others: Addon[] }[] = [];
@@ -113,7 +187,7 @@
 		track();
 	});
 	$effect(() => {
-		void query; void category; void sort; void entryType;
+		void query; void category; void sort; void entryType; void appliedUpdateAge;
 		if (list) list.scrollTop = 0;
 	});
 
@@ -194,20 +268,50 @@
 		<div bind:this={controls} class="backdrop -mt-5 pt-5 pb-2 sm:sticky sm:top-(--header-h) sm:z-10">
 			<div class="mb-2 md:hidden"><CollectionSwitch value={entryType} onchange={switchCollection} /></div>
 			<div class="flex flex-wrap gap-2">
-				<input
-					class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
-					type="search"
-					placeholder="Search {visibleAddons.length || ''} {collectionLabel} by name, description, author or link"
-					aria-label="Search {collectionLabel}"
-					bind:value={query}
-				/>
+				<div class="flex min-w-0 flex-1 basis-full items-stretch gap-2 sm:basis-0">
+					<label class="relative flex w-28 shrink-0 items-center gap-1.5 border border-border bg-surface px-2.5 text-xs leading-tight text-muted sm:w-32">
+						{#if adjustingAge}
+							<span bind:this={ageTooltip} class="pointer-events-none fixed z-50 -translate-x-1/2 whitespace-nowrap border border-border bg-bg/80 px-2 py-1 text-sm text-fg/90 shadow-lg" aria-hidden="true">{draftUpdateAge ? `${updateCutoffYear} onward` : 'All years'}</span>
+						{/if}
+						<span class="text-muted/80" aria-hidden="true">−</span>
+						<input class="age-slider m-0 h-5 min-w-0 w-full cursor-pointer" type="range" min="1" max={allUpdateYears} step="1"
+							aria-label="Maximum update age" aria-valuetext={draftUpdateAge ? `Updated in ${updateCutoffYear} or later. Unknown dates stay visible.` : 'All years'}
+							value={draftUpdateAge || allUpdateYears}
+							onpointerdown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); positionAgeTooltip(event.clientX, event.clientY); beginAgeAdjustment(); }}
+							onpointermove={(event) => { if (adjustingAge) positionAgeTooltip(event.clientX, event.clientY); }}
+							onpointerup={() => { if (adjustingAge) applyUpdateAge(); }}
+							onpointercancel={() => { if (adjustingAge) applyUpdateAge(); }}
+							onlostpointercapture={() => { if (adjustingAge) applyUpdateAge(); }}
+							onkeydown={(event) => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) { const rect = event.currentTarget.getBoundingClientRect(); positionAgeTooltip(rect.left + rect.width / 2, rect.bottom); beginAgeAdjustment(); } }}
+							onkeyup={() => { if (adjustingAge) applyUpdateAge(); }}
+							onblur={() => { if (adjustingAge) applyUpdateAge(); }}
+							oninput={(event) => {
+								const years = Number(event.currentTarget.value);
+								const now = performance.now();
+								// Let quick sweeps settle instead of rendering years the pointer already passed.
+								const speed = Math.abs(years - (draftUpdateAge || allUpdateYears)) / Math.max(1, now - lastAgeInputAt);
+								if (speed >= 0.08) ageSettlesAt = now + 100;
+								lastAgeInputAt = now;
+								draftUpdateAge = years === allUpdateYears ? 0 : years;
+								if (adjustingAge) previewUpdateAge(); else applyUpdateAge();
+							}} />
+						<span class="text-muted/80" aria-hidden="true">∞</span>
+					</label>
+					<input
+						class="input min-w-0 flex-1"
+						type="search"
+						placeholder="Search {visibleAddons.length || ''} {collectionLabel} by name, description, author or link"
+						aria-label="Search {collectionLabel}"
+						bind:value={query}
+					/>
+				</div>
 				<select class="input min-w-0 w-auto flex-1 disabled:opacity-40 sm:flex-none md:hidden" disabled={entryType === 'dll'} aria-label="Category" bind:value={category}>
 					<option value="">{entryType === 'dll' ? 'Categories unavailable' : 'All categories'}</option>
 					{#each CATEGORIES as c (c)}
 						<option value={c}>{c} ({entryType === 'dll' ? 0 : (counts[c]?.length ?? 0)})</option>
 					{/each}
 				</select>
-				<select class="input min-w-0 w-auto flex-1 sm:w-44 sm:flex-none" aria-label="Sort by" bind:value={sort}>
+				<select class="input min-w-0 w-28 flex-none sm:w-32" aria-label="Sort by" bind:value={sort}>
 					{#each Object.entries(SORTS) as [value, label] (value)}
 						<option {value}>{label}</option>
 					{/each}
@@ -267,3 +371,47 @@
 		</div>
 	</section>
 </div>
+
+<style>
+	.age-slider {
+		appearance: none;
+		background: transparent;
+	}
+	@media (pointer: coarse) {
+		.age-slider {
+			min-height: 44px;
+			touch-action: pan-y;
+		}
+	}
+	.age-slider::-webkit-slider-runnable-track {
+		height: 2px;
+		background: var(--color-border);
+	}
+	.age-slider::-moz-range-track {
+		height: 2px;
+		background: var(--color-border);
+	}
+	.age-slider::-webkit-slider-thumb {
+		appearance: none;
+		width: 11px;
+		height: 11px;
+		margin-top: -4.5px;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--color-accent) 65%, var(--color-muted));
+	}
+	.age-slider::-moz-range-thumb {
+		width: 11px;
+		height: 11px;
+		border: 0;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--color-accent) 65%, var(--color-muted));
+	}
+	.age-slider:hover::-webkit-slider-thumb,
+	.age-slider:focus-visible::-webkit-slider-thumb {
+		background: var(--color-accent);
+	}
+	.age-slider:hover::-moz-range-thumb,
+	.age-slider:focus-visible::-moz-range-thumb {
+		background: var(--color-accent);
+	}
+</style>

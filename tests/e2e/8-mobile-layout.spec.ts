@@ -55,12 +55,12 @@ test('phone admin entries come before expandable filters and navigation can be s
 	await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
 });
 
-test('phone account options and submit fields remain usable at the smallest width', async ({ page }) => {
+test('phone account details and submit fields remain usable at the smallest width', async ({ page }) => {
 	await page.setViewportSize({ width: 320, height: 844 });
 	await loginAs(page, 'admin');
 	await page.goto('/account');
 	await expect(page.getByRole('searchbox', { name: 'Search your addons' })).toBeInViewport();
-	await page.getByRole('button', { name: 'Account details and options', exact: true }).click();
+	await page.getByRole('button', { name: 'Account details', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Log out', exact: true })).toBeVisible();
 	await page.goto('/submit');
 	await expect(page.getByLabel('Addon name', { exact: true })).toBeInViewport();
