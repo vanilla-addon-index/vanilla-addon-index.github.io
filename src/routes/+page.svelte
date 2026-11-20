@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { addonSearch } from '#lib/addon-search.ts';
 	import { isOlderAddon, MAX_UPDATE_AGE } from '#lib/addon-age.ts';
 	import { preferences, loadPreferences, savePreferences } from '#lib/preferences.svelte.ts';
@@ -10,8 +10,9 @@
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { CATEGORIES } from '#lib/config.ts';
 	import { HOME_TITLE } from '#lib/seo.ts';
-	import { creditFor } from '#lib/links.ts';
+	import { creditFor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
+	import type { Snapshot } from '@sveltejs/kit';
 
 	import { SORTS, readSort, byCodeUpdate, type Sort } from '#lib/addon-sort.ts';
 
@@ -157,6 +158,33 @@
 		return first >= 'A' && first <= 'Z' ? first : '#';
 	}
 
+	type CatalogueRow = { addon: Addon; minor?: boolean; credit?: string };
+	type CatalogueSection = { letter: string; rows: CatalogueRow[]; descriptions: number; downloadLinks: number };
+	const sections = $derived.by(() => {
+		const result: CatalogueSection[] = [];
+		let lastLetter = '';
+		let section: CatalogueSection | undefined;
+		for (const { main, others } of blocks) {
+			const letter = sort === 'name' ? letterOf(main.name) : '';
+			const heading = letter === lastLetter ? '' : letter;
+			lastLetter = letter;
+			// Keep each group together and start a section at each letter jump.
+			if (!section || heading || section.rows.length + others.length >= 32) {
+				section = { letter: heading, rows: [], descriptions: 0, downloadLinks: 0 };
+				result.push(section);
+			}
+			section.rows.push({ addon: main, credit: others.length ? creditFor(main, true) : undefined });
+			for (const addon of others) section.rows.push({ addon, minor: true, credit: creditFor(addon, true) });
+		}
+		for (const section of result) {
+			for (const { addon } of section.rows) {
+				if (addon.description.trim()) section.descriptions++;
+				if (linkKey(addon.repo_url ?? '').split('/', 1)[0]) section.downloadLinks++;
+			}
+		}
+		return result;
+	});
+
 	// The bar of letters above a list sorted by name: each jumps to its heading, and the one
 	// being read is lit. A letter with nothing under it is there too, switched off, so the
 	// others keep their places.
@@ -166,15 +194,36 @@
 	let controls = $state<HTMLElement>();
 	let list = $state<HTMLElement>();
 	let current = $state('');
+	let buffered = new Set<HTMLElement>();
+
+	function prepareViewport(top: number, bottom: number) {
+		// Keep one viewport ready on each side. Explicitly prepare the destination on
+		// large scroll jumps too, before the browser's next content-visibility check.
+		const margin = Math.max(0, bottom - top);
+		const nearby = new Set<HTMLElement>();
+		for (const section of list?.querySelectorAll<HTMLElement>('.catalogue-section') ?? []) {
+			const rect = section.getBoundingClientRect();
+			if (rect.top > bottom + margin) break;
+			if (rect.height && rect.bottom >= top - margin) nearby.add(section);
+		}
+		for (const section of nearby) {
+			if (!buffered.has(section)) section.setAttribute('data-buffered', '');
+		}
+		for (const section of buffered) {
+			if (!nearby.has(section)) section.removeAttribute('data-buffered');
+		}
+		buffered = nearby;
+	}
 
 	function track() {
+		const inner = list && getComputedStyle(list).overflowY === 'auto' ? list.getBoundingClientRect() : undefined;
+		prepareViewport(inner?.top ?? 0, inner?.bottom ?? window.innerHeight);
 		if (sort !== 'name') {
 			current = '';
 			return;
 		}
 		// A little below the bar, so the heading a jump lands on counts as reached.
-		const edge = Math.max(list && getComputedStyle(list).overflowY === 'auto'
-			? list.getBoundingClientRect().top : bar?.getBoundingClientRect().bottom ?? 0, 0) + 16;
+		const edge = Math.max(inner?.top ?? bar?.getBoundingClientRect().bottom ?? 0, 0) + 16;
 		let reached = '';
 		for (const heading of list?.querySelectorAll('h2') ?? []) {
 			if (heading.getBoundingClientRect().top > edge) break;
@@ -183,13 +232,48 @@
 		current = reached;
 	}
 	$effect(() => {
-		void blocks;
+		void sections;
 		track();
 	});
 	$effect(() => {
 		void query; void category; void sort; void entryType; void appliedUpdateAge;
 		if (list) list.scrollTop = 0;
 	});
+
+	function focusedLink() {
+		const link = document.activeElement;
+		if (!(link instanceof HTMLAnchorElement) || !list?.contains(link)) return;
+		const id = link.closest<HTMLElement>('[data-catalogue-id]')?.dataset.catalogueId;
+		const href = link.getAttribute('href');
+		if (id && href) return { id, href };
+	}
+
+	function restoreLink({ id, href }: NonNullable<ReturnType<typeof focusedLink>>) {
+		list?.querySelector<HTMLAnchorElement>(`[data-catalogue-id="${CSS.escape(id)}"] a[href="${CSS.escape(href)}"]`)
+			?.focus({ preventScroll: true });
+	}
+
+	$effect.pre(() => {
+		void sections;
+		const active = document.activeElement;
+		const saved = focusedLink();
+		if (saved) void tick().then(() => {
+			// A live update can move a focused row to another section.
+			if (!active?.isConnected && document.activeElement === document.body) restoreLink(saved);
+		});
+	});
+
+	export const snapshot: Snapshot<{ scrollTop: number; focus?: ReturnType<typeof focusedLink> }> = {
+		capture: () => ({ scrollTop: list?.scrollTop ?? 0, focus: focusedLink() }),
+		restore: ({ scrollTop, focus }) => {
+			// SvelteKit restores the window scroll. On desktop the list scrolls independently.
+			void tick().then(() => {
+				if (list) list.scrollTop = scrollTop;
+				if (focus) restoreLink(focus);
+				track();
+			});
+		}
+	};
 
 	// Desktop letters scroll the list itself. Smaller layouts keep the page jump,
 	// accounting for sticky controls where present.
@@ -198,6 +282,7 @@
 		if (!heading || !controls) return;
 		if (list && getComputedStyle(list).overflowY === 'auto') {
 			list.scrollBy(0, heading.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop);
+			track();
 			return;
 		}
 		const resting =
@@ -205,6 +290,7 @@
 				? parseFloat(getComputedStyle(controls).top) + controls.offsetHeight
 				: 0;
 		window.scrollBy(0, heading.getBoundingClientRect().top - resting);
+		track();
 	}
 
 	const counts = $derived(Object.groupBy(visibleAddons, (a) => a.category));
@@ -223,7 +309,7 @@
 	});
 </script>
 
-<svelte:window onscroll={track} />
+<svelte:window onscroll={track} onresize={track} />
 
 <svelte:head>
 	<title>{HOME_TITLE}</title>
@@ -345,23 +431,20 @@
 			{#if !store.loaded}
 				<p class="px-3 py-8 text-center text-muted">Loading addons…</p>
 			{:else if blocks.length}
-				{#each blocks as { main, others }, i (main.id)}
-					{#if sort === 'name' && (i === 0 || letterOf(blocks[i - 1].main.name) !== letterOf(main.name))}
+				{#each sections as { letter, rows, descriptions, downloadLinks } (rows[0].addon.id)}
+					{#if letter}
 						<h2
-							id="letter-{letterOf(main.name)}"
+							id="letter-{letter}"
 							class="label mb-0 border-b border-border/50 px-3 pt-2 pb-0.5 text-accent/70"
 						>
-							{letterOf(main.name)}
+							{letter}
 						</h2>
 					{/if}
-					<AddonCard
-						addon={main}
-						catalogue
-						owner={others.length > 0 ? creditFor(main, true) : ''}
-					/>
-					{#each others as other (other.id)}
-						<AddonCard addon={other} owner={creditFor(other, true)} minor catalogue />
-					{/each}
+					<div class="catalogue-section" style:--rows={rows.length} style:--descriptions={descriptions} style:--download-links={downloadLinks}>
+						{#each rows as { addon, minor, credit } (addon.id)}
+							<AddonCard {addon} {minor} owner={credit} catalogueId={addon.id} />
+						{/each}
+					</div>
 				{/each}
 			{:else}
 				<p class="px-3 py-8 text-center text-muted">

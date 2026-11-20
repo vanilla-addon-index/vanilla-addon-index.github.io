@@ -238,12 +238,45 @@
 }
 
 @layer utilities {
+	.catalogue-section {
+		/* The browser can skip the layout and paint of distant sections. Reserve the
+		   same height as their rows so the scrollbar and letter jumps stay stable. */
+		--row-line: 1.25rem;
+		--download-line: calc(0.875rem * 1.25 + 2px);
+		--row-frame: calc(var(--spacing) * 2.5 + 1px);
+		--section-height: calc(var(--rows) * (var(--row-frame) + max(var(--row-line), var(--download-line))));
+		content-visibility: auto;
+		contain-intrinsic-block-size: var(--section-height);
+	}
+	.catalogue-section[data-buffered] {
+		content-visibility: visible;
+		contain: layout style paint;
+	}
+	.catalogue-section:last-child {
+		contain-intrinsic-block-size: calc(var(--section-height) - 1px);
+	}
+	.catalogue-section:last-child > .catalogue-row:last-child {
+		border-bottom-width: 0;
+	}
+	@media (width < 40rem) {
+		.catalogue-section {
+			--section-height: calc(var(--rows) * (var(--row-frame) + 2 * var(--row-line)) + var(--descriptions) * var(--row-line) + var(--download-links) * (var(--download-line) - var(--row-line)));
+		}
+	}
+	@media (40rem <= width < 48rem) {
+		/* At this width, cards share the list's columns across sections. */
+		.catalogue-section {
+			display: contents;
+			content-visibility: visible;
+		}
+		.catalogue-section > .catalogue-row {
+			grid-column: 1 / -1;
+		}
+	}
 	@media (min-width: 48rem) {
 		/* Preserve the catalogue's existing independent row widths. */
-		.addon-list > .catalogue-row {
+		.catalogue-section > .catalogue-row {
 			grid-template-columns: minmax(0, 1fr) auto;
-			/* Retain row paint/layout isolation without skipping off-screen content. */
-			contain: layout style paint;
 		}
 	}
 	/* On phones, section bars stay one row and can be swiped without moving the page. */
