@@ -78,6 +78,20 @@ async function fetchSnapshot() {
 	return ((await res.json()) as Addon[]).map(withVersions);
 }
 
+let startupSnapshot: Promise<Addon[] | null> | undefined;
+
+/** Starts the published catalogue before the login state is known. */
+export function startSnapshot() {
+	if (LOCAL) return;
+	startupSnapshot = fetchSnapshot().then((snapshot) => {
+		if (!store.loaded) {
+			store.addons = mergeFresh(snapshot, [], [], readGone());
+			store.loaded = true;
+		}
+		return snapshot;
+	}, () => null);
+}
+
 const PAGE = 1000;
 
 // When this browser last asked the database what is newer than the snapshot, and how long
@@ -117,13 +131,11 @@ function writeGone(ids: number[]) {
  * theirs to edit: the snapshot does not say who posted what. And what they delete here is
  * remembered, so that their own delete shows at once like their own posts and edits do.
  *
- * Says whether the database answered; without it the snapshot stands alone.
+ * Says whether we asked the database and whether it answered.
  */
-async function fetchPublic(): Promise<{ list: Addon[]; reached: boolean }> {
-	const snapshot = await fetchSnapshot();
-	const me = auth.session?.user.id;
+async function fetchFresh(snapshot: Addon[], me: string | undefined) {
 	const since = newestStamp(snapshot) || '1970-01-01';
-	let fresh: Addon[] = [];
+	const fresh: Addon[] = [];
 	let reached = true;
 	let asked = 0;
 	try {
@@ -132,9 +144,11 @@ async function fetchPublic(): Promise<{ list: Addon[]; reached: boolean }> {
 		// Storage unavailable: ask every time.
 	}
 	// A member's answer holds their own addons, so it is asked for on every load.
-	if (supabase && (me || Date.now() - asked > ASK_EVERY)) {
+	const queried = Boolean(supabase && (me || Date.now() - asked > ASK_EVERY));
+	if (supabase && queried) {
+		const selected = columns();
 		for (let from = 0; ; from += PAGE) {
-			const query = supabase.from('addons').select(columns());
+			const query = supabase.from('addons').select(selected);
 			const { data, error } = await (me ? query.or(`updated_at.gt."${since}",owner.eq.${me}`) : query.gt('updated_at', since))
 				.order('updated_at', { ascending: false })
 				.order('id')
@@ -146,18 +160,8 @@ async function fetchPublic(): Promise<{ list: Addon[]; reached: boolean }> {
 			fresh.push(...(data as unknown as Row[]).map(toAddon));
 			if (data.length < PAGE) break;
 		}
-		if (reached) {
-			try {
-				localStorage.setItem(ASKED_KEY, String(Date.now()));
-			} catch {
-				// Ignore quota and private-mode errors.
-			}
-		}
 	}
-	const gone = stillGone(readGone(), snapshot);
-	writeGone(gone);
-	// What an earlier visit fetched is in the list this browser kept.
-	return { list: mergeFresh(snapshot, store.addons, fresh, gone), reached };
+	return { fresh, reached, queried };
 }
 
 // The API returns at most 1000 rows per request.
@@ -196,16 +200,16 @@ const MAX_CHANGED = 400;
  * the daily snapshot and from earlier loads, and the database sends in full only the ones
  * posted or edited since.
  */
-async function fetchLive() {
+async function fetchLive(published: Promise<Addon[] | null> | undefined) {
 	if (!supabase) throw new Error('not configured');
 	if (LOCAL) return fetchAll();
 	const [snapshot, outline] = await Promise.all([
-		fetchSnapshot().catch(() => [] as Addon[]),
+		published,
 		fetchPaged<Outline>('id, updated_at, group_id, is_main, owner, approved_by, profiles:profiles!addons_owner_fkey(username)')
 	]);
 	// What this browser already holds counts too: rows loaded earlier in the visit or saved
 	// by the last one. An admin approving imports by the hundred fetches each row once.
-	const rows = liveRows(snapshot, store.addons);
+	const rows = liveRows(snapshot ?? [], store.addons);
 	const changed = outline.filter((o) => rows.get(o.id)?.updated_at !== o.updated_at).map((o) => o.id);
 	if (changed.length > MAX_CHANGED) return fetchAll();
 
@@ -226,6 +230,9 @@ async function fetchLive() {
 
 const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
 
+// An older refresh may finish after the session or role changes.
+let latestLoad = 0;
+
 /**
  * Visitors read the snapshot, a static file that costs the database nothing, and ask the
  * database only for what was posted or edited since. Someone logged in posts, edits and
@@ -233,27 +240,52 @@ const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
  * the database, deletions included. Each source stands in for the other when it fails.
  */
 export async function loadAddons() {
-	const loggedIn = Boolean(auth.session);
+	const load = ++latestLoad;
+	const me = auth.session?.user.id;
 	// Admins review, group and delete, so they get the list exactly as it is now.
-	const exact = LOCAL || (loggedIn && auth.isAdmin);
+	const exact = LOCAL || (Boolean(me) && auth.isAdmin);
+	const published = LOCAL ? undefined : startupSnapshot ?? fetchSnapshot().catch(() => null);
 	try {
 		if (exact) {
-			store.addons = await fetchLive();
+			const list = await fetchLive(published);
+			if (load !== latestLoad) return;
+			store.addons = list;
 			store.stale = false;
 		} else {
-			const { list, reached } = await fetchPublic();
-			store.addons = list;
+			const snapshot = await published;
+			if (load !== latestLoad) return;
+			if (!snapshot) throw new Error('snapshot unavailable');
+			const { fresh, reached, queried } = await fetchFresh(snapshot, me);
+			if (load !== latestLoad) return;
+			const gone = stillGone(readGone(), snapshot);
+			writeGone(gone);
+			// What an earlier visit fetched is in the list this browser kept.
+			store.addons = mergeFresh(snapshot, store.addons, fresh, gone);
+			if (queried && reached) {
+				try {
+					localStorage.setItem(ASKED_KEY, String(Date.now()));
+				} catch {
+					// Ignore quota and private-mode errors.
+				}
+			}
 			// Someone logged in is told when posting will not work; a visitor has no need to know.
-			store.stale = loggedIn && !reached;
+			store.stale = Boolean(me) && !reached;
 		}
 	} catch {
+		if (load !== latestLoad) return;
 		try {
-			store.addons = await (exact ? fetchSnapshot() : fetchAll());
-			store.stale = exact;
+			const list = await (exact ? published ?? fetchSnapshot() : fetchAll());
+			if (load !== latestLoad) return;
+			if (list) {
+				store.addons = exact && published ? mergeFresh(list, store.addons, [], readGone()) : list;
+				store.stale = exact;
+			}
 		} catch {
 			// Keep whatever the cache gave us.
 		}
 	}
+	if (load !== latestLoad) return;
+	startupSnapshot = undefined;
 	store.loaded = true;
 	writeCache();
 }
