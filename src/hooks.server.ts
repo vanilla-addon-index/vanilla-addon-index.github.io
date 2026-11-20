@@ -4,6 +4,7 @@ import { ABOUT_DESCRIPTION, ABOUT_TITLE, HOME_DESCRIPTION, HOME_TITLE, HOME_PREV
 import { readSnapshot } from '#lib/snapshot.server.ts';
 import { entryPath } from '#lib/entry-path.ts';
 import type { Addon } from '#lib/types.ts';
+import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
 import narrowRegular from '@fontsource/pt-sans-narrow/files/pt-sans-narrow-latin-400-normal.woff2?url';
 import narrowBold from '@fontsource/pt-sans-narrow/files/pt-sans-narrow-latin-700-normal.woff2?url';
 
@@ -98,16 +99,18 @@ function describe(path: string, slug: string | undefined) {
 	};
 }
 
+// Fetch the fonts used by the controls and catalogue text early. The @font-face
+// unicode ranges let the browser request the other Inter subsets when it needs them.
+const fontPreloads = [narrowRegular, narrowBold, interLatin]
+	.map((href) => `<link rel="preload" href="${esc(href)}" as="font" type="font/woff2" crossorigin="anonymous">`)
+	.join('');
+
 export const handle: Handle = ({ event, resolve }) => {
 	const page = describe(event.url.pathname, event.params.slug);
 	return resolve(event, {
-		// Fonts are fetched with the scripts instead of after the first text is drawn; without
-		// this a first visit shows the fallback font for a moment.
-		preload: ({ type, path }) => type === 'js' || type === 'css' || path.endsWith('.woff2'),
+		preload: ({ type }) => type === 'js' || type === 'css',
 		transformPageChunk: ({ html }) =>
-			html.replace('</head>', () => `${page.head}` +
-				`<link rel="preload" href="${esc(narrowRegular)}" as="font" type="font/woff2" crossorigin="anonymous">` +
-				`<link rel="preload" href="${esc(narrowBold)}" as="font" type="font/woff2" crossorigin="anonymous"></head>`)
+			html.replace('</head>', () => `${page.head}${fontPreloads}</head>`)
 				.replace(/<body[^>]*>/, (body) => body + page.body)
 	});
 };
