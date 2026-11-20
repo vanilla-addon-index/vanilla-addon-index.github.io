@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { addonSearch } from '#lib/addon-search.ts';
+	import { matchesAddonSearch, prepareAddonQuery, prepareAddonSearch } from '#lib/addon-search.ts';
 	import { isOlderAddon, MAX_UPDATE_AGE } from '#lib/addon-age.ts';
 	import { preferences, loadPreferences, savePreferences } from '#lib/preferences.svelte.ts';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -120,17 +120,14 @@
 		readUrl(url.searchParams);
 	});
 
-	// One block per addon, or per group of versions. A group shows when any of its versions
-	// matches, and is placed in the list by its main version.
-	const filteredBlocks = $derived.by(() => {
-		const hasQuery = Boolean(query.trim());
-		const matches = (a: Addon) => (!category || a.category === category) && (!hasQuery || addonSearch(a, query).matches);
-
+	// Collection and update age decide which versions are eligible. Keep that grouping
+	// and its sort order when search or category filters change.
+	const catalogueBlocks = $derived.by(() => {
 		const groups = new Map<number, Addon[]>();
 		const list: { main: Addon; others: Addon[] }[] = [];
 		for (const a of visibleAddons) {
 			if (a.group_id === null) {
-				if (matches(a)) list.push({ main: a, others: [] });
+				list.push({ main: a, others: [] });
 			} else if (groups.has(a.group_id)) {
 				groups.get(a.group_id)!.push(a);
 			} else {
@@ -138,7 +135,6 @@
 			}
 		}
 		for (const members of groups.values()) {
-			if (!members.some(matches)) continue;
 			const main = members.find((m) => m.is_main) ?? members[0];
 			const others = members
 				.filter((m) => m !== main)
@@ -148,9 +144,29 @@
 
 		return list;
 	});
-	const nameBlocks = $derived(filteredBlocks.toSorted((a, b) => a.main.name.localeCompare(b.main.name)));
-	const codeBlocks = $derived(filteredBlocks.toSorted((a, b) => byCodeUpdate(a.main, b.main)));
-	const blocks = $derived(sort === 'code' ? codeBlocks : nameBlocks);
+	const nameBlocks = $derived(catalogueBlocks.toSorted((a, b) => a.main.name.localeCompare(b.main.name)));
+	const codeBlocks = $derived(catalogueBlocks.toSorted((a, b) => byCodeUpdate(a.main, b.main)));
+	// Catalogue updates replace changed rows. Prepare a candidate only when it is searched.
+	const searchIndex = new WeakMap<Addon, ReturnType<typeof prepareAddonSearch>>();
+	const terms = $derived(prepareAddonQuery(query));
+	const blocks = $derived.by(() => {
+		const ordered = sort === 'code' ? codeBlocks : nameBlocks;
+		const selectedCategory = category;
+		const search = terms;
+		if (!selectedCategory && !search.words.length) return ordered;
+		// The same version must match both filters. Display its whole eligible group.
+		const matches = (addon: Addon) => {
+			if (selectedCategory && addon.category !== selectedCategory) return false;
+			if (!search.words.length) return true;
+			let prepared = searchIndex.get(addon);
+			if (!prepared) {
+				prepared = prepareAddonSearch(addon);
+				searchIndex.set(addon, prepared);
+			}
+			return matchesAddonSearch(prepared, search);
+		};
+		return ordered.filter(({ main, others }) => matches(main) || others.some(matches));
+	});
 
 	// The heading an addon files under when the list is sorted by name.
 	function letterOf(name: string) {
