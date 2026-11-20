@@ -8,7 +8,7 @@
 	let busy = $state(false);
 	let message = $state('');
 	let error = $state('');
-	const pendingDiscord = $derived(imports.items.filter(item => item.source === 'Discord').length);
+	const pendingDiscord = $derived(imports.counts.discord);
 	async function clearPending() {
 		if (!auth.isOwner || !supabase || busy) return;
 		if (!await ask({ title: 'Clear pending Discord imports?', body: 'Remove unreviewed Discord entries so you can import them again. Published addons, previous decisions and other sources are preserved.', action: 'Clear imports', danger: true })) return;

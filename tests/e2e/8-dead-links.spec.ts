@@ -3,15 +3,14 @@ import {loginAs} from './helpers.ts';
 
 test('confirmed dead links have an exclusive filter even with missing details and a name match', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[{
-		key:'github.com/missing/raidhelper', missing:true, archived:false, stars:0, pushed_at:null, interface:null, fork_of:null, canonical:null
-	}]}));
-	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
-		if (route.request().method() !== 'GET') return route.continue();
-		const response = await route.fetch(), rows = await response.json();
-		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
-		await route.fulfill({response, json:[{...rows[0], name:'RaidHelper', url:'https://github.com/missing/RaidHelper', key:'github.com/missing/raidhelper', category:'', description:''}]});
-	});
+	await page.route('**/rest/v1/rpc/import_review_counts', route => route.fulfill({
+		json: { pending: 1, waiting: 0, fine: 0, duplicate: 0, incomplete: 0, wiki: 0, dead: 1 }
+	}));
+	await page.route('**/rest/v1/pending_imports?*', route => route.fulfill({ json: [] }));
+	await page.route('**/rest/v1/decided_imports?*', route => route.fulfill({ json: [{
+		id: 999998, name:'RaidHelper', url:'https://github.com/missing/RaidHelper',
+		key:'github.com/missing/raidhelper', category:'', description:'', status: 'pending'
+	}] }));
 	await page.goto('/admin/import');
 	const entry = page.locator('[data-entry]');
 	await expect(page.getByRole('button', {name:/^Dead links\s+1$/})).toBeVisible();
@@ -32,11 +31,10 @@ test('confirmed dead links have an exclusive filter even with missing details an
 
 test('filed dead links appear under Decided without manual decisions', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[]}));
-	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
-		const url = new URL(route.request().url());
-		if (url.searchParams.get('status') !== 'eq.dead') return route.continue();
-		return route.fulfill({json:[{id:999999,key:'github.com/missing/gone',url:'https://github.com/missing/Gone',name:'GoneAddon',description:'An unavailable repository.',category:'Miscellaneous',images:[],alts:[],status:'dead'}]});
+	await page.route('**/rest/v1/rpc/import_review_counts', route => route.fulfill({ json: { dead: 1 } }));
+	await page.route('**/rest/v1/decided_imports?*', route => {
+		const query = new URL(route.request().url()).searchParams;
+		return route.fulfill({json:query.has('search_document') ? [] : [{id:999999,key:'github.com/missing/gone',url:'https://github.com/missing/Gone',name:'GoneAddon',description:'An unavailable repository.',category:'Miscellaneous',images:[],alts:[],status:'dead'}]});
 	});
 	await page.goto('/admin/import');
 	await page.getByRole('button', {name:/^Dead links\s+1$/}).click();

@@ -93,17 +93,18 @@ test('renamed forks suggest their published parent and keep separate approval ex
  let candidateId:number|undefined;
  await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route=>{
   if(route.request().method()!=='GET') return route.continue();
-  const response=await route.fetch();const rows=await response.json();
+  const url = new URL(route.request().url());
+  const searching = url.searchParams.has('search_document');
+  url.searchParams.delete('search_document');
+  const response=await route.fetch({url:url.href});const rows=await response.json();
   if(Array.isArray(rows)){
    candidateId??=rows.find(row=>row.status==='pending')?.id;
-   for(const row of rows) if(row.id===candidateId) {row.name=forkName;row.description='';}
+   for(const row of rows) if(row.id===candidateId) {
+    row.name=forkName;row.description='';
+    row.review_stats={...row.review_stats,fork_of:known?parentKey:'github.com/unlisted/parent'};
+   }
   }
-  await route.fulfill({response,json:rows});
- });
- await page.route('**/rest/v1/repo_stats_current?*',async route=>{
-  const response=await route.fetch();const rows=await response.json();
-  for(const row of rows) row.fork_of=known?parentKey:'github.com/unlisted/parent';
-  await route.fulfill({response,json:rows});
+  await route.fulfill({response,json:searching ? rows.filter(row => row.id === candidateId) : rows});
  });
  await page.goto('/admin/import');
  await page.getByLabel('Search',{exact:true}).fill(forkName);
@@ -135,17 +136,18 @@ for (const group of [false,true]) {
   let candidateId:number|undefined;
   await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/,async route=>{
    if(route.request().method()!=='GET') return route.continue();
-   const response=await route.fetch();const rows=await response.json();
+   const url = new URL(route.request().url());
+   const searching = url.searchParams.has('search_document');
+   url.searchParams.delete('search_document');
+   const response=await route.fetch({url:url.href});const rows=await response.json();
    if(Array.isArray(rows)){
     candidateId??=rows.find(row=>row.status==='pending')?.id;
-    for(const row of rows) if(row.id===candidateId) {row.name=version;row.description='A separately named version with its own description.';}
+    for(const row of rows) if(row.id===candidateId) {
+     row.name=version;row.description='A separately named version with its own description.';
+     if(row.review_stats) row.review_stats.fork_of=null;
+    }
    }
-   await route.fulfill({response,json:rows});
-  });
-  await page.route('**/rest/v1/repo_stats_current?*',async route=>{
-   const response=await route.fetch();const rows=await response.json();
-   for(const row of rows) row.fork_of=null;
-   await route.fulfill({response,json:rows});
+   await route.fulfill({response,json:searching ? rows.filter(row => row.id === candidateId) : rows});
   });
   await page.goto('/admin/import');
   await page.getByLabel('Search',{exact:true}).fill(version);

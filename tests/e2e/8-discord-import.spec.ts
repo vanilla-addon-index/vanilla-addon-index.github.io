@@ -2,8 +2,8 @@ import { expect, test } from './test.ts';
 import { loginAs } from './helpers.ts';
 import { zipSync, strToU8 } from 'fflate';
 
-test('owner uploads opening posts into the shared review queue; admin cannot upload', async ({page: adminPage,browser}) => {
- const context = await browser.newContext({baseURL:'http://localhost:5174'});
+test('owner uploads opening posts into the shared review queue; admin cannot upload', async ({page: adminPage,browser,baseURL}) => {
+ const context = await browser.newContext({baseURL});
  const page = await context.newPage();
  await loginAs(adminPage,'admin');
  await adminPage.goto('/admin/import');
