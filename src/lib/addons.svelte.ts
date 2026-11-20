@@ -82,7 +82,8 @@ const PAGE = 1000;
 
 // When this browser last asked the database what is newer than the snapshot, and how long
 // it waits before asking again. Browsing from page to page asks once, not every time.
-const ASKED_KEY = 'fresh-at';
+// Recheck caches made before visitor refreshes read beyond the first API page.
+const ASKED_KEY = 'fresh-at-v2';
 const ASK_EVERY = 5 * 60 * 1000;
 
 // Addons deleted in this browser that the snapshot still lists; see mergeFresh.
@@ -132,13 +133,20 @@ async function fetchPublic(): Promise<{ list: Addon[]; reached: boolean }> {
 	}
 	// A member's answer holds their own addons, so it is asked for on every load.
 	if (supabase && (me || Date.now() - asked > ASK_EVERY)) {
-		const query = supabase.from('addons').select(columns());
-		const { data } = await (me ? query.or(`updated_at.gt."${since}",owner.eq.${me}`) : query.gt('updated_at', since))
-			.order('updated_at', { ascending: false })
-			.limit(PAGE);
-		reached = Boolean(data);
-		if (data) {
-			fresh = (data as unknown as Row[]).map(toAddon);
+		for (let from = 0; ; from += PAGE) {
+			const query = supabase.from('addons').select(columns());
+			const { data, error } = await (me ? query.or(`updated_at.gt."${since}",owner.eq.${me}`) : query.gt('updated_at', since))
+				.order('updated_at', { ascending: false })
+				.order('id')
+				.range(from, from + PAGE - 1);
+			if (error || !data) {
+				reached = false;
+				break;
+			}
+			fresh.push(...(data as unknown as Row[]).map(toAddon));
+			if (data.length < PAGE) break;
+		}
+		if (reached) {
 			try {
 				localStorage.setItem(ASKED_KEY, String(Date.now()));
 			} catch {
