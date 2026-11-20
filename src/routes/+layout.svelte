@@ -4,7 +4,7 @@
 	import { goto, onNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { loadAddons, readCache, startSnapshot, store } from '#lib/addons.svelte.ts';
+	import { ensureCatalogue, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import WikiSubmissionDialog from '#lib/components/WikiSubmissionDialog.svelte';
@@ -27,18 +27,18 @@
 	const framed = window.top !== window.self;
 
 	if (!framed) {
-		startSnapshot();
-		readCache();
+		if (page.route.id === '/') void ensureCatalogue();
 		initAuth();
 	}
 
-	// The snapshot or cache can show first. Refresh once the account is known and again
-	// when it changes, since members need ownership and admins need the exact live list.
 	const userId = $derived(auth.session?.user.id);
+	const needsCatalogue = $derived(page.route.id === '/' ||
+		(Boolean(userId) && (page.route.id === '/account' || page.route.id === '/submit')) ||
+		(auth.isAdmin && page.route.id?.startsWith('/admin')));
+	// Start the catalogue only on routes that use it. Navigating between them reuses the
+	// same load until the account or role changes.
 	$effect(() => {
-		void userId;
-		void auth.isAdmin;
-		if (!framed && auth.known) void loadAddons();
+		if (!framed && needsCatalogue) void ensureCatalogue();
 	});
 
 	// GitHub and Discord send everyone back to the front page after a login. Whoever
@@ -143,7 +143,7 @@
 			<p class="panel mb-4 border-danger/40 px-3 py-2 text-danger">
 				Your account is suspended. You can browse, but not post or edit.
 			</p>
-		{:else if store.stale}
+		{:else if needsCatalogue && store.stale}
 			<p class="panel mb-4 px-3 py-2 text-muted">
 				The database is unreachable. Showing the last daily snapshot; posting is unavailable.
 			</p>

@@ -1,5 +1,5 @@
 import type { Handle } from '@sveltejs/kit/hooks';
-import { SITE_NAME, SITE_URL } from '#lib/config.ts';
+import { PUBLIC_ADDON_COLUMNS, SITE_NAME, SITE_URL } from '#lib/config.ts';
 import { ABOUT_DESCRIPTION, ABOUT_TITLE, HOME_DESCRIPTION, HOME_TITLE, HOME_PREVIEW_TITLE, addonDescription, addonTitle } from '#lib/seo.ts';
 import { readSnapshot } from '#lib/snapshot.server.ts';
 import { entryPath } from '#lib/entry-path.ts';
@@ -55,9 +55,10 @@ function head({ title, description, path, previewTitle = title }: Meta) {
 
 // The content itself, for readers that do not run scripts. Everyone else gets the real page.
 const noscript = (html: string) => `<noscript><main class="mx-auto max-w-6xl px-4 py-5">${html}</main></noscript>`;
+const publicColumns = new Set(PUBLIC_ADDON_COLUMNS.split(','));
 
 function addonPage(addon: Addon) {
-	const links = addon.versions
+	const links = (addon.versions ?? (addon.repo_url ? [{ url: addon.repo_url }] : []))
 		.map((v) => `<li><a href="${esc(v.url)}" rel="nofollow">${esc(v.url)}</a>${v.note ? ` ${esc(v.note)}` : ''}</li>`)
 		.join('');
 	return {
@@ -67,7 +68,9 @@ function addonPage(addon: Addon) {
 			path: entryPath(addon),
 			previewTitle: `${addon.name} – WoW 1.12.1 addon`
 		}),
-		body: noscript(
+		body: `<template id="published-addon">${esc(JSON.stringify(
+			Object.fromEntries(Object.entries(addon).filter(([key]) => publicColumns.has(key)))
+		))}</template>` + noscript(
 			`<h1>${esc(addon.name)}</h1>` +
 				`<p>${esc(addon.category)} addon for World of Warcraft 1.12.1${addon.author ? ` by ${esc(addon.author)}` : ''}</p>` +
 				(addon.description ? `<p style="white-space: pre-line">${esc(addon.description)}</p>` : '') +

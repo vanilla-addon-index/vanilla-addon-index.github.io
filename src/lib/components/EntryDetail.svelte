@@ -1,14 +1,19 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { clientKind } from '#lib/client-kinds.ts';
 	import { entryHref } from '#lib/entry-href.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
+		currentCatalogueLoad,
 		deleteAddon,
+		ensureCatalogue,
 		fetchAddon,
 		findAddon,
-		store, pinLink, mergeAddons, separateAddon,
+		findCachedAddon,
+		readPublishedAddon,
+		pinLink, mergeAddons, separateAddon,
 	} from '#lib/addons.svelte.ts';
 	import { contributionAccess, ownPendingEdit, removeOwnLink, withdrawEdit, type ContributionAccess, type EditRequest } from '#lib/edit-reviews.svelte.ts';
 	import { auth, canEdit } from '#lib/auth.svelte.ts';
@@ -27,11 +32,17 @@
 	import { addonTitle } from '#lib/seo.ts';
 	import type { Addon } from '#lib/types.ts';
 
-	const found = $derived(findAddon(page.params.slug));
+	const published = readPublishedAddon();
+	const slug = $derived(page.params.slug);
+	const account = $derived(auth.session?.user.id);
+	let checked = $state.raw<{ slug: string; canonical?: string; account?: string; missing?: boolean; cached?: Addon }>();
+	const resolved = $derived(checked?.account === account && (checked?.slug === slug || checked?.canonical === slug) ? checked : undefined);
+	const publishedHere = $derived(slug && (published?.slug === slug || published?.aliases.includes(slug)) ? published : undefined);
+	const found = $derived(resolved?.missing ? undefined : findAddon(slug) ?? publishedHere ?? resolved?.cached);
 	// Alias pages also exist in the static build; move the browser to the current address.
 	$effect(() => {
-		if (!found || page.url.pathname === entryHref(found)) return;
-		void goto(entryHref(found) + page.url.search + page.url.hash, { replaceState: true });
+		if (!resolved || !found || page.url.pathname === entryHref(found)) return;
+		void goto(entryHref(found) + page.url.search + page.url.hash, { replace: true });
 	});
 	// While a delete is under way the addon is already gone from the list; the copy
 	// taken just before keeps the page as it was until the next page replaces it.
@@ -53,7 +64,7 @@
 	let savingMirror = $state(false);
 	$effect(() => {
 		const id = addon?.id;
-		if (!id || mirrorVersions === undefined) return;
+		if (!resolved || !id || mirrorVersions === undefined) return;
 		let current = true;
 		// Cached and live addon rows can arrive in quick succession. Keep the
 		// current result visible while refreshing the same addon.
@@ -65,7 +76,7 @@
 		const id = addon?.id;
 		inactiveMirrors = []; mirrorUrl = ''; mirrorSource = '';
 		mirrorFormOpen = false; editingMirror = '';
-		if (!id || !auth.isAdmin || auth.banned) return;
+		if (!resolved || !id || !auth.isAdmin || auth.banned) return;
 		let current = true;
 		listInactiveMirrorDecisions(id).then(rows => { if (current) inactiveMirrors = rows; })
 			.catch(e => { if (current) error = e.message; });
@@ -110,13 +121,40 @@
 	}
 	let report = $state<ReturnType<typeof ReportDialog>>();
 
-	// An addon the list does not have may have been posted since the daily snapshot was
-	// taken: the database is asked for just that one before the page says "not found".
-	let lookedUp = $state('');
+	// Published pages can open without an addons query for visitors. An account needs
+	// current ownership, and an unknown address may have been posted since publication.
 	$effect(() => {
-		const slug = page.params.slug;
-		if (!slug || found || leaving || !store.loaded || lookedUp === slug) return;
-		fetchAddon(slug).finally(() => (lookedUp = slug));
+		const target = slug;
+		const user = account;
+		if (!auth.known || !target || leaving || untrack(() => resolved)) return;
+		const existing = untrack(() => found);
+		if (existing && !user) {
+			checked = { slug: target, canonical: existing.slug };
+			return;
+		}
+		const controller = new AbortController();
+		const { signal } = controller;
+		const catalogue = untrack(currentCatalogueLoad);
+		async function check(target: string) {
+			if (catalogue) {
+				await catalogue;
+				if (signal.aborted) return;
+				const row = findAddon(target);
+				if (row) {
+					checked = { slug: target, canonical: row.slug, account: user };
+					return;
+				}
+			}
+			const row = await fetchAddon(target, signal).catch(() => undefined);
+			if (signal.aborted) return;
+			const cached = row === undefined && !existing ? findCachedAddon(target) : undefined;
+			checked = {
+				slug: target, account: user, missing: row === null,
+				canonical: (row ?? existing ?? cached)?.slug, cached
+			};
+		}
+		void untrack(() => check(target));
+		return () => controller.abort();
 	});
 
 	let access=$state<ContributionAccess>({can_propose:false,links:[]}), pending=$state<EditRequest|null>(null);
@@ -128,10 +166,10 @@
 		if(addon?.id===id && auth.session?.user.id===user && !auth.banned){access=result;pending=request;}
 	}
 	$effect(()=>{
-		const key=(addon?.id??'')+':'+(auth.session?.user.id??'')+':'+!!auth.banned;
+		const key=(resolved ? addon?.id??'' : '')+':'+(auth.session?.user.id??'')+':'+!!auth.banned;
 		if(accessKey===key)return;
 		accessKey=key;access={can_propose:false,links:[]};pending=null;
-		refreshAccess().catch(e=>error=e.message);
+		if (resolved) refreshAccess().catch(e=>error=e.message);
 	});
 	async function removeLink(link:string) {
 		if(!addon)return;
@@ -345,7 +383,7 @@
 			</div>
 
 			<FavoriteButton addonId={addon.id} />
-            {#if auth.session && !auth.banned}{#key addon.id + ':' + auth.session.user.id}<AddAddonLink addonId={addon.id} hasLinks={addon.versions.length > 0} />{/key}{/if}
+            {#if resolved && auth.session && !auth.banned}{#key addon.id + ':' + auth.session.user.id}<AddAddonLink addonId={addon.id} hasLinks={addon.versions.length > 0} />{/key}{/if}
             {#if auth.session && addon.shared && access.can_propose && !auth.isAdmin}<a class="btn w-full" href={resolve('/submit')+'?edit='+addon.slug}>Propose edits</a>{/if}
             {#if auth.session && pending && !auth.isAdmin}<div class="panel px-3 py-2 text-sm"><p>Your edit is waiting for admin review.</p><button class="btn mt-2" onclick={withdraw}>Withdraw proposal</button></div>{/if}
 			{#snippet editControls()}
@@ -354,7 +392,7 @@
 					<button class="btn btn-danger" onclick={remove}>Delete</button>
 				</div>
 			{/snippet}
-			{#if !auth.isAdmin && canEdit(addon.owner)}
+			{#if resolved && !auth.isAdmin && canEdit(addon.owner)}
 				{@render editControls()}
 			{/if}
 
@@ -371,7 +409,7 @@
 					{/if}
 				</p>
 			{/if}
-			{#if auth.isAdmin}
+			{#if resolved && auth.isAdmin}
 				<section aria-label="Admin controls" class="panel mt-4">
 					<div class="space-y-3 p-3">
 						<div class="flex items-center justify-between gap-3">
@@ -482,7 +520,9 @@
 							{/if}
 						</div>
 					</details>
-					<details class="group border-t border-border" data-merge-settings>
+					<details class="group border-t border-border" data-merge-settings ontoggle={(event) => {
+						if (event.currentTarget.open) void ensureCatalogue();
+					}}>
 						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
 							<span>Merge another addon</span>
 							<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
@@ -508,7 +548,7 @@
 		</aside>
 		<ReportDialog bind:this={report} {addon} />
 	</article>
-{:else if store.loaded && lookedUp === page.params.slug}
+{:else if resolved}
 	<div class="py-16 text-center">
 		<h1 class="text-2xl font-bold">Addon not found</h1>
 		<p class="mt-2 text-muted">It may have been renamed or removed.</p>
