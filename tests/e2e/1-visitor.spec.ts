@@ -45,34 +45,52 @@ test('date sorting follows last code update and accepts old sort links', async (
 	}
 });
 
-test('a large catalogue reuses rows when sorting and keeps groups searchable', async ({ page }) => {
-	const addons = Array.from({ length: 900 }, (_, index) => ({
-		id: 10000 + index,
-		slug: `sample-${index}`,
-		name: `${index < 300 ? 'A' : index < 600 ? 'M' : 'Z'}Sample${String(index).padStart(4, '0')}`,
-		description: index === 800 ? 'Distinctive grouped fork' : 'A catalogue performance sample',
-		category: 'Combat', author: '',
-		repo_url: `https://github.com/example/Sample${index}`,
-		versions: [{ url: `https://github.com/example/Sample${index}`, note: '' }],
-		images: [], group_id: [400, 800].includes(index) ? 99 : null, is_main: index === 400,
-		code_update: { date: new Date(Date.UTC(2023, 0, index + 1)).toISOString(), url: '' }
-	}));
-	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: addons }));
+const largeCatalogue = Array.from({ length: 900 }, (_, index) => ({
+	id: 10000 + index,
+	slug: `sample-${index}`,
+	name: `${index < 300 ? 'A' : index < 600 ? 'M' : 'Z'}Sample${String(index).padStart(4, '0')}`,
+	description: index === 800 ? 'Distinctive grouped fork' : 'A catalogue performance sample',
+	category: 'Combat', author: '',
+	repo_url: `https://github.com/example/Sample${index}`,
+	versions: [{ url: `https://github.com/example/Sample${index}`, note: '' }],
+	images: [], group_id: [400, 800].includes(index) ? 99 : null, is_main: index === 400,
+	code_update: { date: new Date(Date.UTC(2023, 0, index + 1)).toISOString(), url: '' }
+}));
+
+test('a large catalogue keeps letter jumps, keyboard navigation and Back working across sections', async ({ page }) => {
+	await page.addInitScript(() => {
+		document.addEventListener('contentvisibilityautostatechange', event => {
+			if (event.target instanceof HTMLElement) {
+				event.target.toggleAttribute('data-rendering-skipped', (event as ContentVisibilityAutoStateChangeEvent).skipped);
+			}
+		}, true);
+	});
+	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: largeCatalogue }));
 	await page.goto('/?sort=name');
 	const list = page.getByRole('region', { name: 'Addon list', exact: true });
 	const rows = list.locator('a[href^="/addon/"]');
 	await expect(rows).toHaveCount(900);
 	const first = list.locator('a[href="/addon/sample-0"]');
-	const node = await first.elementHandle();
-	const row = first.locator('..').locator('..');
-	await expect(row).toHaveCSS('content-visibility', 'visible');
-	// Password managers inspect link geometry and rendered text even off screen.
-	// These reads must not repeatedly activate/deactivate skipped row layouts.
+	const row = first.locator('xpath=ancestor::*[@data-catalogue-id]');
+	const far = list.locator('a[href="/addon/sample-899"]');
+	const farSection = far.locator('xpath=ancestor::*[contains(@class, "catalogue-section")]');
+	await expect(farSection).toHaveAttribute('data-rendering-skipped', '');
+	const fullHeight = await list.evaluate(element => element.scrollHeight);
+	// Dragging the scrollbar far past the buffer must still show rows on the next frame.
+	expect(await list.evaluate(async element => {
+		element.scrollTop = element.scrollHeight;
+		await new Promise(resolve => requestAnimationFrame(resolve));
+		const rect = element.getBoundingClientRect();
+		const row = document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 10);
+		return Boolean(row?.closest('[data-catalogue-id]'));
+	})).toBe(true);
+	await list.evaluate(element => { element.scrollTop = 0; });
+	// Geometry reads from extensions must remain cheap even when they inspect every link.
 	const inspection = await list.evaluate(element => {
 		const start = performance.now();
 		const labels = Array.from(element.querySelectorAll('a')).map(link => {
 			link.getClientRects();
-			return link.innerText;
+			return link.textContent?.trim();
 		});
 		return { labels, duration: performance.now() - start };
 	});
@@ -81,16 +99,64 @@ test('a large catalogue reuses rows when sorting and keeps groups searchable', a
 	const nameBox = await first.boundingBox();
 	const categoryBox = await row.getByText('Combat', { exact: true }).boundingBox();
 	expect(Math.abs(nameBox!.y - categoryBox!.y)).toBeLessThan(5);
+	// Tab crosses from the end of one section to the first addon of the next.
+	await list.locator('.catalogue-section').first().getByRole('link').last().focus();
+	await page.keyboard.press('Tab');
+	await expect(list.locator('a[href="/addon/sample-32"]')).toBeFocused();
+	await expect(list.locator('a[href="/addon/sample-32"]')).toBeInViewport();
+	// Native find can reach a row outside the rendered sections.
+	expect(await page.evaluate(() => (window as Window & { find(text: string): boolean }).find('ZSample0899'))).toBe(true);
+	await list.focus();
+	await page.keyboard.press('End');
+	await expect(far).toBeInViewport();
+	expect(await list.evaluate(element => element.scrollHeight)).toBe(fullHeight);
+	await far.focus();
+	const scroll = await list.evaluate(element => element.scrollTop);
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL('/addon/sample-899');
+	await expect(page.getByRole('heading', { level: 1, name: 'ZSample0899' })).toBeVisible();
+	await page.goBack();
+	await expect(far).toBeFocused();
+	await expect(far).toBeInViewport();
+	await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(scroll);
+
 	const sort = page.getByRole('combobox', { name: 'Sort by' });
 	await sort.selectOption('code');
 	await expect(rows.first()).toHaveText('ZSample0899');
 	await sort.selectOption('name');
 	await expect(rows.first()).toHaveText('ASample0000');
-	expect(await node!.evaluate(element => element.isConnected)).toBe(true);
 	await page.getByRole('navigation', { name: 'Jump to a letter' }).getByRole('button', { name: 'M', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeInViewport();
 	await page.getByLabel('Search addons').fill('Distinctive grouped fork');
 	await expect(rows).toHaveText([/^MSample0400/, /^ZSample0800/]);
+	await page.getByLabel('Search addons').fill('');
+	await expect(rows).toHaveCount(900);
+	await expect(first).toBeInViewport();
+	await expect(farSection).toHaveAttribute('data-rendering-skipped', '');
+});
+
+test('a phone can jump across catalogue sections and return to the same scroll position', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: largeCatalogue }));
+	await page.goto('/');
+	const letters = page.getByRole('navigation', { name: 'Jump to a letter' });
+	await expect(letters).toBeVisible();
+	expect(await page.evaluate(async () => {
+		window.scrollTo(0, document.documentElement.scrollHeight * 0.8);
+		await new Promise(resolve => requestAnimationFrame(resolve));
+		return Boolean(document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('[data-catalogue-id]'));
+	})).toBe(true);
+	await letters.getByRole('button', { name: 'Z', exact: true }).click();
+	const entry = page.getByRole('link', { name: 'ZSample0600', exact: true });
+	await expect(entry).toBeInViewport();
+	const scroll = await page.evaluate(() => scrollY);
+	expect(scroll).toBeGreaterThan(20_000);
+	await entry.click();
+	await expect(page).toHaveURL('/addon/sample-600');
+	await expect(page.getByRole('heading', { level: 1, name: 'ZSample0600' })).toBeVisible();
+	await page.goBack();
+	await expect(entry).toBeInViewport();
+	await expect.poll(() => page.evaluate(() => scrollY)).toBe(scroll);
 });
 
 test('Back restores search and sorting, while refresh and the logo reset them', async ({ page }) => {
@@ -110,6 +176,7 @@ test('Back restores search and sorting, while refresh and the logo reset them', 
 	await expect(page).toHaveURL('/?q=raidhelper&sort=code');
 	await page.getByRole('link', { name: /^RaidHelper/ }).first().click();
 	await expect(page).toHaveURL('/addon/raidhelper');
+	await expect(page.getByRole('heading', { level: 1, name: 'RaidHelper' })).toBeVisible();
 	await page.goBack();
 	await expect(search).toHaveValue('raidhelper');
 	await expect(sort).toHaveValue('code');

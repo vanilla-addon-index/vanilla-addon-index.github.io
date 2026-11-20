@@ -9,15 +9,14 @@
 		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url' | 'entry_type'>;
 		// Renders the row without links, for the live preview on the submit page.
 		preview?: boolean;
-		// Keep the catalogue's independent desktop tracks, including off-screen rows.
-		catalogue?: boolean;
+		catalogueId?: number;
 		// Who hosts it, shown when another addon in the list has the same name or it is in a group.
 		owner?: string;
 		// Another version in a group: indented under the group's main version, with a line down
 		// the indent joining them.
 		minor?: boolean;
 	};
-	let { addon, preview = false, catalogue = false, owner, minor = false }: Props = $props();
+	let { addon, preview = false, catalogueId, owner, minor = false }: Props = $props();
 
 	// The row shows where the description starts.
 	const blurb = $derived(addon.description.trim().split('\n')[0]);
@@ -28,10 +27,11 @@
 </script>
 
 <div
+	data-catalogue-id={catalogueId}
 	class={[
-		'relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-b border-l-2 border-border/50 border-l-transparent px-3 py-1.25 font-read text-sm last:border-b-0 sm:grid-cols-subgrid',
+		'relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-b border-l-2 border-border/50 border-l-transparent px-3 py-1.25 font-read text-sm sm:grid-cols-subgrid',
 		!preview && 'transition-colors duration-100 hover:border-l-accent/60 hover:bg-raised',
-		catalogue && 'catalogue-row',
+		catalogueId === undefined ? 'last:border-b-0' : 'catalogue-row',
 		minor && 'pl-8 before:absolute before:top-0 before:-bottom-px before:left-4 before:border-l before:border-border'
 	]}
 >
@@ -56,25 +56,45 @@
 		<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
 			{addon.entry_type === 'dll' ? clientKind(addon.category) : addon.category}
 		</span>
-		<span class="col-span-2 row-start-3 flex min-w-0 items-center sm:col-span-1 sm:row-start-auto sm:justify-end">
-			{#if host}
-				<svelte:element
-					this={preview ? 'span' : 'a'}
-					href={preview ? undefined : addon.repo_url}
-					target={preview ? undefined : '_blank'}
-					rel={preview ? undefined : 'noopener nofollow'}
-					class={[
-						'relative shrink-0 border border-border px-1.5 font-sans text-sm leading-tight text-muted',
-						!preview && 'transition-colors duration-100 hover:bg-raised hover:text-fg'
-					]}
-				>
-					<span class="invisible" aria-hidden="true">{WIDEST} ↗</span>
-					<span class="absolute inset-x-1.5 inset-y-0 flex items-center justify-between gap-1">
-						<span class="truncate">{host}</span>
-						<span aria-hidden="true">↗</span>
-					</span>
-				</svelte:element>
-			{:else}<span class="text-sm text-muted">No download links</span>{/if}
-		</span>
+		{#if host}
+			<svelte:element
+				this={preview ? 'span' : 'a'}
+				href={preview ? undefined : addon.repo_url}
+				target={preview ? undefined : '_blank'}
+				rel={preview ? undefined : 'noopener nofollow'}
+				data-sizing-label="{WIDEST} ↗"
+				class={[
+					'repository-link relative col-span-2 row-start-3 grid w-max shrink-0 border border-border px-1.5 font-sans text-sm leading-tight text-muted sm:col-span-1 sm:row-start-auto',
+					!preview && 'transition-colors duration-100 hover:bg-raised hover:text-fg'
+				]}
+			>
+				<span class="truncate">{host}</span>
+			</svelte:element>
+		{:else}
+			<span class="col-span-2 row-start-3 text-sm text-muted sm:col-span-1 sm:row-start-auto">No download links</span>
+		{/if}
 	</span>
 </div>
+
+<style>
+	.repository-link {
+		grid-template-columns: minmax(0, 1fr) auto;
+		column-gap: calc(var(--spacing) * 1);
+	}
+	.repository-link::before {
+		content: attr(data-sizing-label);
+		visibility: hidden;
+		grid-area: 1 / 1 / 2 / 3;
+	}
+	.repository-link::after {
+		content: '↗';
+		content: '↗' / '';
+		grid-area: 1 / 2;
+	}
+	.repository-link > span {
+		grid-area: 1 / 1;
+		/* Let the invisible label size the button, even for an unusually long host. */
+		inline-size: 0;
+		min-inline-size: 100%;
+	}
+</style>
