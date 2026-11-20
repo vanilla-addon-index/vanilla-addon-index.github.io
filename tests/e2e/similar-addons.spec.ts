@@ -31,6 +31,12 @@ test('admins edit similar addons inline; visitors and members never see the tool
  await page.getByRole('button',{name:'Save similar addons',exact:true}).click();
  await expect(page.getByRole('button',{name:'Add similar addons',exact:true})).toBeVisible();
  await expect(page.getByText('MPOWA, WeakAuras',{exact:true})).toHaveCount(0);
+ // A direct entry edit updates that cached row and leaves the rest available offline.
+ const cached = await page.evaluate(() => JSON.parse(localStorage.getItem('addons-v3') ?? '[]'));
+ expect(cached).toEqual(expect.arrayContaining([
+  expect.objectContaining({slug:'raidhelper'}),
+  expect.objectContaining({name,similar_addons:''})
+ ]));
  await page.evaluate(()=>{localStorage.clear();sessionStorage.clear();});
  await page.context().clearCookies();
  await page.goto(path);

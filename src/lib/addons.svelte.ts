@@ -8,6 +8,7 @@ import type { Addon, AddonInput } from './types';
 
 // v3: imports have no owner.
 const CACHE_KEY = 'addons-v3';
+let cachedAddons: Addon[] | undefined;
 
 export const store = $state({
 	addons: [] as Addon[],
@@ -50,26 +51,61 @@ const toAddon = ({ profiles, ...row }: Row): Addon => ({
 	owner_name: profiles?.username ?? ''
 });
 
-/** Shows the list saved by the last visit, so the first paint does not wait for the network. */
-function readCache() {
+function readCachedAddons(): Addon[] | undefined {
 	try {
 		const cached = localStorage.getItem(CACHE_KEY);
 		if (cached) {
-			const rows: Addon[] = JSON.parse(cached);
-			store.addons = store.addons.length ? [...liveRows(store.addons, rows).values()].sort(byName) : rows;
-			store.loaded = true;
+			const rows: unknown = JSON.parse(cached);
+			if (Array.isArray(rows) && rows.every(row =>
+				typeof row?.id === 'number' && typeof row.name === 'string' && typeof row.slug === 'string'
+			)) return rows;
 		}
 	} catch {
 		// Storage unavailable or corrupt: fall through to the network.
 	}
 }
 
-function writeCache() {
+/** Shows the list saved by the last visit, so the first paint does not wait for the network. */
+function readCache() {
+	const rows = readCachedAddons();
+	if (!rows) return;
+	store.addons = store.addons.length ? [...liveRows(store.addons, rows).values()].sort(byName) : rows;
+	cachedAddons = rows;
+	store.loaded = true;
+}
+
+// Addresses, grouping and ownership can change without a new updated_at stamp.
+function sameCacheValue(left: unknown, right: unknown): boolean {
+	if (left === right) return true;
+	if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+	if (Array.isArray(left) !== Array.isArray(right)) return false;
+	const a = left as Record<string, unknown>;
+	const b = right as Record<string, unknown>;
+	const keys = Object.keys(a);
+	return keys.length === Object.keys(b).length &&
+		keys.every(key => Object.hasOwn(b, key) && sameCacheValue(a[key], b[key]));
+}
+
+function writeCache(addons: Addon[]) {
+	if (sameCacheValue(addons, cachedAddons)) {
+		cachedAddons = addons;
+		return;
+	}
 	try {
-		localStorage.setItem(CACHE_KEY, JSON.stringify(store.addons));
+		localStorage.setItem(CACHE_KEY, JSON.stringify(addons));
+		cachedAddons = addons;
 	} catch {
 		// Ignore quota and private-mode errors.
 	}
+}
+
+// A direct entry page may have only one row in memory. Apply its change to the
+// saved catalogue so the other rows remain available offline.
+function changeCachedAddon(id: number, addon?: Addon) {
+	cachedAddons = readCachedAddons();
+	const remaining = (cachedAddons ?? []).filter(row => row.id !== id);
+	if (addon) writeCache([...remaining, addon].sort(byName));
+	else if (remaining.length !== (cachedAddons?.length ?? 0)) writeCache(remaining);
 }
 
 async function fetchSnapshot() {
@@ -135,13 +171,10 @@ export function readPublishedAddon() {
 }
 
 export function findCachedAddon(slug: string) {
-	try {
-		const rows: Addon[] = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '[]');
-		const addon = rows.find(row => row.slug === slug) ?? rows.find(row => row.aliases?.includes(slug));
-		if (addon && !readGone().includes(addon.id)) return withVersions(addon);
-	} catch {
-		// Storage unavailable or corrupt.
-	}
+	const rows = readCachedAddons();
+	const addon = rows?.find(row => row.slug === slug) ??
+		rows?.find(row => Array.isArray(row.aliases) && row.aliases.includes(slug));
+	if (addon && !readGone().includes(addon.id)) return withVersions(addon);
 }
 
 /**
@@ -295,11 +328,11 @@ async function refreshCatalogue() {
 	// Admins review, group and delete, so they get the list exactly as it is now.
 	const exact = LOCAL || (Boolean(me) && auth.isAdmin);
 	const published = LOCAL ? undefined : startupSnapshot ?? fetchSnapshot().catch(() => null);
+	let list: Addon[] | undefined;
 	try {
 		if (exact) {
-			const list = await fetchLive(published);
+			list = await fetchLive(published);
 			if (load !== latestLoad) return;
-			store.addons = list;
 			store.stale = false;
 		} else {
 			const snapshot = await published;
@@ -307,10 +340,11 @@ async function refreshCatalogue() {
 			if (!snapshot) throw new Error('snapshot unavailable');
 			const { fresh, reached, queried } = await fetchFresh(snapshot, me);
 			if (load !== latestLoad) return;
-			const gone = stillGone(readGone(), snapshot);
-			writeGone(gone);
+			const previousGone = readGone();
+			const gone = stillGone(previousGone, snapshot);
+			if (gone.length !== previousGone.length) writeGone(gone);
 			// What an earlier visit fetched is in the list this browser kept.
-			store.addons = mergeFresh(snapshot, store.addons, fresh, gone);
+			list = mergeFresh(snapshot, store.addons, fresh, gone);
 			if (queried && reached) {
 				try {
 					localStorage.setItem(ASKED_KEY, String(Date.now()));
@@ -324,10 +358,10 @@ async function refreshCatalogue() {
 	} catch {
 		if (load !== latestLoad) return;
 		try {
-			const list = await (exact ? published ?? fetchSnapshot() : fetchAll());
+			const fallback = await (exact ? published ?? fetchSnapshot() : fetchAll());
 			if (load !== latestLoad) return;
-			if (list) {
-				store.addons = exact && published ? mergeFresh(list, store.addons, [], readGone()) : list;
+			if (fallback) {
+				list = exact && published ? mergeFresh(fallback, store.addons, [], readGone()) : fallback;
 				store.stale = exact;
 			}
 		} catch {
@@ -336,8 +370,11 @@ async function refreshCatalogue() {
 	}
 	if (load !== latestLoad) return;
 	startupSnapshot = undefined;
+	if (list) {
+		store.addons = list;
+		writeCache(list);
+	}
 	store.loaded = true;
-	writeCache();
 }
 
 /**
@@ -385,7 +422,7 @@ export async function createAddon(input: AddonInput, withoutOwner = false) {
 	if (readError) throw new Error(explain(readError));
 	const addon = toAddon(data as Row);
 	store.addons = [...store.addons.filter((a) => a.id !== addon.id), addon].sort(byName);
-	writeCache();
+	changeCachedAddon(addon.id, addon);
 	return addon;
 }
 
@@ -427,7 +464,7 @@ export async function updateAddon(id: number, input: AddonInput | Pick<Addon, 's
 	}
 	const addon = toAddon(data as Row);
 	store.addons = store.addons.map((a) => (a.id === id ? addon : a));
-	writeCache();
+	changeCachedAddon(id, addon);
 	return addon;
 }
 
@@ -443,7 +480,7 @@ export async function deleteAddon(id: number) {
 	}
 	// The snapshot lists it until the next one is taken; this browser knows better.
 	writeGone([...readGone(), id]);
-	writeCache();
+	changeCachedAddon(id);
 }
 
 async function groupCall(name: string, args: Record<string, unknown>) {

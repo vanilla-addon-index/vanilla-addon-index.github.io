@@ -46,3 +46,47 @@ test('About skips the catalogue and a direct entry without published data asks f
 	expect(addonsRequests[0].searchParams.get('or')).toContain('slug.eq.raidhelper');
 	expect(snapshots).toBe(0);
 });
+
+test('an unchanged refresh skips cache serialization and writes, and the saved list works offline', async ({ page }) => {
+	const row = {
+		id: 98001, name: 'Cached Addon', slug: 'cached-addon', category: 'Combat',
+		description: 'Available offline.', images: [], versions: [], updated_at: '2026-10-10T00:00:00Z'
+	};
+	await page.addInitScript((id) => {
+		const stringify = JSON.stringify;
+		JSON.stringify = function (value, ...args) {
+			if (Array.isArray(value) && value[0]?.id === id) performance.mark('catalogue-serialized');
+			return Reflect.apply(stringify, JSON, [value, ...args]);
+		};
+		const setItem = Storage.prototype.setItem;
+		Storage.prototype.setItem = function (key, value) {
+			if (key === 'addons-v3') performance.mark('catalogue-written');
+			return setItem.call(this, key, value);
+		};
+	}, row.id);
+	const api = '**/rest/v1/addons?*';
+	await page.route(api, route => route.fulfill({ json: [row] }));
+	const cacheWork = () => page.evaluate(() => ['catalogue-serialized', 'catalogue-written']
+		.map(mark => performance.getEntriesByName(mark).length));
+
+	await page.goto('/');
+	await expect(page.getByRole('link', { name: row.name })).toBeVisible();
+	await expect.poll(cacheWork).toEqual([1, 1]);
+
+	const refreshed = page.waitForResponse(api);
+	await page.reload();
+	await (await refreshed).finished();
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	expect(await cacheWork()).toEqual([0, 0]);
+
+	// Published address repairs can change a row without changing its timestamp.
+	row.slug = 'cached-addon-repaired';
+	await page.reload();
+	await expect(page.getByRole('link', { name: row.name })).toHaveAttribute('href', '/addon/cached-addon-repaired');
+	expect(await cacheWork()).toEqual([1, 1]);
+
+	await page.route(api, route => route.abort());
+	await page.route('**/addons.json', route => route.abort());
+	await page.reload();
+	await expect(page.getByRole('link', { name: row.name })).toHaveAttribute('href', '/addon/cached-addon-repaired');
+});
