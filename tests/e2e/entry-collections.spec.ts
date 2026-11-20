@@ -134,7 +134,12 @@ test('DLL detail addresses and old links resolve to the right collection', async
   {id:99101,slug:'client-route',aliases:['old-client-route'],name:'ClientRoute',description:'A DLL routing example.',category:'Libraries',entry_type:'dll',versions:[],images:[],group_id:null,is_main:false},
   {id:99102,slug:'addon-route',aliases:[],name:'AddonRoute',description:'An addon routing example.',category:'Combat',entry_type:'addon',versions:[],images:[],group_id:null,is_main:false}
  ];
- await page.route('**/rest/v1/addons?*',route=>route.fulfill({json:rows}));
+ await page.route('**/rest/v1/addons?*', route => {
+  const query = new URL(route.request().url()).searchParams;
+  const slug = query.get('or')?.match(/slug\.eq\.([a-z0-9-]+)/)?.[1];
+  expect(query.get('limit')).toBe('1');
+  return route.fulfill({json:rows.filter(row => row.slug === slug || row.aliases.includes(slug ?? ''))});
+ });
  await page.goto('/dll/client-route');
  await expect(page.getByRole('heading',{level:1,name:'ClientRoute'})).toBeVisible();
  await expect(page.locator('article .chip')).toHaveText('DLL');

@@ -51,11 +51,12 @@ const toAddon = ({ profiles, ...row }: Row): Addon => ({
 });
 
 /** Shows the list saved by the last visit, so the first paint does not wait for the network. */
-export function readCache() {
+function readCache() {
 	try {
 		const cached = localStorage.getItem(CACHE_KEY);
 		if (cached) {
-			store.addons = JSON.parse(cached);
+			const rows: Addon[] = JSON.parse(cached);
+			store.addons = store.addons.length ? [...liveRows(store.addons, rows).values()].sort(byName) : rows;
 			store.loaded = true;
 		}
 	} catch {
@@ -81,11 +82,11 @@ async function fetchSnapshot() {
 let startupSnapshot: Promise<Addon[] | null> | undefined;
 
 /** Starts the published catalogue before the login state is known. */
-export function startSnapshot() {
+function startSnapshot() {
 	if (LOCAL) return;
 	startupSnapshot = fetchSnapshot().then((snapshot) => {
 		if (!store.loaded) {
-			store.addons = mergeFresh(snapshot, [], [], readGone());
+			store.addons = mergeFresh(snapshot, store.addons, [], readGone());
 			store.loaded = true;
 		}
 		return snapshot;
@@ -117,6 +118,29 @@ function writeGone(ids: number[]) {
 		localStorage.setItem(GONE_KEY, JSON.stringify(ids));
 	} catch {
 		// Ignore quota and private-mode errors.
+	}
+}
+
+export function readPublishedAddon() {
+	if (LOCAL) return;
+	const template = document.getElementById('published-addon');
+	const content = template instanceof HTMLTemplateElement && template.content.textContent;
+	if (!content) return;
+	try {
+		const addon = toAddon(JSON.parse(content) as Row);
+		if (!readGone().includes(addon.id)) return addon;
+	} catch {
+		// Fall through to the single-entry lookup if the embedded data is unavailable.
+	}
+}
+
+export function findCachedAddon(slug: string) {
+	try {
+		const rows: Addon[] = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '[]');
+		const addon = rows.find(row => row.slug === slug) ?? rows.find(row => row.aliases?.includes(slug));
+		if (addon && !readGone().includes(addon.id)) return withVersions(addon);
+	} catch {
+		// Storage unavailable or corrupt.
 	}
 }
 
@@ -232,6 +256,25 @@ const byName = (a: Addon, b: Addon) => a.name.localeCompare(b.name);
 
 // An older refresh may finish after the session or role changes.
 let latestLoad = 0;
+let catalogueStarted = false;
+let catalogueLoad: { key: string; done: Promise<void> } | undefined;
+const catalogueKey = () => JSON.stringify([auth.session?.user.id, auth.isAdmin]);
+
+export function currentCatalogueLoad() {
+	if (catalogueLoad?.key === catalogueKey()) return catalogueLoad.done;
+}
+
+function prepareCatalogue() {
+	if (catalogueStarted) return;
+	catalogueStarted = true;
+	startSnapshot();
+	readCache();
+}
+
+export function ensureCatalogue() {
+	prepareCatalogue();
+	if (auth.known) return currentCatalogueLoad() ?? loadAddons();
+}
 
 /**
  * Visitors read the snapshot, a static file that costs the database nothing, and ask the
@@ -239,7 +282,14 @@ let latestLoad = 0;
  * reviews, so they get the list exactly as it is now: the snapshot, brought up to date by
  * the database, deletions included. Each source stands in for the other when it fails.
  */
-export async function loadAddons() {
+export function loadAddons() {
+	prepareCatalogue();
+	const done = refreshCatalogue();
+	catalogueLoad = { key: catalogueKey(), done };
+	return done;
+}
+
+async function refreshCatalogue() {
 	const load = ++latestLoad;
 	const me = auth.session?.user.id;
 	// Admins review, group and delete, so they get the list exactly as it is now.
@@ -294,16 +344,21 @@ export async function loadAddons() {
  * Asks the database for one addon by its address. The snapshot is up to a day old, so a
  * link to an addon posted since then would otherwise lead visitors to "not found".
  */
-export async function fetchAddon(slug: string) {
-	if (!supabase || !/^[a-z0-9-]+$/.test(slug)) return;
-	const { data } = await supabase
+export async function fetchAddon(slug: string, signal?: AbortSignal) {
+	if (!/^[a-z0-9-]+$/.test(slug)) return null;
+	if (!supabase) return;
+	const query = supabase
 		.from('addons')
 		.select(columns())
 		.or(`slug.eq.${slug},aliases.cs.{${slug}}`)
 		.limit(1);
-	const row = (data as Row[] | null)?.[0];
-	if (!row) return;
-	store.addons = [...store.addons.filter((a) => a.id !== row.id), toAddon(row)].sort(byName);
+	const { data, error } = await (signal ? query.abortSignal(signal) : query);
+	if (signal?.aborted || error || !data) return;
+	const row = (data as unknown as Row[])[0];
+	if (!row) return null;
+	const addon = toAddon(row);
+	store.addons = [...store.addons.filter((a) => a.id !== addon.id), addon].sort(byName);
+	return addon;
 }
 
 export const slugify = (name: string) =>
