@@ -142,21 +142,27 @@ test('admins can attach a queued mirror, correct its source, restore it as a ver
 		const decide = (user, url, choice = 'mirror', queueId = null) => db.as(user, q =>
 			q('select public.decide_addon_mirror($1,$2,$3,$4,$5)', [a.id, mirror, url, choice, queueId]));
 		const displayed = () => db.asVisitor(q => q('select * from public.addon_mirrors($1)', [a.id]));
+		const published = () => db.asVisitor(q => q('select * from public.published_addon_mirrors'));
 		await assert.rejects(decide(member, source), /Only admins/);
 		await assert.rejects(decide(admin, other, 'mirror', queued.id), /evidence changed/);
 		await decide(admin, source, 'mirror', queued.id);
 		assert.deepEqual(await displayed(), [{ url: mirror, source }]);
+		assert.deepEqual(await published(), [{ addon_id: a.id, url: mirror, source }]);
+		await assert.rejects(db.asVisitor(q => q('select * from public.addon_mirror_decisions')), /permission denied/);
 		assert.deepEqual((await db.sql('select versions from public.addons'))[0].versions, versions);
 		assert.deepEqual(await db.sql('select url from public.pending_imports'), []);
 
 		await decide(admin, other);
 		assert.deepEqual(await displayed(), [{ url: mirror, source: other }]);
+		assert.deepEqual(await published(), [{ addon_id: a.id, url: mirror, source: other }]);
 		await decide(admin, null, 'independent');
 		assert.deepEqual(await displayed(), []);
+		assert.deepEqual(await published(), []);
 		assert.ok((await db.sql('select versions from public.addons'))[0].versions.some(v => v.url === mirror));
 		await decide(admin, source);
 		await decide(admin, null, 'removed');
 		assert.deepEqual(await displayed(), []);
+		assert.deepEqual(await published(), []);
 		assert.deepEqual((await db.sql('select versions from public.addons'))[0].versions, versions);
 	} finally {
 		await db.close();

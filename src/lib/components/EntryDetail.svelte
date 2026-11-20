@@ -30,7 +30,7 @@
 	import { listAddonMirrors, listInactiveMirrorDecisions, decideAddonMirror } from '#lib/admin.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
-	import type { Addon } from '#lib/types.ts';
+	import type { Addon, AddonMirror } from '#lib/types.ts';
 
 	const published = readPublishedAddon();
 	const slug = $derived(page.params.slug);
@@ -53,8 +53,12 @@
 
 	let error = $state('');
 	let success = $state('');
-	let mirrorResult = $state.raw<{ id: number; rows: { url: string; source: string | null }[] }>();
-	const mirrors = $derived(mirrorResult && mirrorResult.id === addon?.id ? mirrorResult.rows : []);
+	let mirrorResult = $state.raw<{ id: number; user?: string; rows: AddonMirror[] }>();
+	const publishedMirrors = $derived(addon?.published_mirrors);
+	const mirrors = $derived(
+		mirrorResult && mirrorResult.id === addon?.id && mirrorResult.user === account
+			? mirrorResult.rows : publishedMirrors ?? []
+	);
 	const mirrorVersions = $derived(addon?.versions.map(version => version.url).sort().join('\n'));
 	let inactiveMirrors = $state<{ url: string; decision: 'independent' | 'removed' }[]>([]);
 	let mirrorUrl = $state('');
@@ -64,11 +68,13 @@
 	let savingMirror = $state(false);
 	$effect(() => {
 		const id = addon?.id;
+		const user = account;
 		if (!resolved || !id || mirrorVersions === undefined) return;
+		if (!user && publishedMirrors !== undefined) return;
 		let current = true;
 		// Cached and live addon rows can arrive in quick succession. Keep the
 		// current result visible while refreshing the same addon.
-		listAddonMirrors(id).then(rows => { if (current) mirrorResult = { id, rows }; })
+		listAddonMirrors(id).then(rows => { if (current) mirrorResult = { id, user, rows }; })
 			.catch(e => { if (current) error = e.message; });
 		return () => { current = false; };
 	});
@@ -85,14 +91,15 @@
 	async function saveMirror(url: string, source: string | null, decision: 'mirror' | 'independent' | 'removed') {
 		if (!addon || savingMirror) return;
 		const { id, slug } = addon;
+		const user = account;
 		savingMirror = true;
 		try {
 			await change(async () => {
 				await decideAddonMirror(id, url, source, decision);
 				await fetchAddon(slug);
 				const [rows, decisions] = await Promise.all([listAddonMirrors(id), listInactiveMirrorDecisions(id)]);
-				if (addon?.id === id) {
-					mirrorResult = { id, rows };
+				if (addon?.id === id && account === user) {
+					mirrorResult = { id, user, rows };
 					inactiveMirrors = decisions;
 					mirrorUrl = ''; mirrorSource = '';
 					mirrorFormOpen = false; editingMirror = '';
@@ -375,7 +382,7 @@
                             {#if auth.session && !auth.isAdmin && !auth.banned && access.links.includes(version.url)}<button class="btn mt-1 px-2 py-0.5 text-sm" onclick={()=>removeLink(version.url)}>Remove my link</button>{/if}
 						</li>
 					{/each}
-					{#each mirrors.filter(mirror => !mirror.source) as mirror (mirror.url)}
+					{#each mirrors.filter(mirror => !addon.versions.some(version => version.url === mirror.source)) as mirror (mirror.url)}
 						<li class="px-3 py-3 text-sm"><a href={mirror.url} target="_blank" rel="noopener nofollow" class="break-all text-accent hover:underline">{mirror.url}</a>
 							<span class="block text-muted">Mirror link</span></li>
 					{/each}
