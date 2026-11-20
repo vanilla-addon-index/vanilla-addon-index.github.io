@@ -3,7 +3,7 @@
 import { PROVIDER_NAMES } from './config';
 import { linkKey } from './links';
 import { supabase } from './supabase';
-import type { Addon } from './types';
+import type { Addon, AddonMirror } from './types';
 
 export interface LogEntry {
 	id: number;
@@ -118,7 +118,7 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 }
 
 export const listAddonMirrors = (target: number) =>
-	call<{ url: string; source: string | null }[]>('addon_mirrors', { target });
+	call<AddonMirror[]>('addon_mirrors', { target });
 
 export const makeCommunityListing = (target: number) =>
 	call<null>('make_community_listing', { target });

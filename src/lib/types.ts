@@ -9,6 +9,11 @@ export interface Version {
 	note: string;
 }
 
+export interface AddonMirror {
+	url: string;
+	source: string | null;
+}
+
 export type EntryType = 'addon' | 'dll';
 
 export interface Addon {
@@ -26,6 +31,8 @@ export interface Addon {
 	is_main: boolean;
 	// Where to get it: the main link first, then mirrors of the same code elsewhere.
 	versions: Version[];
+	// An empty list records that the snapshot checked and found no mirrors. Older snapshots omit it.
+	published_mirrors?: AddonMirror[];
 	// The main link: the first version's address, derived by the database.
 	repo_url: string;
 	// Where the entry was imported from, empty when a user posted it.

@@ -16,12 +16,13 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
 // The API returns at most 1000 rows per request.
 const PAGE = 1000;
+const init = { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } };
 const addons = [];
 for (let offset = 0; ; offset += PAGE) {
 	const page = await request(
 		// Names repeat; the id keeps the order fixed from one page to the next.
 		`${SUPABASE_URL}/rest/v1/addons?select=${PUBLIC_ADDON_COLUMNS}&order=name,id&limit=${PAGE}&offset=${offset}`,
-		{ init: { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }, read: (response) => response.json() }
+		{ init, read: (response) => response.json() }
 	);
 	addons.push(...page);
 	if (page.length < PAGE) break;
@@ -40,5 +41,20 @@ if (last >= 20 && addons.length < last / 2) {
 	throw new Error(problem);
 }
 
-writeFileSync(FILE, JSON.stringify(addons, null, '\t') + '\n');
+// Read active links in bulk, so published pages can serve them without a database request.
+const mirrors = new Map();
+for (let offset = 0; ; offset += PAGE) {
+	const page = await request(
+		`${SUPABASE_URL}/rest/v1/published_addon_mirrors?select=addon_id,url,source&order=url&limit=${PAGE}&offset=${offset}`,
+		{ init, read: (response) => response.json() }
+	);
+	for (const { addon_id, url, source } of page) {
+		if (!mirrors.has(addon_id)) mirrors.set(addon_id, []);
+		mirrors.get(addon_id).push({ url, source });
+	}
+	if (page.length < PAGE) break;
+}
+
+const snapshot = addons.map(addon => ({ ...addon, published_mirrors: mirrors.get(addon.id) ?? [] }));
+writeFileSync(FILE, JSON.stringify(snapshot, null, '\t') + '\n');
 console.log(`Exported ${addons.length} addons.`);
