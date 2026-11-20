@@ -98,7 +98,8 @@ test('the shared import queue filters types and offers classification in each en
  await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
   if (route.request().method() !== 'GET') return route.continue();
   const item={id:99004,key:'gitlab.com/example/client-review',name:'ClientReview',url:'https://gitlab.com/example/client-review',description:'An extension awaiting review.',category:'',entry_type:'dll',images:[],alts:[],parent:null,obsolete:false,status:'pending',problem:null,rejected_by_owner:false};
-  await route.fulfill({json:[item]});
+  const type = new URL(route.request().url()).searchParams.get('entry_type');
+  await route.fulfill({json:type === 'eq.addon' ? [] : [item]});
  });
  await page.goto('/admin/import');
  const entry=page.locator('[data-entry]').filter({has:page.getByRole('textbox',{name:'Name',exact:true})});

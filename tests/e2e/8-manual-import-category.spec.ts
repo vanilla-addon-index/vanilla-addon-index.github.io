@@ -67,15 +67,15 @@ test('repository evidence and old guesses do not preselect a category', async ({
 
 test('old archived imports stay quiet, omit the obsolete filter and preserve admin category choices', async ({page}) => {
 	await loginAs(page, 'admin');
-	await page.route('**/rest/v1/repo_stats_current?*', route => route.fulfill({json:[{
+	const reviewStats = {
 		key:'github.com/a/chatmonitor', pushed_at:'2010-01-01T00:00:00Z', stars:1,
 		missing:false, archived:true, interface:11200, fork_of:null, canonical:null
-	}]}));
+	};
 	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const response = await route.fetch(), rows = await response.json();
 		if (!Array.isArray(rows) || !rows.length) return route.fulfill({response});
-		await route.fulfill({response, json:[{...rows[0], key:'github.com/a/chatmonitor', url:'https://github.com/a/ChatMonitor', obsolete:true, name:'ChatMonitor', category:'Chat & Social', description:'Monitors the chat. Includes a minimap button.'}]});
+		await route.fulfill({response, json:[{...rows[0], review_stats:reviewStats, key:'github.com/a/chatmonitor', url:'https://github.com/a/ChatMonitor', obsolete:true, name:'ChatMonitor', category:'Chat & Social', description:'Monitors the chat. Includes a minimap button.'}]});
 	});
 	await page.goto('/admin/import');
 	const entry = page.locator('[data-entry]').first();

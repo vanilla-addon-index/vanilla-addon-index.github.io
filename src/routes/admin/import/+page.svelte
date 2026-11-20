@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { entryHref } from '#lib/entry-href.ts';
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { similarAddon, publishedForkParent, isWikiPage, type ReviewNote } from '#lib/import-review.ts';
 	import { store } from '#lib/addons.svelte.ts';
@@ -9,7 +9,7 @@
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import DiscordUpload from '#lib/components/DiscordUpload.svelte';
 	import { CATEGORIES, SITE_NAME } from '#lib/config.ts';
-	import { imports, loadQueue, loadRejected, restore, type QueueItem } from '#lib/imports.svelte.ts';
+	import { IMPORT_PAGE_SIZE, imports, loadMoreImports, loadQueue, remainingImports, selectQueue, restore, type QueueItem, type QueueView as View } from '#lib/imports.svelte.ts';
 	import { linkAuthor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
@@ -24,30 +24,33 @@
 	// Review buckets are exclusive: missing details and repository issues need review
 	// before an entry can be treated as fine or as a possible version.
 	// Decided lists are separate: manual rejections and automatically filed dead links.
-	type View = keyof typeof FILTERS | 'mirrors' | 'incomplete' | 'rejected' | 'dead';
 
 	// The interface number a 1.12 addon declares in its .toc file.
 	const VANILLA_INTERFACE = 11200;
-	const PAGE = 100;
 
 	let view = $state<View>('all');
 	let query = $state('');
 	let entryType = $state('');
-	let shown = $state(PAGE);
 	// Position of the entry the keyboard shortcuts act on.
 	let current = $state(0);
 	let entries = $state<HTMLElement>();
 	let notice = $state('');
 	let error = $state('');
 
-	// Keep the previous list visible, but check for work added since the last visit.
-	onMount(() => {
-		loadQueue().catch((e) => (error = e.message));
-	});
+	let previousQuery = '';
+	let needsCounts = true;
 	$effect(() => {
-		if (auth.isAdmin && view === 'rejected' && !imports.rejectedLoaded) {
-			loadRejected().catch((e) => (error = e.message));
-		}
+		const next = { view, query: query.trim(), entryType };
+		if (!auth.isAdmin) return;
+		const delay = next.query === previousQuery ? 0 : 250;
+		previousQuery = next.query;
+		untrack(() => selectQueue(next));
+		const timer = setTimeout(async () => {
+			try {
+				if (await loadQueue(needsCounts)) needsCounts = false;
+			} catch (e) { error = (e as Error).message; }
+		}, delay);
+		return () => clearTimeout(timer);
 	});
 
 	// Names compare without case, spaces or punctuation: "Big Wigs" is "bigwigs".
@@ -57,11 +60,6 @@
 	const liveByKey = $derived(
 		new Map(store.addons.flatMap((a) => a.versions.map((v) => [linkKey(v.url), a] as const)))
 	);
-	const queuedNames = $derived.by(() => {
-		const totals = new Map<string, number>();
-		for (const item of imports.items) totals.set(plain(item.name), (totals.get(plain(item.name)) ?? 0) + 1);
-		return totals;
-	});
 
 	interface Review {
 		verdict: Verdict;
@@ -86,7 +84,7 @@
 	}
 
 	function review(item: QueueItem): Review {
-		const forkMatch = publishedForkParent(imports.stats[item.key]?.fork_of, store.addons);
+		const forkMatch = publishedForkParent(item.review_stats?.fork_of, store.addons);
 		const judged = judge(item);
 		const existing = liveByName.has(plain(item.name)) || forkMatch;
 		const missing = existing ? [] : gaps(item);
@@ -98,7 +96,7 @@
 	function judge(item: QueueItem): Omit<Review, 'missing'> {
 		const notes: ReviewNote[] = [];
 		const missing = gaps(item);
-		const stats = imports.stats[item.key];
+		const stats = item.review_stats;
 		const name = plain(item.name);
 		const sameName = liveByName.get(name);
 		const forkParent = publishedForkParent(stats?.fork_of, store.addons);
@@ -122,7 +120,7 @@
 			href: forkParent ? entryHref(forkParent) : `https://${stats!.fork_of!}`
 		});
 		if (similar) notes.push({ label: 'Name variant of', value: similar.name, tone: 'warning', href: entryHref(similar) });
-		if ((queuedNames.get(name) ?? 0) > 1) notes.push({ label: 'Queue', value: 'Same name twice', tone: 'warning' });
+		if ((item.same_name_count ?? 0) > 1) notes.push({ label: 'Queue', value: 'Same name twice', tone: 'warning' });
 		if (movedTo) notes.push({ label: 'Moved to', value: movedTo });
 		if (item.parent) notes.push({ label: 'Extends', value: item.parent });
 		if (item.alts.length) notes.push({ label: 'Wiki versions', value: String(item.alts.length) });
@@ -138,33 +136,11 @@
 		return { verdict: 'fine', advice: 'Ready', notes };
 	}
 
-	const pendingDead = $derived(imports.items.filter(item => imports.stats[item.key]?.missing));
-	const deadEntries = $derived([...new Map([...pendingDead, ...imports.dead].map(item => [item.id, item])).values()].sort((a, b) => a.name.localeCompare(b.name)));
-	const reviewed = $derived(imports.items.filter(item => !imports.stats[item.key]?.missing).map((item) => ({ item, ...review(item) })));
-	const totals = $derived(Object.groupBy(reviewed, (r) => r.verdict));
-
-	const matches = (item: QueueItem) => {
-		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-		const haystack = `${item.name} ${item.description} ${item.url} ${item.category}`.toLowerCase();
-		return (!entryType || (item.entry_type ?? 'addon') === entryType) && words.every((w) => haystack.includes(w));
-	};
-	const incomplete = $derived(totals.incomplete?.length ?? 0);
-	const visible = $derived(
-		reviewed.filter(
-			({ item, verdict }) =>
-				(view === 'all' || (view === 'mirrors' ? Boolean(item.mirror_source) : verdict === view)) && matches(item)
-		)
-	);
-	const decided = $derived(view === 'dead' ? deadEntries : imports.rejected);
-	const visibleRejected = $derived(decided.filter(matches));
-	const total = $derived(view === 'rejected' || view === 'dead' ? visibleRejected.length : visible.length);
-	const page = $derived(visible.slice(0, shown));
-	const pageRejected = $derived(visibleRejected.slice(0, shown));
-	const onPage = $derived(view === 'rejected' || view === 'dead' ? pageRejected.length : page.length);
+	const page = $derived(view === 'dead' || view === 'rejected' ? [] : imports.items.map(item => ({ item, ...review(item) })));
+	const onPage = $derived(imports.items.length);
 
 	function show(next: View) {
 		view = next;
-		shown = PAGE;
 		current = 0;
 		entries?.scrollTo(0, 0);
 	}
@@ -208,7 +184,7 @@
 		else if (key === 'k' || key === 'arrowup') move(-1);
 		else if (view === 'dead') return;
 		else if (view === 'rejected') {
-			const item = pageRejected[current];
+			const item = imports.items[current];
 			if (!item || key !== 'u') return;
 			restoreOne(item);
 		} else {
@@ -277,7 +253,7 @@
 					<p class="text-muted">Sources: {WIKI_NAME} and OctoWoW</p>
 				</div>
 				<dl>
-					{#each [['Waiting', imports.counts.pending - pendingDead.length], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected], ['Dead links', deadEntries.length]] as [label, value] (label)}
+				{#each [['Waiting', imports.counts.waiting], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected], ['Dead links', imports.counts.dead]] as [label, value] (label)}
 						<div class="flex justify-between border-b border-border px-3 py-1.5 last:border-b-0">
 							<dt class="text-muted">{label}</dt>
 							<dd>{value}</dd>
@@ -306,14 +282,14 @@
 					{@render choice(
 						value as View,
 						label,
-						value === 'all' ? reviewed.length : (totals[value as Verdict]?.length ?? 0)
+						value === 'all' ? imports.counts.waiting : imports.counts[value as 'fine' | 'duplicate' | 'wiki']
 					)}
 				{/each}
-				{@render choice('mirrors', 'Confirmed mirrors', reviewed.filter(({ item }) => item.mirror_source).length)}
-				{@render choice('incomplete', 'Needs review', incomplete)}
+				{@render choice('mirrors', 'Confirmed mirrors', imports.counts.mirrors)}
+				{@render choice('incomplete', 'Needs review', imports.counts.incomplete)}
 				<h2 class="label mt-2 border-t border-border px-3 pt-3">Decided</h2>
 				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
-				{@render choice('dead', 'Dead links', deadEntries.length)}
+				{@render choice('dead', 'Dead links', imports.counts.dead)}
 			</div>
 
 			<DiscordUpload />
@@ -344,12 +320,11 @@
 				aria-label="Search"
 				bind:value={query}
 				oninput={() => {
-					shown = PAGE;
 					current = 0;
 					entries?.scrollTo(0, 0);
 				}}
 			/>
-				<select class="input w-auto shrink-0" aria-label="Type" bind:value={entryType} onchange={() => { shown = PAGE; current = 0; }}>
+				<select class="input w-auto shrink-0" aria-label="Type" bind:value={entryType} onchange={() => { current = 0; entries?.scrollTo(0, 0); }}>
 					<option value="">All types</option><option value="addon">Addons</option><option value="dll">DLL mods</option>
 				</select>
 			</div>
@@ -365,14 +340,14 @@
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="panel mt-2 focus-visible:outline-none md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain" bind:this={entries} role="region" aria-label="Import entries" tabindex="0">
 				{#if view === 'rejected' || view === 'dead'}
-					{#if view === 'dead' ? !imports.loaded : !imports.rejectedLoaded}
+					{#if !imports.loaded}
 						<p class="px-3 py-8 text-center text-muted">{view === 'dead' ? 'Loading dead links…' : 'Loading the rejected entries…'}</p>
-					{:else if !pageRejected.length}
+					{:else if !onPage}
 						<p class="px-3 py-8 text-center text-muted">
-							{view === 'dead' ? (deadEntries.length ? 'No dead link matches.' : 'No dead links.') : (imports.rejected.length ? 'No rejected entry matches.' : 'Nothing has been rejected.')}
+							{view === 'dead' ? (imports.counts.dead ? 'No dead link matches.' : 'No dead links.') : (imports.counts.rejected ? 'No rejected entry matches.' : 'Nothing has been rejected.')}
 						</p>
 					{:else}
-						{#each pageRejected as item, index (item.id)}
+						{#each imports.items as item, index (item.id)}
 							{#snippet body()}
 								<div class="mt-1.5">
 									{#if view === 'dead'}
@@ -390,7 +365,7 @@
 					<p class="px-3 py-8 text-center text-muted">Loading the queue…</p>
 				{:else if !page.length}
 					<p class="px-3 py-8 text-center text-muted">
-						{imports.items.length
+						{imports.counts.waiting
 							? 'Nothing in the queue matches.'
 							: 'The queue is empty. New candidates from the wiki and OctoWoW are added every night.'}
 					</p>
@@ -412,9 +387,9 @@
 				{/if}
 			</div>
 
-			{#if total > shown}
-				<button class="btn mt-2 w-full" onclick={() => (shown += PAGE)}>
-					Show {Math.min(PAGE, total - shown)} more of {total}
+			{#if remainingImports()}
+				<button class="btn mt-2 w-full" disabled={imports.loading} onclick={() => loadMoreImports()?.catch((e) => (error = e.message))}>
+					Show {Math.min(IMPORT_PAGE_SIZE, remainingImports())} more of {imports.matching}
 				</button>
 			{/if}
 		</section>

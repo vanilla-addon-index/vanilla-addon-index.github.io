@@ -1,4 +1,4 @@
-import { loadAddons } from './addons.svelte';
+import { loadAddons, plainName } from './addons.svelte';
 import { supabase } from './supabase';
 import { auth } from './auth.svelte';
 import type { Addon, AddonInput } from './types';
@@ -20,6 +20,9 @@ export interface QueueItem extends Candidate {
 	mirror_source?: string | null;
 	mirror_addon_id?: number | null;
 	mirror_source_unavailable?: boolean;
+	same_name_count?: number;
+	review_bucket?: 'fine' | 'duplicate' | 'incomplete' | 'wiki';
+	review_stats?: RepoStats | null;
 }
 
 
@@ -36,74 +39,103 @@ export interface RepoStats {
 	canonical: string | null;
 }
 
+export type QueueView = 'all' | 'fine' | 'duplicate' | 'wiki' | 'mirrors' | 'incomplete' | 'rejected' | 'dead';
+interface Selection { view: QueueView; query: string; entryType: string }
+type QueueCounts = Record<Exclude<QueueView, 'all'> | 'pending' | 'waiting' | 'approved' | 'submitted' | 'discord', number>;
+
+export const IMPORT_PAGE_SIZE = 50;
 export const imports = $state({
 	items: [] as QueueItem[],
-	// What GitHub says about each repository, by link key. Empty until the nightly job has run.
-	stats: {} as Record<string, RepoStats>,
-	counts: { pending: 0, approved: 0, rejected: 0, submitted: 0, dead: 0 },
+	counts: {
+		pending: 0, waiting: 0, approved: 0, rejected: 0, submitted: 0, dead: 0,
+		fine: 0, duplicate: 0, wiki: 0, mirrors: 0, incomplete: 0, discord: 0
+	} as QueueCounts,
 	loaded: false,
-	// Entries an admin turned down. Fetched only when that list is opened.
-	rejected: [] as QueueItem[],
-	rejectedLoaded: false,
-	dead: [] as QueueItem[],
+	loading: false,
+	matching: 0,
 	wikiReading: {} as Record<number, boolean>,
 	wikiErrors: {} as Record<number, string>
 });
-
-const PAGE = 1000;
 
 function client() {
 	if (!supabase) throw new Error('Database is not configured.');
 	return supabase;
 }
 
-// The API returns at most 1000 rows per request.
-async function all<T>(table: string, filter?: [string, string]): Promise<T[]> {
-	const rows: T[] = [];
-	for (let from = 0; ; from += PAGE) {
-		let query = client().from(table).select('*');
-		if (filter) query = query.eq(filter[0], filter[1]);
-		const { data, error } = await query.order('key').range(from, from + PAGE - 1);
-		if (error) throw new Error(error.message);
-		rows.push(...(data as T[]));
-		if (data.length < PAGE) return rows;
-	}
-}
-
-async function count(status: QueueItem['status']) {
-	let query = client()
-		.from(status === 'pending' ? 'pending_imports' : 'import_queue')
-		.select('id', { count: 'exact', head: true })
-		.eq('status', status);
-	if (status === 'approved') query = query.eq('wiki_expanded', false);
-	const { count: n, error } = await query;
-	if (error) throw new Error(error.message);
-	return n ?? 0;
-}
+let countsRequest = 0;
 
 /** Refreshes the Import tab badge without loading the queue or repository details. */
 export async function countImports() {
 	if (!supabase) return;
-	imports.counts.pending = await count('pending');
+	const read = ++countsRequest;
+	const { count, error } = await supabase.from('pending_imports')
+		.select('id', { count: 'exact', head: true })
+		.eq('status', 'pending');
+	if (error) throw new Error(error.message);
+	if (read === countsRequest && auth.isAdmin) imports.counts.pending = count ?? 0;
 }
 
-export async function loadQueue() {
-	const [items, stats, pending, approved, rejected, submitted, dead] = await Promise.all([
-		all<QueueItem>('pending_imports', ['status', 'pending']),
-		all<RepoStats>('repo_stats_current'),
-		count('pending'),
-		count('approved'),
-		count('rejected'),
-		count('submitted'),
-		all<QueueItem>('import_queue', ['status', 'dead'])
-	]);
-	imports.items = items.sort(byName);
-	imports.stats = Object.fromEntries(stats.map((s) => [s.key, s]));
-	imports.dead = dead.sort(byName);
-	imports.counts = { pending, approved, rejected, submitted, dead: dead.length };
-	imports.loaded = true;
-	void expandWaitingArticles();
+let selection: Selection = { view: 'all', query: '', entryType: '' };
+let activeRequest: AbortController | undefined;
+let nextOffset = $state(0);
+
+export function selectQueue(next: Selection) {
+	activeRequest?.abort();
+	selection = next;
+	nextOffset = 0;
+	imports.items = [];
+	imports.matching = 0;
+	imports.loaded = false;
 }
+
+export async function loadQueue(refreshCounts = true, more = false) {
+	if (!auth.isAdmin) return;
+	activeRequest?.abort();
+	const request = new AbortController();
+	activeRequest = request;
+	imports.loading = true;
+	const { view, query, entryType } = selection;
+	const decided = view === 'rejected' || view === 'dead';
+	const offset = more ? nextOffset : 0;
+	const read = refreshCounts ? ++countsRequest : countsRequest;
+	try {
+		let rows = client().from(decided ? 'decided_imports' : 'pending_imports')
+			.select('id,key,url,name,description,images,alts,category,obsolete,parent,group_key,status,problem,readme_checked_at,rejected_by_owner,wiki_source,wiki_recommended,source,entry_type' +
+				(decided ? '' : ',mirror_source,mirror_addon_id,mirror_source_unavailable,same_name_count,review_bucket,review_stats'),
+			{ count: more ? undefined : 'exact' });
+		if (!decided) rows = rows.eq('status', 'pending');
+		if (view === 'all' || view === 'mirrors') rows = rows.eq('repository_missing', false);
+		else rows = rows.eq('review_bucket', view);
+		if (view === 'mirrors') rows = rows.not('mirror_source', 'is', null);
+		if (entryType) rows = rows.eq('entry_type', entryType);
+		for (const word of query.toLowerCase().split(/\s+/).filter(Boolean)) {
+			// PostgreSQL's quoted regex mode searches for the rest of the pattern literally.
+			rows = rows.filter('search_document', 'match', `(?q)${word}`);
+		}
+		const [page, counts] = await Promise.all([
+			rows.order('sort_name').order('id').range(offset, offset + IMPORT_PAGE_SIZE - 1).abortSignal(request.signal),
+			refreshCounts ? client().rpc('import_review_counts').abortSignal(request.signal) : undefined
+		]);
+		if (request.signal.aborted || !auth.isAdmin) return;
+		if (page.error || counts?.error) throw new Error((page.error ?? counts?.error)!.message);
+		const items = (page.data ?? []) as unknown as QueueItem[];
+		if (counts?.data && read === countsRequest) imports.counts = counts.data as QueueCounts;
+		nextOffset = offset + items.length;
+		imports.matching = page.count ?? (more && items.length === IMPORT_PAGE_SIZE ? imports.matching : nextOffset);
+		imports.items = more ? [...new Map([...imports.items, ...items].map(item => [item.id, item])).values()] : items;
+		imports.loaded = true;
+		if (!decided) void expandWaitingArticles();
+		return true;
+	} finally {
+		if (activeRequest === request) imports.loading = false;
+	}
+}
+
+export function loadMoreImports() {
+	if (!imports.loading && nextOffset < imports.matching) return loadQueue(false, true);
+}
+
+export const remainingImports = () => Math.max(0, imports.matching - nextOffset);
 
 const attemptedArticles = new Set<number>();
 let expanding = false;
@@ -112,13 +144,16 @@ async function expandWaitingArticles() {
 	expanding = true;
 	try {
 		const articles = imports.items.filter(item => isWikiPage(item.url) && !attemptedArticles.has(item.id));
+		let changed = false;
 		for (let i = 0; i < articles.length; i += 3) {
-			await Promise.all(articles.slice(i, i + 3).map(item => expandArticle(item)));
+			const results = await Promise.all(articles.slice(i, i + 3).map(item => expandArticle(item, undefined, false)));
+			changed = changed || results.some(Boolean);
 		}
+		if (changed) await loadQueue().catch(() => {});
 	} finally { expanding = false; }
 }
 
-export async function expandArticle(item: QueueItem, pasted?: ArticleLink[]) {
+export async function expandArticle(item: QueueItem, pasted?: ArticleLink[], refresh = true) {
 	attemptedArticles.add(item.id);
 	imports.wikiReading[item.id] = true;
 	imports.wikiErrors[item.id] = '';
@@ -131,16 +166,10 @@ export async function expandArticle(item: QueueItem, pasted?: ArticleLink[]) {
 		await call('expand_wiki_article', { queue_id: item.id, links,
 			article_name: changedTitle ? article.title : null,
 			article_description: changedTitle ? article.description : null });
-		await loadQueue();
-	} catch(e) { imports.wikiErrors[item.id] = (e as Error).message; }
+		if (refresh) await loadQueue();
+		return true;
+	} catch(e) { imports.wikiErrors[item.id] = (e as Error).message; return false; }
 	finally { imports.wikiReading[item.id] = false; }
-}
-
-const byName = (a: QueueItem, b: QueueItem) => a.name.localeCompare(b.name);
-
-export async function loadRejected() {
-	imports.rejected = (await all<QueueItem>('import_queue', ['status', 'rejected'])).sort(byName);
-	imports.rejectedLoaded = true;
 }
 
 async function call<T>(name: string, args: Record<string, unknown>) {
@@ -149,17 +178,52 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 	return data as T;
 }
 
+async function refreshQueueCounts() {
+	const read = ++countsRequest;
+	const { data, error } = await client().rpc('import_review_counts');
+	if (!error && data && read === countsRequest && auth.isAdmin) imports.counts = data as QueueCounts;
+}
+
+async function afterPublish() {
+	await loadAddons();
+	// Publishing can change other entries' review categories. The All and
+	// Confirmed mirrors lists already contain the right rows.
+	if (['fine', 'duplicate', 'incomplete'].includes(selection.view)) await loadQueue();
+	else await refreshQueueCounts();
+}
+
 // Takes entries out of the list at once, so the page does not wait for the database or
 // redraw the whole queue. Returns a function that puts them back.
 function settle(ids: number[], as: 'approved' | 'rejected') {
-	const before = { items: imports.items, counts: { ...imports.counts } };
-	imports.items = imports.items.filter((item) => !ids.includes(item.id));
-	const moved = before.items.length - imports.items.length;
+	const view = selection;
+	const before = { items: imports.items, counts: { ...imports.counts }, matching: imports.matching, offset: nextOffset };
+	const removed = before.items.filter(item => ids.includes(item.id));
+	const moved = removed.length;
+	const removedNames = new Map<string, number>();
+	for (const item of removed) {
+		const name = plainName(item.name);
+		removedNames.set(name, (removedNames.get(name) ?? 0) + 1);
+	}
+	imports.items = before.items.filter(item => !ids.includes(item.id)).map(item => {
+		const siblings = removedNames.get(plainName(item.name));
+		return siblings && item.same_name_count ? { ...item, same_name_count: item.same_name_count - siblings } : item;
+	});
 	imports.counts.pending -= moved;
+	imports.counts.waiting -= moved;
 	imports.counts[as] += moved;
+	imports.matching -= moved;
+	nextOffset -= moved;
+	for (const item of removed) {
+		if (item.review_bucket) imports.counts[item.review_bucket]--;
+		if (item.mirror_source) imports.counts.mirrors--;
+		if (item.source === 'Discord') imports.counts.discord--;
+	}
 	return () => {
+		if (selection !== view) return;
 		imports.items = before.items;
 		imports.counts = before.counts;
+		imports.matching = before.matching;
+		nextOffset = before.offset;
 	};
 }
 
@@ -168,9 +232,8 @@ export async function approve(ids: number[]) {
 	const undo = settle(ids, 'approved');
 	try {
 		const published = await call<number>('approve_imports', { ids });
-		// Some stayed behind with a reason: fetch the queue again to show it.
-		if (published < ids.length) await loadQueue();
-		await loadAddons();
+		if (published < ids.length) await Promise.all([loadQueue(), loadAddons()]);
+		else await afterPublish();
 		return published;
 	} catch (e) {
 		await loadQueue().catch(undo);
@@ -179,11 +242,9 @@ export async function approve(ids: number[]) {
 }
 
 export async function reject(ids: number[]) {
-	const turnedDown = imports.items.filter((item) => ids.includes(item.id));
 	const undo = settle(ids, 'rejected');
 	try {
 		await call<number>('decide_imports', { ids, decision: 'rejected' });
-		if (imports.rejectedLoaded) imports.rejected = [...imports.rejected, ...turnedDown.map(item => ({ ...item, status: 'rejected' as const, rejected_by_owner: auth.isOwner }))].sort(byName);
 	} catch (e) {
 		await loadQueue().catch(undo);
 		throw e;
@@ -192,12 +253,15 @@ export async function reject(ids: number[]) {
 
 /** Puts rejected entries back in the queue. */
 export async function restore(ids: number[]) {
-	const back = imports.rejected.filter((item) => ids.includes(item.id));
 	await call<number>('decide_imports', { ids, decision: 'pending' });
-	imports.rejected = imports.rejected.filter((item) => !ids.includes(item.id));
-	imports.items = [...imports.items, ...back.map((item) => ({ ...item, status: 'pending' as const, rejected_by_owner: false }))].sort(byName);
-	imports.counts.rejected -= back.length;
-	imports.counts.pending += back.length;
+	if (selection.view === 'rejected') {
+		const remaining = imports.items.filter(item => !ids.includes(item.id));
+		const moved = imports.items.length - remaining.length;
+		imports.matching -= moved;
+		nextOffset -= moved;
+		imports.items = remaining;
+	}
+	await refreshQueueCounts();
 }
 
 /** Publishes a queued entry straight into the group of an addon that is already live. */
@@ -205,7 +269,7 @@ export async function approveInto(item: QueueItem, addon: Addon) {
 	const undo = settle([item.id], 'approved');
 	try {
 		await call('approve_into', { queue_id: item.id, target: addon.id });
-		await loadAddons();
+		await afterPublish();
 	} catch (e) {
 		await loadQueue().catch(undo);
 		throw e;
@@ -219,5 +283,5 @@ export async function approveInto(item: QueueItem, addon: Addon) {
 export async function publishEdited(item: QueueItem, input: AddonInput, into?: Addon) {
 	await call('publish_import', { queue_id: item.id, input, destination: into?.id ?? null });
 	settle([item.id], 'approved');
-	await loadAddons();
+	await afterPublish();
 }
