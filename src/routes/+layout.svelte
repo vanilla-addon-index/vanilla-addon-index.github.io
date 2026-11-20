@@ -4,7 +4,7 @@
 	import { goto, onNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { loadAddons, readCache, store } from '#lib/addons.svelte.ts';
+	import { loadAddons, readCache, startSnapshot, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import WikiSubmissionDialog from '#lib/components/WikiSubmissionDialog.svelte';
@@ -27,19 +27,18 @@
 	const framed = window.top !== window.self;
 
 	if (!framed) {
-		initAuth();
+		startSnapshot();
 		readCache();
+		initAuth();
 	}
 
-	// The list comes from the daily snapshot for visitors and from the database for anyone
-	// logged in, so it is loaded once that is known, and again on logging in or out.
-	// An admin gets it exactly as it is, so it is loaded again once an account turns out
-	// to be one.
+	// The snapshot or cache can show first. Refresh once the account is known and again
+	// when it changes, since members need ownership and admins need the exact live list.
 	const userId = $derived(auth.session?.user.id);
 	$effect(() => {
 		void userId;
 		void auth.isAdmin;
-		if (auth.known) loadAddons();
+		if (!framed && auth.known) void loadAddons();
 	});
 
 	// GitHub and Discord send everyone back to the front page after a login. Whoever
