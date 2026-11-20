@@ -57,6 +57,33 @@ const largeCatalogue = Array.from({ length: 900 }, (_, index) => ({
 	code_update: { date: new Date(Date.UTC(2023, 0, index + 1)).toISOString(), url: '' }
 }));
 
+test('search combines filters on one version and picks up live text and group changes', async ({ page }) => {
+	const main = { ...largeCatalogue[400], name: 'Main Edition', versions: [] };
+	const fork = { ...largeCatalogue[800], name: 'Independent Fork', category: 'Unit Frames', versions: [] };
+	await page.addInitScript(rows => localStorage.setItem('addons-v3', JSON.stringify(rows)), [main, fork]);
+	let release!: () => void;
+	const live = new Promise<void>(resolve => { release = resolve; });
+	await page.route('**/rest/v1/addons?*', async route => {
+		await live;
+		await route.fulfill({ json: [main, { ...fork, group_id: null, description: 'New searchable description' }] });
+	});
+	const rows = page.getByRole('region', { name: 'Addon list', exact: true }).locator('a[href^="/addon/"]');
+	const search = page.getByRole('searchbox', { name: 'Search addons' });
+	try {
+		await page.goto('/?q=distinctive+grouped+fork');
+		await expect(rows).toHaveText([/^Main Edition/, /^Independent Fork/]);
+		await page.getByRole('button', { name: /^Combat/ }).click();
+		await expect(rows).toHaveCount(0);
+		await page.getByRole('button', { name: /^Unit Frames/ }).click();
+		await expect(rows).toHaveText([/^Main Edition/, /^Independent Fork/]);
+	} finally {
+		release();
+	}
+	await expect(rows).toHaveCount(0);
+	await search.fill('new searchable');
+	await expect(rows).toHaveText(['Independent Fork']);
+});
+
 test('a large catalogue keeps letter jumps, keyboard navigation and Back working across sections', async ({ page }) => {
 	await page.addInitScript(() => {
 		document.addEventListener('contentvisibilityautostatechange', event => {
