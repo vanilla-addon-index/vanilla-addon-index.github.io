@@ -4,7 +4,7 @@ for (const locale of ['en-US', 'da-DK']) {
 	test.describe(locale, () => {
 		test.use({ locale, timezoneId: 'America/Los_Angeles', viewport: { width: 320, height: 844 } });
 
-		test('shows the latest known code update once per group', async ({ page }) => {
+		test('shows one update per catalogue group and each download date on its addon page', async ({ page }) => {
 			const groupDate = '2025-11-22';
 			const detailDate = '2025-11-21';
 			const source = 'https://github.com/example/original';
@@ -14,7 +14,7 @@ for (const locale of ['en-US', 'da-DK']) {
 			const rows = [
 				{ id: 99200, name: 'Group Main', slug: 'group-main', group_id: 99, is_main: true, shared: true,
 					repo_url: source, pinned_link: source, versions: [source, secondary].map(url => ({ url, note: '' })),
-					code_update: pinnedUpdate, link_code_updates: { [source]: pinnedUpdate, [secondary]: latest } },
+					code_update: pinnedUpdate, link_code_updates: { [secondary]: latest } },
 				{ id: 99201, name: 'Group Fork', slug: 'group-fork', group_id: 99, is_main: false,
 					code_update: { date: '2025-11-22T00:30:00Z', url: source + '/fork/commits' } },
 				{ id: 99202, name: 'Standalone', slug: 'standalone',
@@ -50,12 +50,13 @@ for (const locale of ['en-US', 'da-DK']) {
 			await page.setViewportSize({ width: 320, height: 844 });
 			await main.getByRole('link').click();
 			await expect(page.getByRole('heading', { level: 1, name: 'Group Main' })).toBeVisible();
-			const update = page.locator('aside time');
-			await expect(update).toHaveText(detailDate);
-			await expect(update).toHaveAttribute('datetime', latest.date);
-			await expect(page.getByRole('link', { name: detailDate, exact: true })).toHaveAttribute('href', latest.url);
-			await expect(page.getByRole('link', { name: source, exact: true })).toBeVisible();
-			await expect(page.getByRole('link', { name: secondary, exact: true })).toBeVisible();
+			await expect(page.locator('aside').getByText('Last update', { exact: true })).toHaveCount(2);
+			for (const [url, date, update] of [[source, '2023-01-01', pinnedUpdate], [secondary, detailDate, latest]] as const) {
+				const download = page.locator('aside ol > li').filter({ has: page.getByRole('link', { name: url, exact: true }) });
+				await expect(download.locator('dt')).toHaveText(['Author', 'Last update']);
+				await expect(download.getByRole('link', { name: date, exact: true })).toHaveAttribute('href', update.url);
+				await expect(download.locator('time')).toHaveAttribute('datetime', update.date);
+			}
 		});
 	});
 }

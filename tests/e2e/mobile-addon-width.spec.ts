@@ -41,8 +41,8 @@ test('mirrors have their own collapsed row below the source metadata', async ({ 
 	const toggle = page.getByText('Mirrors (1)', { exact: true });
 	await expect(toggle).toBeVisible();
 	const firstDownload = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: source, exact: true }) });
-	const author = await firstDownload.getByText('Author', { exact: true }).boundingBox();
-	expect((await toggle.boundingBox())!.y).toBeGreaterThan(author!.y + author!.height);
+	const updated = await firstDownload.getByText('Last update', { exact: true }).boundingBox();
+	expect((await toggle.boundingBox())!.y).toBeGreaterThan(updated!.y + updated!.height);
 	await expect(page.getByRole('link', { name: mirror, exact: true })).toBeHidden();
 	await toggle.click();
 	await expect(page.getByRole('link', { name: mirror, exact: true })).toBeVisible();
