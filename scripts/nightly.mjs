@@ -78,7 +78,10 @@ async function db(name, args = {}) {
 			},
 			body: JSON.stringify({ token, ...args })
 		},
-		read: (response) => response.json(),
+		// PostgREST returns 204 No Content for the void mirror write.
+		read: async (response) => name === 'store_repository_mirrors' && response.status === 204
+			? null
+			: response.json(),
 		errorMessage: async (response) => {
 			const body = await response.json().catch(() => null);
 			return typeof body?.message === 'string' ? body.message : '';
