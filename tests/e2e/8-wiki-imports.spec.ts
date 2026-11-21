@@ -28,7 +28,9 @@ test('wiki pages have an exclusive waiting filter even when matching a published
 	}
 	await page.getByRole('button', {name:/^Wiki pages\s+1$/}).click();
 	await expect(entry).toHaveCount(1);
-	await expect(entry.getByRole('link', {name:'https://turtle-wow.fandom.com/wiki/Addon_BigWigs', exact:true})).toBeVisible();
+	const article = entry.getByRole('link', {name:/^Open wiki article/});
+	await expect(article).toBeVisible();
+	await expect(article).toHaveAttribute('href', 'https://turtle-wow.fandom.com/wiki/Addon_BigWigs');
 	await page.getByRole('button', {name:/^All\s+1$/}).click();
 	await expect(entry).toHaveCount(1);
 });
