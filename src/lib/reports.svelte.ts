@@ -35,18 +35,6 @@ export async function reportAddon(addonId: number, reason: Reason, note: string)
 	refreshAdminBadges({ afterAction: true });
 }
 
-/** The reports still waiting, oldest first. */
-export async function loadReports() {
-	const { data, error } = await client()
-		.from('reports')
-		.select('id, addon_id, reason, note, reported_by_name, created_at')
-		.eq('status', 'open')
-		.order('id')
-		.limit(1000);
-	if (error) throw new Error(error.message);
-	return data as Report[];
-}
-
 export async function decideReport(id: number, outcome: 'handled' | 'dismissed') {
 	const { error } = await client().rpc('decide_report', { report: id, outcome });
 	if (error) throw new Error(error.message);

@@ -11,6 +11,7 @@ export interface QueueItem extends Candidate {
 	entry_type?: 'addon' | 'dll';
 	source?: string;
 	id: number;
+	sort_name?: string;
 	rejected_by_owner: boolean;
 	status: 'pending' | 'approved' | 'rejected' | 'submitted' | 'dead';
 	// Why the last approval attempt failed, if it did.
@@ -44,7 +45,7 @@ export type QueueView = 'all' | 'fine' | 'duplicate' | 'wiki' | 'mirrors' | 'inc
 interface Selection { view: QueueView; query: string; entryType: string }
 type QueueCounts = Record<Exclude<QueueView, 'all'> | 'pending' | 'waiting' | 'approved' | 'submitted' | 'discord', number>;
 
-export const IMPORT_PAGE_SIZE = 50;
+const IMPORT_PAGE_SIZE = 50;
 export const imports = $state({
 	items: [] as QueueItem[],
 	counts: {
@@ -53,7 +54,6 @@ export const imports = $state({
 	} as QueueCounts,
 	loaded: false,
 	loading: false,
-	matching: 0,
 	wikiReading: {} as Record<number, boolean>,
 	wikiErrors: {} as Record<number, string>
 });
@@ -67,14 +67,15 @@ let countsRequest = 0;
 
 let selection: Selection = { view: 'all', query: '', entryType: '' };
 let activeRequest: AbortController | undefined;
-let nextOffset = $state(0);
+let cursor: { name: string; id: number } | undefined;
+let hasMore = $state(false);
 
 export function selectQueue(next: Selection) {
 	activeRequest?.abort();
 	selection = next;
-	nextOffset = 0;
+	cursor = undefined;
+	hasMore = false;
 	imports.items = [];
-	imports.matching = 0;
 	imports.loaded = false;
 }
 
@@ -86,14 +87,13 @@ export async function loadQueue(refreshCounts = true, more = false) {
 	imports.loading = true;
 	const { view, query, entryType } = selection;
 	const decided = view === 'rejected' || view === 'dead';
-	const offset = more ? nextOffset : 0;
+	const after = more ? cursor : undefined;
 	const read = refreshCounts ? ++countsRequest : countsRequest;
 	const updateBadge = refreshCounts ? trackImportBadge() : undefined;
 	try {
 		let rows = client().from(decided ? 'decided_imports' : 'pending_imports')
-			.select('id,key,url,name,description,images,alts,category,obsolete,parent,group_key,status,problem,readme_checked_at,rejected_by_owner,wiki_source,wiki_recommended,source,entry_type' +
-				(decided ? '' : ',mirror_source,mirror_addon_id,mirror_source_unavailable,same_name_count,review_bucket,review_stats'),
-			{ count: more ? undefined : 'exact' });
+			.select('id,sort_name,key,url,name,description,images,alts,category,obsolete,parent,group_key,status,problem,readme_checked_at,rejected_by_owner,wiki_source,wiki_recommended,source,entry_type' +
+				(decided ? '' : ',mirror_source,mirror_addon_id,mirror_source_unavailable,same_name_count,review_bucket,review_stats'));
 		if (!decided) rows = rows.eq('status', 'pending');
 		if (view === 'all' || view === 'mirrors') rows = rows.eq('repository_missing', false);
 		else rows = rows.eq('review_bucket', view);
@@ -103,19 +103,25 @@ export async function loadQueue(refreshCounts = true, more = false) {
 			// PostgreSQL's quoted regex mode searches for the rest of the pattern literally.
 			rows = rows.filter('search_document', 'match', `(?q)${word}`);
 		}
+		if (after) {
+			const name = '"' + after.name.replace(/["\\]/g, '\\$&') + '"';
+			rows = rows.or(`sort_name.gt.${name},and(sort_name.eq.${name},id.gt.${after.id})`);
+		}
 		const [page, counts] = await Promise.all([
-			rows.order('sort_name').order('id').range(offset, offset + IMPORT_PAGE_SIZE - 1).abortSignal(request.signal),
+			rows.order('sort_name').order('id').limit(IMPORT_PAGE_SIZE + 1).abortSignal(request.signal),
 			refreshCounts ? client().rpc('import_review_counts').abortSignal(request.signal) : undefined
 		]);
 		if (request.signal.aborted || !auth.isAdmin) return;
 		if (page.error || counts?.error) throw new Error((page.error ?? counts?.error)!.message);
-		const items = (page.data ?? []) as unknown as QueueItem[];
+		const rowsFound = (page.data ?? []) as unknown as QueueItem[];
+		const items = rowsFound.slice(0, IMPORT_PAGE_SIZE);
 		if (counts?.data && read === countsRequest) {
 			imports.counts = counts.data as QueueCounts;
 			updateBadge?.(imports.counts.pending);
 		}
-		nextOffset = offset + items.length;
-		imports.matching = page.count ?? (more && items.length === IMPORT_PAGE_SIZE ? imports.matching : nextOffset);
+		const last = items.at(-1);
+		cursor = last && { name: last.sort_name ?? last.name.toLowerCase(), id: last.id };
+		hasMore = rowsFound.length > IMPORT_PAGE_SIZE;
 		imports.items = more ? [...new Map([...imports.items, ...items].map(item => [item.id, item])).values()] : items;
 		imports.loaded = true;
 		if (!decided) void expandWaitingArticles();
@@ -126,10 +132,10 @@ export async function loadQueue(refreshCounts = true, more = false) {
 }
 
 export function loadMoreImports() {
-	if (!imports.loading && nextOffset < imports.matching) return loadQueue(false, true);
+	if (!imports.loading && hasMore && cursor) return loadQueue(false, true);
 }
 
-export const remainingImports = () => Math.max(0, imports.matching - nextOffset);
+export const hasMoreImports = () => hasMore;
 
 const attemptedArticles = new Set<number>();
 let expanding = false;
@@ -194,7 +200,7 @@ async function afterPublish() {
 // redraw the whole queue. Returns a function that puts them back.
 function settle(ids: number[], as: 'approved' | 'rejected') {
 	const view = selection;
-	const before = { items: imports.items, counts: { ...imports.counts }, matching: imports.matching, offset: nextOffset };
+	const before = { items: imports.items, counts: { ...imports.counts } };
 	const removed = before.items.filter(item => ids.includes(item.id));
 	const moved = removed.length;
 	const removedNames = new Map<string, number>();
@@ -209,8 +215,6 @@ function settle(ids: number[], as: 'approved' | 'rejected') {
 	imports.counts.pending -= moved;
 	imports.counts.waiting -= moved;
 	imports.counts[as] += moved;
-	imports.matching -= moved;
-	nextOffset -= moved;
 	for (const item of removed) {
 		if (item.review_bucket) imports.counts[item.review_bucket]--;
 		if (item.mirror_source) imports.counts.mirrors--;
@@ -220,8 +224,6 @@ function settle(ids: number[], as: 'approved' | 'rejected') {
 		if (selection !== view) return;
 		imports.items = before.items;
 		imports.counts = before.counts;
-		imports.matching = before.matching;
-		nextOffset = before.offset;
 	};
 }
 
@@ -254,11 +256,7 @@ export async function reject(ids: number[]) {
 export async function restore(ids: number[]) {
 	await call<number>('decide_imports', { ids, decision: 'pending' });
 	if (selection.view === 'rejected') {
-		const remaining = imports.items.filter(item => !ids.includes(item.id));
-		const moved = imports.items.length - remaining.length;
-		imports.matching -= moved;
-		nextOffset -= moved;
-		imports.items = remaining;
+		imports.items = imports.items.filter(item => !ids.includes(item.id));
 	}
 	await refreshQueueCounts();
 }
