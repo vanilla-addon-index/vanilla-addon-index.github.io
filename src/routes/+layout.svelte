@@ -141,11 +141,9 @@
 	<footer bind:offsetHeight={footerHeight} class="backdrop sm:sticky sm:bottom-0 sm:z-20 sm:pt-5">
 		<div class="border-t border-border">
 			<div class="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-sm text-muted">
-				<span>
-					Sources:
+				<span class="flex flex-wrap gap-x-3 gap-y-1">
 					<a href="https://turtle-wow.fandom.com/wiki/Addons" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 whitespace-nowrap text-[#a3d631] hover:underline"><span aria-hidden="true">🐢</span> Turtle WoW Wiki</a>
 					<a href="https://octowow.st/git/explore/repos" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 whitespace-nowrap text-[#c99aeb] hover:underline"><span aria-hidden="true">🐙</span> OctoWoW Repos</a>
-					· Refreshed daily
 				</span>
 				<a href={resolve('/about')} class="ml-auto hover:text-accent">About and privacy</a>
 			</div>

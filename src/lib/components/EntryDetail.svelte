@@ -53,7 +53,27 @@
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 
 	let error = $state('');
-	let success = $state('');
+	type AdminTool = 'downloads' | 'mirrors' | 'merge';
+	type ToolStatus = { pending: true } | { pending: false; message: string; failed: boolean };
+	let toolStatus = $state<Partial<Record<AdminTool, ToolStatus>>>({});
+	$effect(() => {
+		addon?.id;
+		toolStatus = {};
+		renameLink = ''; separateName = '';
+	});
+
+	async function runTool(tool: AdminTool, work: () => Promise<void>, message: string) {
+		const id = addon?.id;
+		if (id === undefined || toolStatus[tool]?.pending) return;
+		toolStatus[tool] = { pending: true };
+		try {
+			await work();
+			if (addon?.id === id) toolStatus[tool] = { pending: false, message, failed: false };
+		} catch (e) {
+			if (addon?.id === id) toolStatus[tool] = { pending: false, message: (e as Error).message, failed: true };
+		}
+	}
+
 	let mirrorResult = $state.raw<{ id: number; user?: string; rows: AddonMirror[] }>();
 	const publishedMirrors = $derived(addon?.published_mirrors);
 	const mirrors = $derived(
@@ -64,9 +84,10 @@
 	let inactiveMirrors = $state<{ url: string; decision: 'independent' | 'removed' }[]>([]);
 	let mirrorUrl = $state('');
 	let mirrorSource = $state('');
+	const mirrorSources = $derived(addon?.versions.filter(version => repositoryRoot(version.url)) ?? []);
 	let mirrorFormOpen = $state(false);
 	let editingMirror = $state('');
-	let savingMirror = $state(false);
+	const savingMirror = $derived(!!toolStatus.mirrors?.pending);
 	$effect(() => {
 		const id = addon?.id;
 		const user = account;
@@ -93,39 +114,40 @@
 		if (!addon || savingMirror) return;
 		const { id, slug } = addon;
 		const user = account;
-		savingMirror = true;
-		try {
-			await change(async () => {
-				await decideAddonMirror(id, url, source, decision);
-				await fetchAddon(slug);
-				const [rows, decisions] = await Promise.all([listAddonMirrors(id), listInactiveMirrorDecisions(id)]);
-				if (addon?.id === id && account === user) {
-					mirrorResult = { id, user, rows };
-					inactiveMirrors = decisions;
-					mirrorUrl = ''; mirrorSource = '';
-					mirrorFormOpen = false; editingMirror = '';
-				}
-				success = 'Mirror decision saved.';
-			});
-		} finally { savingMirror = false; }
+		await runTool('mirrors', async () => {
+			await decideAddonMirror(id, url, source, decision);
+			await fetchAddon(slug);
+			const [rows, decisions] = await Promise.all([listAddonMirrors(id), listInactiveMirrorDecisions(id)]);
+			if (addon?.id === id && account === user) {
+				mirrorResult = { id, user, rows };
+				inactiveMirrors = decisions;
+				mirrorUrl = ''; mirrorSource = '';
+				mirrorFormOpen = false; editingMirror = '';
+			}
+		}, 'Mirror decision saved.');
 	}
-	let separating = $state(false);
+	const updatingDownloads = $derived(!!toolStatus.downloads?.pending);
 	let renameLink = $state('');
 	let separateName = $state('');
 	async function separate(link: string, name?: string) {
-		if (!addon || separating) return;
-		separating = true;
-		error = ''; success = '';
-		try {
-			await separateAddon(addon.id, link, name);
-			renameLink = ''; separateName = '';
-			success = 'Addon separated.';
-		} catch (e) {
-			if ((e as {code?: string}).code === 'PNA01') {
-				renameLink = link;
+		if (!addon || updatingDownloads) return;
+		const { id } = addon;
+		await runTool('downloads', async () => {
+			try {
+				await separateAddon(id, link, name);
+				if (addon?.id === id) {
+					renameLink = ''; separateName = '';
+				}
+			} catch (e) {
+				if (addon?.id === id && (e as { code?: string }).code === 'PNA01') renameLink = link;
+				throw e;
 			}
-			error = (e as Error).message;
-		} finally { separating = false; }
+		}, 'Link moved to its own addon page.');
+	}
+
+	function changePin(id: number, url: string, pinned: boolean) {
+		return runTool('downloads', () => pinLink(id, pinned ? null : url),
+			pinned ? 'Main download unpinned.' : 'Main download pinned.');
 	}
 	let report = $state<ReturnType<typeof ReportDialog>>();
 
@@ -190,10 +212,8 @@
 		await change(async()=>{await withdrawEdit(pending!.id);pending=null;});
 	}
 
-	// Group changes are small and reversible, so they happen at once, with no prompt.
 	async function change(work: () => Promise<void>) {
 		error = '';
-		success = '';
 		try {
 			await work();
 		} catch (e) {
@@ -332,141 +352,162 @@
 				</p>
 			{/if}
 			{#if resolved && auth.isAdmin}
-				<section aria-label="Admin controls" class="panel mt-4">
-					<div class="space-y-3 p-3">
-						<div class="flex items-center justify-between gap-3">
-							<h2 class="label mb-0">Admin controls</h2>
-							{#if addon.owner_name}<span class="min-w-0 truncate text-sm text-muted">Posted by <UserLink name={addon.owner_name} /></span>{/if}
+				<section aria-label="Admin controls" class="panel admin-controls mt-4">
+					<header class="admin-header space-y-3 p-4">
+						<div>
+							<h2 class="text-lg font-bold">Admin controls</h2>
+							{#if addon.owner_name}
+								<p class="text-sm text-muted [overflow-wrap:anywhere]">Posted by <UserLink name={addon.owner_name} class="text-fg" /></p>
+							{/if}
 						</div>
-						<div class="grid grid-cols-2 gap-2">
-							{#if canEdit(addon.owner)}<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn">Edit</a>{/if}
-							<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn">History</a>
+						<div class="flex gap-2">
+							{#if canEdit(addon.owner)}<a href={resolve(`/submit?edit=${addon.slug}`)} class="btn btn-primary flex-1">Edit</a>{/if}
+							<a href={resolve(`/admin/log?addon=${addon.id}`)} class="btn flex-1">History</a>
 						</div>
-					</div>
-					<div class="space-y-2 border-t border-border p-3">
-						<h3 class="label mb-0">Search discovery</h3>
-						{#key addon.id}<SimilarAddonEditor {addon} />{/key}
-					</div>
-					{#if addon.versions.length}
-						<details class="group border-t border-border" data-download-settings>
-							<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
-								<span>Manage links</span>
-								<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
-							</summary>
-							<div class="px-3 pb-3">
-								<p class="mb-3 text-sm text-muted">Pin a download to show it first.{#if addon.versions.length > 1} Separate a link to give it its own addon page.{/if}</p>
+					</header>
+
+					{#snippet toolHeading(title: string, description: string, count?: string)}
+						<span class="min-w-0">
+							<span class="block font-semibold">{title}</span>
+							<span class="block text-sm leading-snug text-muted">{description}</span>
+						</span>
+						{#if count}<span class="tool-badge justify-self-end">{count}</span>{/if}
+						<span class="tool-chevron" aria-hidden="true"></span>
+					{/snippet}
+
+					{#snippet feedback(tool: AdminTool, pendingText: string)}
+						{@const status = toolStatus[tool]}
+						{#if status?.pending}
+							<p class="text-sm text-muted" role="status">{pendingText}</p>
+						{:else if status?.message}
+							<p class={['tool-feedback', status.failed ? 'text-danger' : 'text-accent']} role={status.failed ? 'alert' : 'status'}>{status.message}</p>
+						{/if}
+					{/snippet}
+
+					{#key addon.id}
+						<details class="admin-tool" data-download-settings>
+							<summary>{@render toolHeading('Download links', 'Pin a main link or split off a version', String(addon.versions.length))}</summary>
+							<div class="tool-body">
+								{#if !addon.versions.length}<p class="text-sm text-muted">No download links to manage.</p>{/if}
 								{#each addon.versions as version (version.url)}
-									<div class="space-y-2 border-t border-border/50 py-3 first:border-t-0 first:pt-0 last:pb-0" data-link-controls>
-										<p class="truncate text-sm text-muted" title={version.url}>{version.url.replace(/^https?:\/\//, '')}</p>
+									{@const pinned = addon.pinned_link === version.url}
+									<div class="tool-card" data-link-controls>
+										<p class="tool-url">{version.url.replace(/^https?:\/\//, '')}</p>
+										{#if pinned}<p class="text-xs font-semibold text-accent">Main download</p>{/if}
 										<div class="flex flex-wrap gap-2">
-											<button class="btn px-2 py-0.5 text-sm" onclick={() => change(() => pinLink(addon.id, addon.pinned_link === version.url ? null : version.url))}>{addon.pinned_link === version.url ? 'Unpin' : 'Pin'}</button>
-											{#if addon.pinned_link === version.url}<span class="self-center text-xs text-accent">Main download</span>{/if}
-											{#if addon.versions.length > 1}<button class="btn px-2 py-0.5 text-sm" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>{/if}
+											<button class="btn" disabled={updatingDownloads} onclick={() => changePin(addon.id, version.url, pinned)}>{pinned ? 'Unpin' : 'Pin'}</button>
+											{#if addon.versions.length > 1}<button class="btn" disabled={updatingDownloads} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>{/if}
 										</div>
 										{#if renameLink === version.url}
 											<form class="space-y-2 pt-2" onsubmit={(event) => { event.preventDefault(); void separate(version.url, separateName); }}>
 												<label class="field-label" for="separate-name">New addon name</label>
 												<p class="text-sm text-muted">Matching names stay grouped. Give this addon a different name to separate it.</p>
-												<input id="separate-name" class="input" bind:value={separateName} required minlength="2" maxlength="60" disabled={separating} />
-												<div class="flex gap-2">
-													<button class="btn" disabled={separating}>{separating ? 'Separating…' : 'Separate addon'}</button>
-													<button type="button" class="btn" disabled={separating} onclick={() => { renameLink = ''; separateName = ''; error = ''; }}>Cancel</button>
+												<input id="separate-name" class="input" bind:value={separateName} required minlength="2" maxlength="60" disabled={updatingDownloads} />
+												<div class="flex flex-wrap gap-2">
+													<button class="btn btn-primary" disabled={updatingDownloads}>Separate addon</button>
+													<button type="button" class="btn" disabled={updatingDownloads} onclick={() => { renameLink = ''; separateName = ''; delete toolStatus.downloads; }}>Cancel</button>
 												</div>
 											</form>
 										{/if}
 									</div>
 								{/each}
+								{@render feedback('downloads', 'Updating download links…')}
 							</div>
 						</details>
-					{/if}
-					<details class="group border-t border-border" data-mirror-settings>
-						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
-							<span>Manage mirrors</span>
-							<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
-						</summary>
-						<div class="px-3 pb-3">
-							<p class="mb-3 text-sm text-muted">Attach a mirror under its source download.</p>
-							{#snippet mirrorSourceOptions()}
-								<option value="">Choose a source</option>
-								{#each addon.versions.filter(version => repositoryRoot(version.url)) as version (version.url)}
-									<option value={version.url}>{version.url.replace(/^https?:\/\//, '')}</option>
-								{/each}
-							{/snippet}
-							{#each mirrors as mirror (mirror.url)}
-								<div class="space-y-2 border-t border-border/50 py-3">
-									<p class="truncate text-sm text-muted" title={mirror.url}>{mirror.url.replace(/^https?:\/\//, '')}</p>
-									<div class="flex flex-wrap gap-2">
-										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror} aria-expanded={editingMirror === mirror.url}
-											onclick={() => (editingMirror = editingMirror === mirror.url ? '' : mirror.url)}>Change source</button>
-										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'independent')}>List as version</button>
-										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'removed')}>Unlink mirror</button>
+						<details class="admin-tool" data-mirror-settings>
+							<summary>{@render toolHeading('Mirrors', 'Manage copies of source downloads', mirrorResult?.id === addon.id && mirrorResult.user === account ? `${mirrors.length} active` : undefined)}</summary>
+							<div class="tool-body">
+								{#snippet mirrorSourceOptions()}
+									<option value="">Choose a source</option>
+									{#each mirrorSources as version (version.url)}
+										<option value={version.url}>{version.url.replace(/^https?:\/\//, '')}</option>
+									{/each}
+								{/snippet}
+								{#each mirrors as mirror (mirror.url)}
+									<div class="tool-card">
+										<p class="tool-url">{mirror.url.replace(/^https?:\/\//, '')}</p>
+										{#if mirror.source}
+											<p class="text-sm text-muted [overflow-wrap:anywhere]">Source: {mirror.source.replace(/^https?:\/\//, '')}</p>
+										{:else}
+											<p class="text-sm text-muted">No source assigned</p>
+										{/if}
+										<div class="flex flex-wrap gap-2">
+											<button class="btn" disabled={savingMirror || !mirrorSources.length} aria-expanded={editingMirror === mirror.url}
+												onclick={() => (editingMirror = editingMirror === mirror.url ? '' : mirror.url)}>Change source</button>
+											<button class="btn" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'independent')}>List as version</button>
+											<button class="btn" disabled={savingMirror} onclick={() => saveMirror(mirror.url, null, 'removed')}>Unlink mirror</button>
+										</div>
+										{#if editingMirror === mirror.url}
+											<label class="field-label">Mirror source
+												<select class="input w-full" value={mirror.source ?? ''} disabled={savingMirror}
+													onchange={(event) => { if (event.currentTarget.value) void saveMirror(mirror.url, event.currentTarget.value, 'mirror'); }}>
+													{@render mirrorSourceOptions()}
+												</select>
+											</label>
+										{/if}
 									</div>
-									{#if editingMirror === mirror.url}
-										<label class="field-label">Mirror source
-											<select class="input w-full" value={mirror.source ?? ''} disabled={savingMirror}
-												onchange={(event) => { if (event.currentTarget.value) void saveMirror(mirror.url, event.currentTarget.value, 'mirror'); }}>
+								{/each}
+								{#each inactiveMirrors as decision (decision.url)}
+									<div class="tool-card">
+										<p class="tool-url">{decision.url.replace(/^https?:\/\//, '')}</p>
+										<p class="text-sm text-muted">{decision.decision === 'removed' ? 'Unlinked' : 'Listed as a version'}</p>
+										<button class="btn" disabled={savingMirror || !mirrorSources.length}
+											onclick={() => { mirrorUrl = decision.url; mirrorSource = ''; mirrorFormOpen = true; }}>Reattach as mirror</button>
+									</div>
+								{/each}
+								{#if mirrorFormOpen}
+									<form class="tool-card" onsubmit={(event) => { event.preventDefault(); void saveMirror(mirrorUrl, mirrorSource, 'mirror'); }}>
+										<label class="field-label">Mirror repository URL <input type="url" class="input" bind:value={mirrorUrl} disabled={savingMirror} required /></label>
+										<label class="field-label">Source repository
+											<select class="input" bind:value={mirrorSource} disabled={savingMirror} required>
 												{@render mirrorSourceOptions()}
 											</select>
 										</label>
-									{:else if mirror.source}
-										<p class="truncate text-xs text-muted" title={mirror.source}>Source: {mirror.source.replace(/^https?:\/\//, '')}</p>
-									{/if}
-								</div>
-							{/each}
-							{#each inactiveMirrors as decision (decision.url)}
-								<div class="space-y-2 border-t border-border/50 py-3">
-									<p class="truncate text-sm text-muted" title={decision.url}>{decision.url.replace(/^https?:\/\//, '')}</p>
-									<div class="flex flex-wrap gap-2">
-										<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror}
-											onclick={() => { mirrorUrl = decision.url; mirrorSource = ''; mirrorFormOpen = true; }}>Change decision</button>
-										<span class="self-center text-xs text-muted">{decision.decision === 'removed' ? 'Unlinked' : 'Listed as a version'}</span>
-									</div>
-								</div>
-							{/each}
-							{#if mirrorFormOpen}
-							<form class="space-y-2 border-t border-border/50 pt-3" onsubmit={(event) => { event.preventDefault(); void saveMirror(mirrorUrl, mirrorSource, 'mirror'); }}>
-								<label class="field-label">Mirror repository URL <input type="url" class="input w-full" bind:value={mirrorUrl} required /></label>
-								<label class="field-label">Source repository
-									<select class="input w-full" bind:value={mirrorSource} required>
-										{@render mirrorSourceOptions()}
-									</select>
-								</label>
-								<div class="flex gap-2">
-									<button class="btn px-2 py-0.5 text-sm" disabled={savingMirror}>Attach mirror</button>
-									<button type="button" class="btn px-2 py-0.5 text-sm" disabled={savingMirror}
-										onclick={() => { mirrorFormOpen = false; mirrorUrl = ''; mirrorSource = ''; }}>Cancel</button>
-								</div>
-							</form>
-							{:else}
-								<button class="btn px-2 py-0.5 text-sm" onclick={() => (mirrorFormOpen = true)}>Attach mirror</button>
-							{/if}
-						</div>
-					</details>
-					<details class="group border-t border-border" data-merge-settings ontoggle={(event) => {
-						if (event.currentTarget.open) void ensureCatalogue();
-					}}>
-						<summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-raised [&::-webkit-details-marker]:hidden">
-							<span>Merge another addon</span>
-							<span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">&#8250;</span>
-						</summary>
-						<div class="space-y-2 px-3 pb-3">
-							<p class="text-sm text-muted">Move another addon's download links here. Its old address will lead to this page.</p>
-							<AddonPicker
-								placeholder="Merge another addon’s links here…"
-								exclude={(other) => other.id === addon.id}
-								onpick={(other) => change(() => mergeAddons(other.id, addon.id))}
-							/>
-						</div>
-					</details>
+										<div class="flex flex-wrap gap-2">
+											<button class="btn btn-primary" disabled={savingMirror}>Attach mirror</button>
+											<button type="button" class="btn" disabled={savingMirror}
+												onclick={() => { mirrorFormOpen = false; mirrorUrl = ''; mirrorSource = ''; }}>Cancel</button>
+										</div>
+									</form>
+								{:else if mirrorSources.length}
+									<button class="btn w-full" disabled={savingMirror} onclick={() => (mirrorFormOpen = true)}>Attach mirror</button>
+								{:else}
+									<p class="text-sm text-muted">Add a source repository to this page before attaching a mirror.</p>
+								{/if}
+								{@render feedback('mirrors', 'Saving mirror decision…')}
+							</div>
+						</details>
+						<details class="admin-tool">
+							<summary>{@render toolHeading('Similar addons', 'Help visitors find alternatives in search', addon.similar_addons ? 'Set' : 'None')}</summary>
+							<div class="tool-body">
+								<SimilarAddonEditor {addon} />
+							</div>
+						</details>
+						<details class="admin-tool" data-merge-settings ontoggle={(event) => {
+							if (event.currentTarget.open) void ensureCatalogue();
+						}}>
+							<summary>{@render toolHeading('Merge another addon', 'Bring its download links onto this page')}</summary>
+							<div class="tool-body">
+								<p class="text-sm text-muted">Selecting an addon merges it immediately. Its old address will lead here.</p>
+								<fieldset class="min-w-0" disabled={toolStatus.merge?.pending}>
+									<AddonPicker
+										placeholder="Merge another addon’s links here…"
+										exclude={(other) => other.id === addon.id}
+										onpick={(other) => runTool('merge', () => mergeAddons(other.id, addon.id), `Merged ${other.name} into this page.`)}
+									/>
+								</fieldset>
+								{@render feedback('merge', 'Merging addon…')}
+							</div>
+						</details>
+					{/key}
 					{#if canEdit(addon.owner)}
-						<div class="flex justify-end border-t border-border p-3">
-							<button class="btn btn-danger px-3 py-1 text-sm" onclick={remove}>Delete</button>
+						<div class="flex justify-end border-t border-border p-4">
+							<button class="btn btn-danger shrink-0 text-danger" onclick={remove}>Delete</button>
 						</div>
 					{/if}
 				</section>
 			{/if}
-			{#if success}<p role="status">{success}</p>{/if}
-			{#if error}<p class="text-danger">{error}</p>{/if}
+			{#if error}<p role="alert" class="text-danger">{error}</p>{/if}
 		</aside>
 		<ReportDialog bind:this={report} {addon} />
 	</article>
@@ -479,3 +520,116 @@
 {:else}
 	<p class="py-12 text-center text-muted">Loading…</p>
 {/if}
+
+<style>
+	.admin-controls {
+		border-color: color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
+		border-radius: 0.65rem;
+	}
+
+	.admin-header {
+		border-radius: inherit;
+		background: linear-gradient(120deg, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 85%);
+	}
+
+	.admin-controls :global(.btn),
+	.admin-controls :global(.input) {
+		min-height: 2.375rem;
+		border-radius: 0.375rem;
+		font-size: 0.875rem;
+	}
+
+	.admin-header :global(.btn) {
+		font-size: inherit;
+	}
+
+	.admin-controls :global(.input) {
+		margin-top: 0.25rem;
+	}
+
+	.admin-tool {
+		border-top: 1px solid var(--color-border);
+	}
+
+	.admin-tool > summary {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto 0.75rem;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.75rem 1rem;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.admin-tool > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.admin-tool > summary:hover,
+	.admin-tool[open] > summary {
+		background: var(--color-raised);
+	}
+
+	.admin-tool > summary:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: -2px;
+	}
+
+	.tool-badge {
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		padding: 0.0625rem 0.5rem;
+		color: var(--color-muted);
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.tool-chevron {
+		grid-column: 3;
+		justify-self: center;
+		width: 0.45rem;
+		height: 0.45rem;
+		margin-top: -0.2rem;
+		border: solid var(--color-muted);
+		border-width: 0 1.5px 1.5px 0;
+		transform: rotate(45deg);
+	}
+
+	.admin-tool[open] .tool-chevron {
+		margin-top: 0.2rem;
+		transform: rotate(225deg);
+	}
+
+	.tool-body {
+		display: grid;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem 1rem;
+	}
+
+	.tool-card {
+		min-width: 0;
+		border: 1px solid var(--color-border);
+		border-radius: 0.375rem;
+		padding: 0.625rem;
+		background: var(--color-surface);
+	}
+
+	.tool-card > * + * {
+		margin-top: 0.5rem;
+	}
+
+	.tool-url,
+	.tool-feedback {
+		font-size: 0.875rem;
+		overflow-wrap: anywhere;
+	}
+
+	.tool-url {
+		font-weight: 500;
+	}
+
+	.tool-feedback {
+		border-inline-start: 2px solid currentColor;
+		padding-inline-start: 0.625rem;
+	}
+</style>
