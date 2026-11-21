@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import type { Locator } from '@playwright/test';
 import { test, expect } from './test';
 import { loginAs, unique } from './helpers';
 
@@ -11,11 +12,22 @@ test('wiki download links appear as ordinary import cards and group through norm
 	await page.getByLabel('Search',{exact:true}).fill(name);
 	await expect(page.locator('[data-entry]')).toHaveCount(3);
 	await expect(page.getByRole('button',{name:'Review wiki links',exact:true})).toHaveCount(0);
-	await expect(page.getByText('Wiki recommended · pins on approval',{exact:false})).toBeVisible();
-	const first=page.locator('[data-entry]').filter({has:page.getByRole('link',{name:`https://github.com/wiki-first/${name}`,exact:true})});
+	const row = (host: string) => page.locator('[data-entry]').filter({
+		has: page.locator('a[href="https://github.com/' + host + '/' + name + '"]')
+	});
+	const expand = async (entry: Locator) => {
+		const toggle = entry.locator('button[data-act="review"]');
+		if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+	};
+	const recommended = row('wiki-recommended');
+	await expand(recommended);
+	await expect(recommended.getByText('Wiki recommended · pins on approval', { exact: false })).toBeVisible();
+	const first = row('wiki-first');
+	await expand(first);
 	await first.getByLabel('Category',{exact:true}).selectOption('Miscellaneous');
 	await first.getByRole('button',{name:'Approve',exact:true}).click();
 	await expect(page.locator('[data-entry]')).toHaveCount(2);
+	await expand(row('wiki-second'));
 	await page.getByRole('button',{name:`Add link to ${name}`,exact:true}).first().click();
 	await expect(page.locator('[data-entry]')).toHaveCount(1);
 	await page.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
@@ -35,6 +47,13 @@ test('unreadable articles remain visible with a paste fallback',async({page})=>{
 	});
 	await page.goto('/admin/import');
 	await expect(page.getByRole('button',{name:'Retry reading wiki'})).toBeVisible();
+	await expect(page.getByLabel('Paste repository links or wiki source')).toBeHidden();
+	await expect(page.getByLabel('Category', { exact: true })).toHaveCount(0);
+	await expect(page.getByLabel('Author', { exact: true })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: /Open wiki article/ })).toHaveAttribute('href', 'https://turtle-wow.fandom.com/wiki/LazyPig');
+	const paste = page.getByRole('button', { name: 'Paste links manually' });
+	await paste.click();
+	await expect(paste).toHaveAttribute('aria-expanded', 'true');
 	await expect(page.getByLabel('Paste repository links or wiki source')).toBeVisible();
 	await expect(page.getByRole('button',{name:'Approve',exact:true})).toHaveCount(0);
 });

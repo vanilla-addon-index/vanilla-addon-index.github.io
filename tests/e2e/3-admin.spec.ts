@@ -5,7 +5,7 @@ import { confirm, loginAs, logLine, postAddon, unique, chooseImportCategory } fr
 // An admin: reviews imports and reports, and can undo anything from the log.
 
 const waiting = async (page: Page) =>
-	Number(await page.locator('dl > div', { hasText: 'Waiting' }).locator('dd').innerText());
+	Number((await page.getByRole('button', { name: /^All \d+$/ }).innerText()).match(/\d+$/)![0]);
 const entry = (page: Page, name: string) => page.locator('[data-entry]').filter({ has: page.locator(`input[aria-label="Name"][value="${name}"]`) });
 
 test('returning to admin refreshes an empty import queue without reloading', async ({ page }) => {
@@ -18,10 +18,11 @@ test('returning to admin refreshes an empty import queue without reloading', asy
 		} else await route.continue();
 	});
 	await page.goto('/admin/import');
-	await expect(page.getByText('Loading', { exact: false })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: /Nothing in the queue matches|The queue is empty/ })).toBeVisible();
 	await expect(page.locator('[data-entry]')).toHaveCount(0);
 	fresh = true;
 	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Edit reviews/ }).click();
+	await expect(page).toHaveURL(/\/admin\/edits$/);
 	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Import(?:\s+\d+)?$/ }).click();
 	await expect(page.locator('[data-entry]').first()).toBeVisible();
 });
@@ -76,7 +77,7 @@ test('the report a member sent shows up, with a count on the Admin button, and c
 	await admin.click();
 	await expect(page).toHaveURL(/\/admin\/reports/);
 
-	const report = page.locator('.panel > div').filter({ hasText: 'QuestHelper' });
+	const report = page.locator('article[id^="report-"]').filter({ hasText: 'QuestHelper' });
 	await expect(report.getByText('Harmful or malicious')).toBeVisible();
 	await expect(report.getByText('Reported by a browser test.')).toBeVisible();
 	expect(reads).toBe(1);
@@ -101,8 +102,10 @@ test('waiting filters partition every entry and review issues stay out of Looks 
 	const incomplete = await entries.count();
 	expect(incomplete).toBeGreaterThan(0);
 	expect(incomplete).toBeLessThan(all);
-	await expect(entries.getByRole('note', {name:'Import status'})).toHaveCount(incomplete);
-	await expect(entries.filter({ hasText: 'Ready' })).toHaveCount(0);
+	const missingCategory = entries.locator('[data-act="review"]').filter({ hasText: 'Needs category' });
+	await expect(missingCategory.first()).toBeVisible();
+	await expect(entries.getByRole('button', { expanded: true })).toHaveCount(1);
+	await expect(missingCategory.getByText('Ready', { exact: true })).toHaveCount(0);
 	const names = await entries.getByLabel('Name', { exact: true }).evaluateAll((inputs) =>
 		inputs.map((input) => (input as HTMLInputElement).value)
 	);
@@ -112,7 +115,7 @@ test('waiting filters partition every entry and review issues stay out of Looks 
 	await fine.click();
 	await expect(entries).toHaveCount(fineCount);
 	expect(fineCount).toBeGreaterThan(0);
-	await expect(entries.filter({ has: page.getByRole('note', { name: 'Import status' }).filter({ hasText: /Missing:\s*description/ }) })).toHaveCount(0);
+	await expect(entries.filter({ has: page.locator('[data-act="review"]').filter({ hasText: 'Needs description' }) })).toHaveCount(0);
 	for (const name of names) await expect(entry(page, name)).toHaveCount(0);
 });
 

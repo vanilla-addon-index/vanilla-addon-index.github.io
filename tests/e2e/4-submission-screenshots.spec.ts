@@ -35,7 +35,8 @@ for (const who of ['admin', 'member'] as const) test(`same-name ${who} submissio
   await expect(page.getByRole('link', { name: 'Log in', exact: true })).toBeVisible();
   await loginAs(page, 'admin');
   await page.goto('/admin/edits');
-  const request = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'New link for ' + name, exact: true }) });
+  const request = page.locator('article[id^="link-review-"]').filter({ has: page.getByText(name, { exact: true }) });
+  await request.locator('[data-act="review"]').press('Enter');
   await expect(request.getByAltText('Suggested screenshot')).toHaveCount(5);
   await request.getByRole('button', { name: 'Approve link', exact: true }).click();
   await expect(request).toHaveCount(0);

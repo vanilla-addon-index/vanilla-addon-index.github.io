@@ -33,8 +33,10 @@ npm run dev:local
 ```
 
 Open **http://localhost:5174**. The local backend includes sample addons and test
-accounts for each role. Running `npm run local` again resets that local data;
-`npm run local:stop` stops the backend.
+accounts for each role, plus sample reports, edit proposals, and import reviews.
+Running `npm run local` again resets the local data. Use `npm run local:demo` to
+add the admin preview fixtures to an existing local database without resetting it.
+Use `npm run local:stop` to stop the backend.
 
 `npm run dev` connects to the **hosted database** instead. Changes made there are real.
 

@@ -26,6 +26,10 @@ test('admin can search for an unrelated live addon and explicitly merge an impor
  await page.goto('/admin/import');
  const entry=page.locator('[data-entry]').filter({has:page.getByLabel('Name',{exact:true})});
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toBeDisabled();
+ const merge=entry.getByRole('button',{name:'Merge',exact:true});
+ await expect(merge).toHaveAttribute('aria-expanded','false');
+ await merge.click();
+ await expect(merge).toHaveAttribute('aria-expanded','true');
  await entry.getByRole('combobox',{name:'Merge into existing addon…'}).fill(name);
  expect(merged).toBe(false);
  await entry.getByRole('option').filter({hasText:name}).click();

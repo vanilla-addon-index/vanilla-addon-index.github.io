@@ -5,6 +5,7 @@
 //   node scripts/local.mjs up      start it if needed, then wipe and fill it
 //   node scripts/local.mjs reset   wipe and fill it (it must be running)
 //   node scripts/local.mjs down    stop it
+//   node scripts/local.mjs demo-admin   add preview data without resetting the database
 //
 // Needs Docker. `npm run dev:local` then serves the site against it on port 5174, where
 // the login page offers one account of each kind. See src/lib/local-accounts.ts.
@@ -13,6 +14,7 @@ import { writeFileSync } from 'node:fs';
 import { CATEGORIES } from '../src/lib/config.ts';
 import { LOCAL_ACCOUNTS, LOCAL_PASSWORD } from '../src/lib/local-accounts.ts';
 import { dllDemoSql } from './local-dll-demo.mjs';
+import { adminDemoSql } from './local-admin-demo.mjs';
 
 // The site only needs the database, the API and the login service.
 const LEFT_OUT = 'realtime,storage-api,imgproxy,mailpit,logflare,vector,supavisor';
@@ -66,7 +68,33 @@ const THINGS = ['Helper', 'Tracker', 'Timers', 'Plus', 'Lite', 'Master', 'Watch'
 const name = (i) => `${WORDS[i % WORDS.length]}${THINGS[Math.floor(i / WORDS.length) % THINGS.length]}${i >= 144 ? ` ${Math.floor(i / 144) + 1}` : ''}`;
 const quote = (text) => `'${String(text).replace(/'/g, "''")}'`;
 
-function seedSql() {
+// Keep the larger, fixed queue for browser-test counts and filtering fixtures.
+function testImportSql() {
+	// The import queue, with what the nightly job would have found out about each repository.
+	const queued = Array.from({ length: 40 }, (_, i) => {
+		const title = `Queued${WORDS[i % WORDS.length]}${i}`;
+		const key = `github.com/wiki${i}/${title.toLowerCase()}`;
+		return {
+			title,
+			key,
+			queue: `(${quote(key)}, ${quote(`https://github.com/wiki${i}/${title}`)}, ${quote(title)}, ${quote(i % 7 === 0 ? '' : `${title} is waiting in the import queue of the local test data.`)}, ${quote(CATEGORIES[i % CATEGORIES.length])}, ${i % 13 === 5})`,
+			stats: `(${quote(key)}, ${i * 3}, now() - interval '${i % 9 === 4 ? 7 : 1} years', ${i % 11 === 3}, ${i % 10 === 6}, ${i % 8 === 2 ? 20504 : 11200}, ${quote(key)})`
+		};
+	});
+
+	return `
+insert into public.import_queue (key, url, name, description, category, obsolete) values
+${queued.map((q) => q.queue).join(',\n')};
+insert into public.repo_stats (key, stars, pushed_at, archived, missing, interface, canonical) values
+${queued.map((q) => q.stats).join(',\n')};
+-- One queued entry is a fork of a live addon, and one has the name of a live addon.
+update public.repo_stats set fork_of = (select link_keys[1] from public.addons where name = 'QuestHelper')
+where key = ${quote(queued[1].key)};
+update public.import_queue set name = 'BagHelper' where key = ${quote(queued[2].key)};
+`;
+}
+
+function seedSql(includeTestImports) {
 	const flags = LOCAL_ACCOUNTS.map(
 		(a) =>
 			`update public.profiles set is_owner = ${a.role === 'owner'}, is_admin = ${a.role === 'admin'}, banned = ${Boolean(a.banned)} where username = ${quote(a.username)};`
@@ -91,17 +119,6 @@ function seedSql() {
 		)
 		.join(',\n');
 
-	// The import queue, with what the nightly job would have found out about each repository.
-	const queued = Array.from({ length: 40 }, (_, i) => {
-		const title = `Queued${WORDS[i % WORDS.length]}${i}`;
-		const key = `github.com/wiki${i}/${title.toLowerCase()}`;
-		return {
-			title,
-			key,
-			queue: `(${quote(key)}, ${quote(`https://github.com/wiki${i}/${title}`)}, ${quote(title)}, ${quote(i % 7 === 0 ? '' : `${title} is waiting in the import queue of the local test data.`)}, ${quote(CATEGORIES[i % CATEGORIES.length])}, ${i % 13 === 5})`,
-			stats: `(${quote(key)}, ${i * 3}, now() - interval '${i % 9 === 4 ? 7 : 1} years', ${i % 11 === 3}, ${i % 10 === 6}, ${i % 8 === 2 ? 20504 : 11200}, ${quote(key)})`
-		};
-	});
 
 	return `
 ${flags}
@@ -116,14 +133,7 @@ ${posted};
 select public.merge_addon_links((select id from public.addons where name = 'RaidTracker'), (select id from public.addons where name = 'RaidHelper'));
 select public.merge_addon_links((select id from public.addons where name = 'RaidTimers'), (select id from public.addons where name = 'RaidHelper'));
 
-insert into public.import_queue (key, url, name, description, category, obsolete) values
-${queued.map((q) => q.queue).join(',\n')};
-insert into public.repo_stats (key, stars, pushed_at, archived, missing, interface, canonical) values
-${queued.map((q) => q.stats).join(',\n')};
--- One queued entry is a fork of a live addon, and one has the name of a live addon.
-update public.repo_stats set fork_of = (select link_keys[1] from public.addons where name = 'QuestHelper')
-where key = ${quote(queued[1].key)};
-update public.import_queue set name = 'BagHelper' where key = ${quote(queued[2].key)};
+${includeTestImports ? testImportSql() : ''}
 
 -- Seeding is not something that happened on the site.
 ${dllDemoSql()}
@@ -135,7 +145,12 @@ delete from public.activity_log;
 `;
 }
 
-async function fill() {
+function seedAdminDemo() {
+	sql(adminDemoSql, 'adding local admin demo fixtures');
+	console.log('Local admin demo data is ready. Existing entries were preserved.');
+}
+
+async function fill(includeDemo) {
 	const info = status();
 	if (!info) throw new Error('The local backend is not running. Start it with: node scripts/local.mjs up');
 
@@ -145,7 +160,8 @@ async function fill() {
 
 	console.log('Creating the test accounts and data…');
 	await createAccounts(info);
-	sql(seedSql(), 'seeding');
+	sql(seedSql(!includeDemo), 'seeding');
+	if (includeDemo) seedAdminDemo();
 
 	writeFileSync(
 		ENV_FILE,
@@ -154,18 +170,20 @@ async function fill() {
 	console.log(`Ready: ${info.API_URL}. Accounts: ${LOCAL_ACCOUNTS.map((a) => a.username).join(', ')}.`);
 }
 
-const command = process.argv[2];
+const [command, option] = process.argv.slice(2);
 if (command === 'up') {
 	if (!status()) supabase(`start -x ${LEFT_OUT}`);
-	await fill();
+	await fill(option === '--demo');
 } else if (command === 'reset') {
-	await fill();
+	await fill(option === '--demo');
 } else if (command === 'down') {
 	supabase('stop');
+} else if (command === 'demo-admin') {
+	seedAdminDemo();
 } else if (command === 'demo-dll') {
 	sql(dllDemoSql(), 'adding local DLL demo entries');
 	console.log('Local DLL demo entries added. Existing data was preserved.');
 } else {
-	console.log('Usage: node scripts/local.mjs up | reset | down | demo-dll');
+	console.log('Usage: node scripts/local.mjs up [--demo] | reset [--demo] | down | demo-admin | demo-dll');
 	process.exit(1);
 }

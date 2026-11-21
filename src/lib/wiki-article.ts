@@ -44,9 +44,9 @@ export async function readArticle(url: string): Promise<{ links: ArticleLink[]; 
 	if (page.origin !== WIKI || !page.pathname.startsWith('/wiki/')) throw new Error('Expected a Turtle WoW Wiki article.');
 	const title = decodeURIComponent(page.pathname.slice(6));
 	const response = await fetch(`${WIKI}/api.php?${new URLSearchParams({ action: 'parse', page: title, prop: 'wikitext|revid', format: 'json', formatversion: '2', origin: '*', redirects: '1' })}`, { signal: AbortSignal.timeout(15000) });
-	if (!response.ok) throw new Error('The wiki could not be read. Paste repository links below instead.');
+	if (!response.ok) throw new Error('The wiki could not be read.');
 	const data = await response.json();
-	if (typeof data.parse?.wikitext !== 'string' || typeof data.parse?.revid !== 'number') throw new Error('No article text returned. Paste repository links below instead.');
+	if (typeof data.parse?.wikitext !== 'string' || typeof data.parse?.revid !== 'number') throw new Error('No article text returned.');
 	if (/^\s*#redirect\b/i.test(data.parse.wikitext)) throw new Error('The wiki redirect could not be resolved. Open the article to check its download links.');
 	const description = data.parse.wikitext.split(/\n\s*\n|\n\s*==/)[0]
 		.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, '$1')

@@ -36,6 +36,10 @@ test('a member submission clears its pending import without an admin approval', 
  await expect(logLine(page, /member2 submitted a link already waiting for import:/)).toBeVisible();
 });
 
+// Select a repository covered by the local fixtures, even if a wiki article is first in the queue.
+const pendingRepository = (row: { status: string; url: string }) =>
+ row.status === 'pending' && /^https:\/\/github\.com\/wiki\d+\//.test(row.url);
+
 // import screenshots
 test('importing an unchecked same-name link fetches README screenshots for review', async ({page}) => {
  const name = unique('Import screenshots');
@@ -59,7 +63,7 @@ test('importing an unchecked same-name link fetches README screenshots for revie
   const response = await route.fetch();
   const body = await response.json();
   if (Array.isArray(body)) {
-   candidateId ??= body.find(row => row.status === 'pending')?.id;
+   candidateId ??= body.find(pendingRepository)?.id;
    for (const row of body) if(row.id === candidateId) {
     row.name = name;
     row.images = [];
@@ -69,8 +73,9 @@ test('importing an unchecked same-name link fetches README screenshots for revie
   await route.fulfill({response,json:body});
  });
  await page.goto('/admin/import');
- const entry=page.locator('[data-entry]').filter({has:page.getByRole('button',{name:`Add link to ${name}`,exact:true})});
- await expect(entry).toBeVisible();
+ const entry=page.locator('[data-entry]').filter({has:page.getByText(name,{exact:true})});
+ const review=entry.locator('[data-act="review"]');
+ if (await review.getAttribute('aria-expanded') === 'false') await review.click();
  await entry.getByLabel('Name', { exact: true }).click();
  await expect(entry.getByText(/\+2 pictures/)).toBeVisible();
  await entry.getByRole('button',{name:'Remove this screenshot'}).last().click();
@@ -98,7 +103,7 @@ test('renamed forks suggest their published parent and keep separate approval ex
   url.searchParams.delete('search_document');
   const response=await route.fetch({url:url.href});const rows=await response.json();
   if(Array.isArray(rows)){
-   candidateId??=rows.find(row=>row.status==='pending')?.id;
+   candidateId??=rows.find(pendingRepository)?.id;
    for(const row of rows) if(row.id===candidateId) {
     row.name=forkName;row.description='';
     row.review_stats={...row.review_stats,fork_of:known?parentKey:'github.com/unlisted/parent'};
@@ -116,11 +121,21 @@ test('renamed forks suggest their published parent and keep separate approval ex
  await page.reload();
  await page.getByLabel('Search',{exact:true}).fill(forkName);
  await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeVisible();
- await expect(entry.getByRole('button',{name:'Approve separately',exact:true})).toBeVisible();
+ const publishNew = entry.getByRole('button',{name:'Publish as new page',exact:true});
+ await expect(publishNew).toBeDisabled();
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toHaveCount(0);
  await expect(entry.getByLabel('Category',{exact:true})).toHaveValue('');
- await expect(entry.getByRole('button',{name:'Approve separately',exact:true})).toBeDisabled();
+ await expect(entry.getByText(/To publish a new page/)).toHaveCount(0);
+ await entry.getByLabel('Category',{exact:true}).selectOption('Combat');
+ await expect(publishNew).toBeDisabled();
+ await entry.getByLabel('Description',{exact:true}).fill('A standalone fork with its own features.');
+ await expect(publishNew).toBeEnabled();
+ // A same-name match must take precedence even after the new-page fields are complete.
+ await entry.getByLabel('Name',{exact:true}).fill(name);
+ await expect(publishNew).toBeDisabled();
  await expect(entry.getByRole('button',{name:`Add link to ${name}`,exact:true})).toBeEnabled();
+ await entry.getByLabel('Name',{exact:true}).fill(forkName);
+ await expect(publishNew).toBeEnabled();
  await entry.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
  await expect(entry).toHaveCount(0);
  await page.goto(address);
@@ -141,7 +156,7 @@ for (const group of [false,true]) {
    url.searchParams.delete('search_document');
    const response=await route.fetch({url:url.href});const rows=await response.json();
    if(Array.isArray(rows)){
-    candidateId??=rows.find(row=>row.status==='pending')?.id;
+    candidateId??=rows.find(pendingRepository)?.id;
     for(const row of rows) if(row.id===candidateId) {
      row.name=version;row.description='A separately named version with its own description.';
      if(row.review_stats) row.review_stats.fork_of=null;

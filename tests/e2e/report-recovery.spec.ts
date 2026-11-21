@@ -35,7 +35,9 @@ test('owner rollback previews and reopens a dismissed harmful report in the revi
  await confirm(page,'Roll back');
  await expect(page.getByText(`Rolled back 1 change by ${fixture.reviewer}.`,{exact:true})).toBeVisible();
  await page.goto('/admin/reports');
- await expect(page.getByRole('link',{name:fixture.name,exact:true})).toBeVisible();
+ const report=page.getByRole('button',{name:new RegExp(`^${fixture.name}\\b`)});
+ await report.click();
+ await expect(report).toHaveAttribute('aria-expanded','true');
  await expect(page.getByText(`Original harmful-download evidence for ${fixture.name}.`,{exact:true})).toBeVisible();
  expect(sql(`select status from public.reports where id=${fixture.report}`)).toBe('open');
 });

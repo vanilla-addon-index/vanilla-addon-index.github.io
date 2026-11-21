@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { entryHref } from '#lib/entry-href.ts';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import ResponsiveSidebar from '#lib/components/ResponsiveSidebar.svelte';
 	import { similarAddon, publishedForkParent, isWikiPage, type ReviewNote } from '#lib/import-review.ts';
 	import { store } from '#lib/addons.svelte.ts';
@@ -169,11 +169,14 @@
 
 	// The shortcuts act on the highlighted entry through its own buttons and fields, so
 	// they publish what its fields say at that moment.
-	const within = (what: string) => document.querySelector<HTMLElement>(`[data-entry="${current}"] [data-act="${what}"]`);
+	const within = (what: string) => entries?.querySelector<HTMLElement>(`[data-entry="${current}"] [data-act="${what}"]`);
 
-	function move(by: number) {
+	async function move(by: number) {
 		current = Math.max(0, Math.min(onPage - 1, current + by));
-		document.querySelector(`[data-entry="${current}"]`)?.scrollIntoView({ block: 'nearest' });
+		await tick();
+		const summary = within('review');
+		summary?.focus({ preventScroll: true });
+		(summary ?? entries?.querySelector(`[data-entry="${current}"]`))?.scrollIntoView({ block: 'nearest' });
 	}
 
 	function shortcut(event: KeyboardEvent) {
@@ -188,11 +191,11 @@
 			if (!item || key !== 'u') return;
 			restoreOne(item);
 		} else {
-			if (key === 'a') within('approve')?.click();
-			else if (key === 'r') within('reject')?.click();
-			else if (key === 'e') within('name')?.focus();
-			else if (key === 'v') within('version')?.click();
-			else return;
+			const action = { a: 'approve', r: 'reject', e: 'name', v: 'version' }[key];
+			if (!action) return;
+			const control = within(action);
+			if (action === 'name') control?.focus();
+			else control?.click();
 		}
 		event.preventDefault();
 	}
@@ -219,11 +222,12 @@
 		]}
 		onclick={() => (current = index)}
 	>
-		<div class="flex flex-wrap items-baseline gap-x-3">
-			<span class="font-bold">{item.name}</span>
+		<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+			<span class="font-bold [overflow-wrap:anywhere]">{item.name}</span>
 			<span class="text-sm text-muted">{item.category}</span>
+			<span class="ml-auto rounded border border-border px-1.5 py-0.5 text-xs text-muted">{view === 'dead' ? 'Dead link' : 'Rejected'}</span>
 		</div>
-		<p class="break-words text-muted">{item.description || 'No description from the source.'}</p>
+		<p class="mt-1 break-words text-sm text-muted">{item.description || 'No description from the source.'}</p>
 		<a
 			href={item.url}
 			target="_blank"
@@ -246,69 +250,68 @@
 	<div class="admin-workspace">
 		<aside class="admin-sidebar">
 			<ResponsiveSidebar label="Import filters and counts">
-			{#snippet children()}
-			<div class="panel">
-				<div class="border-b border-border px-3 py-3">
-					<h1 class="text-2xl leading-tight font-bold">Import</h1>
-					<p class="text-muted">Sources: {WIKI_NAME} and OctoWoW</p>
-				</div>
-				<dl>
-				{#each [['Waiting', imports.counts.waiting], ['Published', imports.counts.approved], ['Submitted by users', imports.counts.submitted], ['Rejected', imports.counts.rejected], ['Dead links', imports.counts.dead]] as [label, value] (label)}
-						<div class="flex justify-between border-b border-border px-3 py-1.5 last:border-b-0">
-							<dt class="text-muted">{label}</dt>
-							<dd>{value}</dd>
+				{#snippet children()}
+					{#snippet choice(value: View, label: string, count: number)}
+						<button
+							class={[
+								'flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 border-l-2 px-3 py-0.5 text-left text-sm hover:bg-raised md:min-h-8',
+								view === value ? 'border-accent bg-accent/10 font-semibold text-accent' : 'border-transparent'
+							]}
+							aria-pressed={view === value}
+							onclick={() => show(value)}
+						>
+							<span>{label}</span>
+							<span class="text-muted tabular-nums">{count}</span>
+						</button>
+					{/snippet}
+
+					<div class="panel">
+						<header class="border-b border-border px-3 py-2">
+							<h1 class="text-2xl leading-tight font-bold">Import</h1>
+							<p class="text-sm text-muted">{WIKI_NAME} and OctoWoW</p>
+						</header>
+
+						<h2 class="label mb-0 px-3 pt-2 pb-1">Waiting</h2>
+						{@render choice('all', FILTERS.all, imports.counts.waiting)}
+						{@render choice('fine', FILTERS.fine, imports.counts.fine)}
+						{@render choice('duplicate', FILTERS.duplicate, imports.counts.duplicate)}
+						{@render choice('wiki', FILTERS.wiki, imports.counts.wiki)}
+						{@render choice('mirrors', 'Confirmed mirrors', imports.counts.mirrors)}
+						{@render choice('incomplete', 'Needs review', imports.counts.incomplete)}
+
+						<h2 class="label mt-1 mb-0 border-t border-border px-3 pt-2 pb-1">Decided</h2>
+						{@render choice('rejected', 'Rejected', imports.counts.rejected)}
+						{@render choice('dead', 'Dead links', imports.counts.dead)}
+
+						<dl class="mt-1 space-y-1 border-t border-border px-3 py-2 text-sm">
+							<div class="flex justify-between gap-2">
+								<dt class="text-muted">Published</dt><dd class="tabular-nums">{imports.counts.approved}</dd>
+							</div>
+							<div class="flex justify-between gap-2">
+								<dt class="text-muted">Submitted by users</dt><dd class="tabular-nums">{imports.counts.submitted}</dd>
+							</div>
+						</dl>
+					</div>
+
+					<DiscordUpload />
+
+					<details class="panel px-3 py-2 text-sm">
+						<summary class="cursor-pointer font-semibold hover:text-accent">Keyboard shortcuts</summary>
+						<div class="mt-2 space-y-1 text-muted">
+							<p>J / K or ↓ / ↑ to move</p>
+							{#if view === 'dead'}
+								<p>Dead repositories are filed automatically.</p>
+							{:else if view === 'rejected'}
+								<p>U to put back in the queue</p>
+							{:else}
+								<p>A approve · E edit the name</p>
+								<p>V approve as a version · R reject</p>
+								<p>Ctrl+Enter approves from a field</p>
+							{/if}
 						</div>
-					{/each}
-				</dl>
-			</div>
-
-			{#snippet choice(value: View, label: string, count: number)}
-				<button
-					class={[
-						'flex w-full cursor-pointer justify-between border-l-2 px-3 py-1 text-left transition-colors duration-100 hover:bg-raised',
-						view === value ? 'border-accent text-accent' : 'border-transparent'
-					]}
-					aria-pressed={view === value}
-					onclick={() => show(value)}
-				>
-					<span>{label}</span>
-					<span class="text-sm leading-7 text-muted">{count}</span>
-				</button>
-			{/snippet}
-
-			<div class="panel py-1">
-				<h2 class="label px-3 pt-2">Waiting</h2>
-				{#each Object.entries(FILTERS) as [value, label] (value)}
-					{@render choice(
-						value as View,
-						label,
-						value === 'all' ? imports.counts.waiting : imports.counts[value as 'fine' | 'duplicate' | 'wiki']
-					)}
-				{/each}
-				{@render choice('mirrors', 'Confirmed mirrors', imports.counts.mirrors)}
-				{@render choice('incomplete', 'Needs review', imports.counts.incomplete)}
-				<h2 class="label mt-2 border-t border-border px-3 pt-3">Decided</h2>
-				{@render choice('rejected', 'Rejected', imports.counts.rejected)}
-				{@render choice('dead', 'Dead links', imports.counts.dead)}
-			</div>
-
-			<DiscordUpload />
-
-			<div class="panel px-3 py-2 text-sm text-muted">
-				<h2 class="label">Keys</h2>
-				<p>J / K or ↓ / ↑ to move</p>
-				{#if view === 'dead'}
-					<p>Dead repositories are filed automatically.</p>
-				{:else if view === 'rejected'}
-					<p>U to put back in the queue</p>
-				{:else}
-					<p>A approve · E edit the name</p>
-					<p>V approve as a version · R reject</p>
-					<p>Ctrl+Enter approves from a field</p>
-				{/if}
-			</div>
-			{/snippet}
-		</ResponsiveSidebar>
+					</details>
+				{/snippet}
+			</ResponsiveSidebar>
 		</aside>
 
 		<section class="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col">
@@ -364,11 +367,15 @@
 				{:else if !imports.loaded}
 					<p class="px-3 py-8 text-center text-muted">Loading the queue…</p>
 				{:else if !page.length}
-					<p class="px-3 py-8 text-center text-muted">
-						{imports.counts.waiting
-							? 'Nothing in the queue matches.'
-							: 'The queue is empty. New candidates from the wiki and OctoWoW are added every night.'}
-					</p>
+					<div class="px-4 py-5 text-center">
+						{#if imports.counts.waiting}
+							<h2 class="font-semibold">Nothing in the queue matches.</h2>
+							<p class="mt-1 text-sm text-muted">Try a different search or filter.</p>
+						{:else}
+							<h2 class="font-semibold">The queue is empty.</h2>
+							<p class="mt-1 text-sm text-muted">New candidates from the wiki and OctoWoW are added nightly.</p>
+						{/if}
+					</div>
 				{:else}
 					{#each page as { item, verdict, advice, notes, match, forkMatch }, index (item.id)}
 						<ImportEntry
