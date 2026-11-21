@@ -92,4 +92,26 @@ describe('reports', () => {
 		await call(admin, 'delete from public.addons where id = $1', [row.id]);
 		assert.equal((await db.sql('select * from public.reports')).length, 0);
 	});
+
+	test('the admin badge counts all waiting queues and excludes resolved work', async () => {
+		const count = 'select public.admin_badge_counts() as counts';
+		const badges = async () => (await call(admin, count))[0].counts;
+		await refused(() => db.asVisitor(q => q(count)), /permission denied/);
+		await refused(() => call(bob, count), /Only admins/);
+		assert.deepEqual(await badges(), { imports: 0, reports: 0, edits: 0 });
+
+		const atlas = await post(db, alice, addon('Atlas'));
+		await report(bob, atlas);
+		await db.sql(`insert into public.import_queue(key,url,name,status)
+			values ('github.com/a/new','https://github.com/a/new','New','pending'),
+				('github.com/a/dead','https://github.com/a/dead','Dead','dead')`);
+		await db.sql(`insert into public.addon_edit_requests(addon_id,proposed_by,base,changes,status)
+			values ($1,$2,'{}','{}','pending'), ($1,$2,'{}','{}','rejected')`, [atlas.id, bob.id]);
+		await db.sql(`insert into public.addon_link_requests(addon_id,proposed_by,url,key,status)
+			values ($1,$2,'https://github.com/b/atlas','github.com/b/atlas','pending'),
+				($1,$2,'https://github.com/b/old','github.com/b/old','withdrawn')`, [atlas.id, bob.id]);
+		assert.deepEqual(await badges(), { imports: 1, reports: 1, edits: 2 });
+		await db.sql("update public.addon_link_requests set status = 'accepted' where status = 'pending'");
+		assert.deepEqual(await badges(), { imports: 1, reports: 1, edits: 1 });
+	});
 });

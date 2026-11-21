@@ -1,5 +1,6 @@
 import { asset } from '$app/paths';
 import { auth } from './auth.svelte';
+import { refreshAdminBadges } from './admin-badges.svelte';
 import { LOCAL, PUBLIC_ADDON_COLUMNS } from './config';
 import { tell } from './confirm.svelte';
 import { liveRows, mergeFresh, newestStamp, stillGone } from './fresh';
@@ -481,12 +482,14 @@ export async function deleteAddon(id: number) {
 	// The snapshot lists it until the next one is taken; this browser knows better.
 	writeGone([...readGone(), id]);
 	changeCachedAddon(id);
+	refreshAdminBadges({ afterAction: true });
 }
 
 async function groupCall(name: string, args: Record<string, unknown>) {
 	if (!supabase) throw new Error('Database is not configured.');
 	const { error } = await supabase.rpc(name, args);
 	if (error) throw new Error(explain(error));
+	if (name === 'merge_addons') refreshAdminBadges({ afterAction: true });
 	await loadAddons();
 }
 

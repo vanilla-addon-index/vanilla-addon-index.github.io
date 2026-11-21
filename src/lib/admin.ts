@@ -1,6 +1,7 @@
 // Calls behind the admin panel's Log, Trash and Users tabs. The database checks the
 // caller's rights on every one of them; see the moderation migration.
 import { PROVIDER_NAMES } from './config';
+import { refreshAdminBadges } from './admin-badges.svelte';
 import { linkKey } from './links';
 import { supabase } from './supabase';
 import type { Addon, AddonMirror } from './types';
@@ -117,6 +118,12 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 	return data as T;
 }
 
+async function callAndRefreshBadges<T>(name: string, args: Record<string, unknown>) {
+	const result = await call<T>(name, args);
+	refreshAdminBadges({ afterAction: true });
+	return result;
+}
+
 export const listAddonMirrors = (target: number) =>
 	call<AddonMirror[]>('addon_mirrors', { target });
 
@@ -132,7 +139,8 @@ export async function listInactiveMirrorDecisions(target: number) {
 
 export const decideAddonMirror = (target: number, mirrorUrl: string, sourceUrl: string | null,
 	choice: 'mirror' | 'independent' | 'removed', queueId?: number) =>
-	call<null>('decide_addon_mirror', { target, mirror_url: mirrorUrl, source_url: sourceUrl, choice, queue_id: queueId });
+	(queueId === undefined ? callAndRefreshBadges : call)<null>(
+		'decide_addon_mirror', { target, mirror_url: mirrorUrl, source_url: sourceUrl, choice, queue_id: queueId });
 
 /** What narrows the log down. The database does the searching, so it covers every line ever written. */
 export interface LogFilter {
@@ -233,7 +241,7 @@ export const ROLLBACK_TEXT: Record<RollbackStep['kind'], string> = {
  * changed and the answer lists what a real run would do. See the rollback migration.
  */
 export const rollbackAccount = (id: string, since: Date, preview: boolean) =>
-	call<Rollback>('rollback_account', { target: id, since: since.toISOString(), preview });
+	(preview ? call : callAndRefreshBadges)<Rollback>('rollback_account', { target: id, since: since.toISOString(), preview });
 
 /** Which trash entries still exist, so the log only offers to restore what can be restored. */
 export async function loadTrashIds(ids: number[]) {
@@ -250,7 +258,7 @@ export async function loadTrashIds(ids: number[]) {
 export const undoGrouping = (logId: number) => call<null>('undo_grouping', { log_id: logId });
 
 /** Undoes an approval: the addon goes to the trash and its entry is back in the import queue. */
-export const unapproveImport = (addonId: number) => call<null>('unapprove_import', { target: addonId });
+export const unapproveImport = (addonId: number) => callAndRefreshBadges<null>('unapprove_import', { target: addonId });
 
 /** Puts a rejected import back in the queue, found by its link. False when it was not rejected any more. */
 export async function requeueImport(url: string) {
@@ -262,7 +270,7 @@ export async function requeueImport(url: string) {
 		.maybeSingle();
 	if (error) throw new Error(error.message);
 	if (!data) return false;
-	await call<number>('decide_imports', { ids: [data.id], decision: 'pending' });
+	await callAndRefreshBadges<number>('decide_imports', { ids: [data.id], decision: 'pending' });
 	return true;
 }
 
@@ -345,7 +353,7 @@ export const listDeletedAccounts = (target: string | null = null, beforeId: stri
  call<DeletedAccount[]>('list_deleted_accounts', { target, before_id: beforeId });
 
 /** Owner-only recovery of the exact report decision in this audit entry. */
-export const reopenReport = (logId: number) => call<boolean>('reopen_report', { log_id: logId });
+export const reopenReport = (logId: number) => callAndRefreshBadges<boolean>('reopen_report', { log_id: logId });
 
 export interface RecoveryComparison {
  entry: LogEntry;

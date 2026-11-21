@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { loadAddons } from './addons.svelte';
-import { countEditReviews } from './edit-reviews.svelte';
+import { refreshAdminBadges } from './admin-badges.svelte';
 import { auth } from './auth.svelte';
 
 export interface LinkRequest {
@@ -36,5 +36,6 @@ export async function loadLinkRequests() {
 }
 export async function decideLink(request_id: number, accept: boolean) {
 	await call('decide_addon_link', { request_id, accept });
-	await Promise.all([loadAddons(), countEditReviews()]);
+	refreshAdminBadges({ afterAction: true });
+	await loadAddons();
 }
