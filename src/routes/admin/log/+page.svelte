@@ -277,7 +277,9 @@
 						title: `Send this import for "${addon.name}" back to the queue?`,
 						body: 'This import goes back to review. On a shared page, only the approved download link is removed.',
 						run: () => requeueImportApproval(entry.id),
-						done: 'The import is back in the queue.'
+						done: entry.action === 'import.attach'
+							? `The download link import for "${addon.name}" is back in the queue.`
+							: `"${addon.name}" is back in the import queue.`
 					}]),
 					...(entry.action === 'import.approve' ? [remove] : [])
 				];

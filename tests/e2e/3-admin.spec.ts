@@ -166,7 +166,7 @@ test('an import is approved as it is, another with changes, and one is rejected 
 	await openLogLine(approval);
 	await approval.getByRole('button', { name: 'Back to the queue' }).click();
 	await confirm(page, 'Back to the queue');
-	await expect(page.getByText(`"${renamed}" is back in the import queue.`)).toBeVisible();
+	await expect(approval.getByRole('status')).toHaveText(`"${renamed}" is back in the import queue.`);
 	await page.goto('/admin/import');
 	await expect.poll(() => waiting(page)).toBe(before - 1);
 });
