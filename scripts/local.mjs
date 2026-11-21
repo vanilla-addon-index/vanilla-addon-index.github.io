@@ -4,6 +4,7 @@
 //
 //   node scripts/local.mjs up      start it if needed, then wipe and fill it
 //   node scripts/local.mjs reset   wipe and fill it (it must be running)
+//   node scripts/local.mjs demo-dates   add missing dates to the running fixture catalogue
 //   node scripts/local.mjs down    stop it
 //   node scripts/local.mjs demo-admin   add preview data without resetting the database
 //
@@ -68,6 +69,54 @@ const WORDS = ['Raid', 'Quest', 'Bag', 'Buff', 'Map', 'Chat', 'Bar', 'Frame', 'A
 const THINGS = ['Helper', 'Tracker', 'Timers', 'Plus', 'Lite', 'Master', 'Watch', 'Notes', 'Alert', 'Sort', 'Stats', 'Mate'];
 const name = (i) => `${WORDS[i % WORDS.length]}${THINGS[Math.floor(i / WORDS.length) % THINGS.length]}${i >= 144 ? ` ${Math.floor(i / 144) + 1}` : ''}`;
 const quote = (text) => `'${String(text).replace(/'/g, "''")}'`;
+const importedAddons = Array.from({ length: 240 }, (_, i) => {
+	const title = name(i);
+	return { title, url: `https://github.com/author${i % 40}/${title.replace(/\s+/g, '-')}` };
+});
+
+function seedCodeDates() {
+	// The original RaidHelper date stays newer than the other downloads on its shared page.
+	const sharedDates = new Map([
+		[0, '2024-06-14T14:00:48Z'],
+		[12, '2021-03-18T12:00:00Z'],
+		[24, '2019-09-07T12:00:00Z']
+	]);
+	const fixtures = importedAddons.flatMap(({ url }, i) => {
+		if (i % 13 === 6) return []; // Keep some dates unknown.
+		const days = i * 2 + (i % 7 === 0 ? 3650 : i % 3 === 0 ? 900 : 0);
+		const date = sharedDates.has(i) ? `timestamptz ${quote(sharedDates.get(i))}`
+			: `(current_date - ${days} + time '12:00') at time zone 'UTC'`;
+		return [`(${quote(url)}, ${date})`];
+	});
+
+	sql(`
+begin;
+create temporary table demo_code_dates (url text primary key, committed_at timestamptz) on commit drop;
+insert into demo_code_dates values
+${fixtures.join(',\n')};
+
+insert into public.repo_code_updates (url, committed_at, history_url)
+select demo.url, demo.committed_at, demo.url || '/commits/HEAD'
+from demo_code_dates demo
+where exists (
+	select 1 from public.addons a, jsonb_array_elements(a.versions) v
+	where v ->> 'url' = demo.url
+)
+on conflict (url) do nothing;
+
+-- Rebuild the public dates through the usual trigger, without adding activity log entries.
+select set_config('app.doing', 'code_refresh', true);
+update public.addons a set versions = a.versions
+where exists (
+	select 1 from jsonb_array_elements(a.versions) v
+	join demo_code_dates demo on demo.url = v ->> 'url'
+	join public.repo_code_updates r on r.url = demo.url
+	where a.link_code_updates -> demo.url is distinct from
+		jsonb_build_object('date', r.committed_at, 'url', r.history_url)
+);
+commit;
+`, 'seeding local code dates');
+}
 
 // Keep the larger, fixed queue for browser-test counts and filtering fixtures.
 function testImportSql() {
@@ -102,9 +151,8 @@ function seedSql(includeTestImports) {
 	).join('\n');
 
 	// Imports an admin approved: the bulk of the list.
-	const imported = Array.from({ length: 240 }, (_, i) => {
-		const title = name(i);
-		return `(${quote(title)}, ${quote(`${title} does one thing well. It was imported from the wiki for the local test data.`)}, ${quote(CATEGORIES[i % CATEGORIES.length])}, ${quote(`author${i % 40}`)}, jsonb_build_array(jsonb_build_object('url', 'https://github.com/author${i % 40}/${title.replace(/\s+/g, '-')}', 'note', '')), 'Turtle WoW Wiki', (select id from public.profiles where username = 'admin'), now() - interval '${i} hours')`;
+	const imported = importedAddons.map(({ title, url }, i) => {
+		return `(${quote(title)}, ${quote(`${title} does one thing well. It was imported from the wiki for the local test data.`)}, ${quote(CATEGORIES[i % CATEGORIES.length])}, ${quote(`author${i % 40}`)}, jsonb_build_array(jsonb_build_object('url', ${quote(url)}, 'note', '')), 'Turtle WoW Wiki', (select id from public.profiles where username = 'admin'), now() - interval '${i} hours')`;
 	}).join(',\n');
 
 	const posted = [
@@ -139,9 +187,6 @@ ${includeTestImports ? testImportSql() : ''}
 -- Seeding is not something that happened on the site.
 ${dllDemoSql()}
 
-insert into public.repo_code_updates (url, committed_at, history_url)
-select repo_url, '2024-06-14T14:00:48Z', repo_url || '/commits/HEAD' from public.addons where name = 'RaidHelper';
-update public.addons set code_update = null where name = 'RaidHelper';
 delete from public.activity_log;
 `;
 }
@@ -163,6 +208,7 @@ async function fill(includeDemo) {
 	console.log('Creating the test accounts and data…');
 	await createAccounts(info);
 	sql(seedSql(!includeDemo), 'seeding');
+	seedCodeDates();
 	if (includeDemo) seedAdminDemo();
 
 	writeFileSync(
@@ -185,7 +231,10 @@ if (command === 'up') {
 } else if (command === 'demo-dll') {
 	sql(dllDemoSql(), 'adding local DLL demo entries');
 	console.log('Local DLL demo entries added. Existing data was preserved.');
+} else if (command === 'demo-dates') {
+	seedCodeDates();
+	console.log('Local addon update dates filled in.');
 } else {
-	console.log('Usage: node scripts/local.mjs up [--demo] | reset [--demo] | down | demo-admin | demo-dll');
+	console.log('Usage: node scripts/local.mjs up [--demo] | reset [--demo] | down | demo-admin | demo-dll | demo-dates');
 	process.exit(1);
 }

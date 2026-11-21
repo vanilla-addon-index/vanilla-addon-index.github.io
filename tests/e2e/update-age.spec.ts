@@ -1,5 +1,65 @@
 import { expect, test } from './test.ts';
 
+for (const locale of ['en-US', 'da-DK']) {
+	test.describe(locale, () => {
+		test.use({ locale, timezoneId: 'America/Los_Angeles', viewport: { width: 320, height: 844 } });
+
+		test('shows the latest known code update once per group', async ({ page }) => {
+			const groupDate = '2025-11-22';
+			const detailDate = '2025-11-21';
+			const source = 'https://github.com/example/original';
+			const secondary = 'https://github.com/example/secondary';
+			const pinnedUpdate = { date: '2023-01-01T00:00:00Z', url: source + '/commits' };
+			const latest = { date: '2025-11-21T00:30:00Z', url: secondary + '/commits' };
+			const rows = [
+				{ id: 99200, name: 'Group Main', slug: 'group-main', group_id: 99, is_main: true, shared: true,
+					repo_url: source, pinned_link: source, versions: [source, secondary].map(url => ({ url, note: '' })),
+					code_update: pinnedUpdate, link_code_updates: { [source]: pinnedUpdate, [secondary]: latest } },
+				{ id: 99201, name: 'Group Fork', slug: 'group-fork', group_id: 99, is_main: false,
+					code_update: { date: '2025-11-22T00:30:00Z', url: source + '/fork/commits' } },
+				{ id: 99202, name: 'Standalone', slug: 'standalone',
+					code_update: { date: '2025-10-01T00:00:00Z', url: source + '/standalone/commits' } },
+				{ id: 99203, name: 'Unknown', slug: 'unknown', code_update: { date: 'invalid', url: source + '/unknown/commits' } }
+			].map(row => ({
+				description: 'Update date example.', category: 'UI & Appearance', author: 'Example',
+				created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', ...row
+			}));
+			await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: rows }));
+			await page.goto('/?sort=code');
+			const list = page.getByRole('region', { name: 'Addon list' });
+			const main = list.locator('[data-catalogue-id="99200"]');
+			await expect(list.locator('[data-catalogue-id]').first()).toHaveAttribute('data-catalogue-id', '99200');
+			await expect(main.locator('time')).toHaveText(groupDate);
+			await expect(main.getByRole('link')).toHaveCount(1);
+			await expect(list.locator('[data-catalogue-id="99201"] time')).toHaveCount(0);
+			const unknown = list.locator('[data-catalogue-id="99203"]');
+			await expect(unknown).toContainText('Last update unknown');
+			expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+			const categories = list.getByText('UI & Appearance', { exact: true });
+			for (const width of [640, 768, 1440]) {
+				await page.setViewportSize({ width, height: 844 });
+				const rightEdges = await categories.evaluateAll(labels => labels.map(label => label.getBoundingClientRect().right));
+				expect(rightEdges).toHaveLength(rows.length);
+				expect(new Set(rightEdges).size).toBe(1);
+				const date = await main.locator('time').boundingBox();
+				const dash = await unknown.getByText('—', { exact: true }).boundingBox();
+				const oneRem = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+				expect(date!.x - rightEdges[0]).toBeCloseTo(oneRem);
+				expect(dash!.x - rightEdges[0]).toBeCloseTo(oneRem);
+			}
+			await page.setViewportSize({ width: 320, height: 844 });
+			await main.getByRole('link').click();
+			await expect(page.getByRole('heading', { level: 1, name: 'Group Main' })).toBeVisible();
+			const update = page.locator('aside time');
+			await expect(update).toHaveText(detailDate);
+			await expect(update).toHaveAttribute('datetime', latest.date);
+			await expect(page.getByRole('link', { name: detailDate, exact: true })).toHaveAttribute('href', latest.url);
+			await expect(page.getByRole('link', { name: source, exact: true })).toBeVisible();
+			await expect(page.getByRole('link', { name: secondary, exact: true })).toBeVisible();
+		});
+	});
+}
+
 test('visitors can filter update ages, keep unknown dates, and remember or reset their choice', async ({ page }) => {
 	// The retired account checkbox must not silently enable the new slider.
 	await page.addInitScript(() => localStorage.setItem('vanilla-addon-index:hide-older', 'true'));

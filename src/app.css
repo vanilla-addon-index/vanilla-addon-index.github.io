@@ -129,8 +129,7 @@
 			background-attachment: fixed;
 		}
 	}
-	/* Shared row columns: flexible addon text and a right-aligned category/link group.
-	   Keep each category next to its link instead of reserving separate empty tracks. */
+	/* Shared row columns: flexible addon text and right-aligned category and update. */
 	.addon-list {
 		@apply sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4;
 	}
@@ -246,9 +245,8 @@
 		/* The browser can skip the layout and paint of distant sections. Reserve the
 		   same height as their rows so the scrollbar and letter jumps stay stable. */
 		--row-line: 1.25rem;
-		--download-line: calc(0.875rem * 1.25 + 2px);
 		--row-frame: calc(var(--spacing) * 2.5 + 1px);
-		--section-height: calc(var(--rows) * (var(--row-frame) + max(var(--row-line), var(--download-line))));
+		--section-height: calc(var(--rows) * (var(--row-frame) + var(--row-line)));
 		content-visibility: auto;
 		contain-intrinsic-block-size: var(--section-height);
 	}
@@ -264,7 +262,7 @@
 	}
 	@media (width < 40rem) {
 		.catalogue-section {
-			--section-height: calc(var(--rows) * (var(--row-frame) + 2 * var(--row-line)) + var(--descriptions) * var(--row-line) + var(--download-links) * (var(--download-line) - var(--row-line)));
+			--section-height: calc(var(--rows) * (var(--row-frame) + var(--row-line)) + (var(--descriptions) + var(--update-rows)) * var(--row-line));
 		}
 	}
 	@media (40rem <= width < 48rem) {

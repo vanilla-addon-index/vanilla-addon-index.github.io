@@ -4,12 +4,12 @@
 	import { store } from '#lib/addons.svelte.ts';
 	import { supabase } from '#lib/supabase.ts';
 	import { byCodeUpdate } from '#lib/addon-sort.ts';
+	import { formatUpdateDate } from '#lib/addon-update.ts';
 	let { query = '' }: { query?: string } = $props();
 	let ids = $state<number[]>([]), loading = $state(true), error = $state('');
 	let retry = $state(0);
 	const favorites = $derived(store.addons.filter((a) => ids.includes(a.id)).sort(byCodeUpdate));
 	const matching = $derived(favorites.filter(addon => [addon.name, addon.description, addon.category, ...addon.versions.map(version => version.url)].join(' ').toLowerCase().includes(query.trim().toLowerCase())));
-	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 	$effect(() => {
 		const user = auth.session?.user.id;
 		void retry;
@@ -36,11 +36,12 @@
 		{:else}
 			<ul>
 				{#each matching as addon (addon.id)}
+					{@const date = formatUpdateDate(addon.code_update?.date)}
 					<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 py-2 last:border-b-0">
 						<a class="font-bold hover:text-accent" href={entryHref(addon)}>{addon.name}</a>
 						<span class="text-sm text-muted">Last update:
-							{#if addon.code_update}
-								<time class="text-fg" datetime={addon.code_update.date}>{date(addon.code_update.date)}</time>
+							{#if date}
+								<time class="text-fg" datetime={addon.code_update?.date}>{date}</time>
 							{:else}Unknown{/if}
 						</span>
 					</li>

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { entryHref } from '#lib/entry-href.ts';
 	import { clientKind } from '#lib/client-kinds.ts';
-	import { LINK_HOSTS } from '#lib/config.ts';
-	import { linkKey } from '#lib/links.ts';
+	import { formatUpdateDate, latestAddonCodeUpdate } from '#lib/addon-update.ts';
 	import type { Addon } from '#lib/types.ts';
 
 	type Props = {
-		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'repo_url' | 'entry_type'>;
+		addon: Pick<Addon, 'slug' | 'name' | 'description' | 'category' | 'entry_type'>
+			& Partial<Pick<Addon, 'code_update' | 'link_code_updates'>>;
+		updateDate?: string;
 		// Renders the row without links, for the live preview on the submit page.
 		preview?: boolean;
 		catalogueId?: number;
@@ -16,14 +17,11 @@
 		// the indent joining them.
 		minor?: boolean;
 	};
-	let { addon, preview = false, catalogueId, owner, minor = false }: Props = $props();
+	let { addon, updateDate, preview = false, catalogueId, owner, minor = false }: Props = $props();
 
 	// The row shows where the description starts.
 	const blurb = $derived(addon.description.trim().split('\n')[0]);
-	// The link is a small button naming the site it opens. Every button is as wide as the
-	// longest name among the allowed sites, so they are all one size.
-	const host = $derived(linkKey(addon.repo_url ?? '').split('/')[0]);
-	const WIDEST = LINK_HOSTS.map((h) => h.split('/')[0]).reduce((a, b) => (b.length > a.length ? b : a));
+	const date = $derived(minor ? undefined : updateDate ?? latestAddonCodeUpdate(addon)?.date);
 </script>
 
 <div
@@ -38,7 +36,7 @@
 	<!-- Name and description share the list's first column, the description straight after
 	     the name. On a phone the wrapper steps aside and they are cells of the row's own grid. -->
 	<span class="contents sm:flex sm:min-w-0 sm:gap-2">
-		<!-- The name's link is stretched over the whole row; the addon link sits above it. -->
+		<!-- The name's link is stretched over the whole row. -->
 		<svelte:element
 			this={preview ? 'span' : 'a'}
 			href={preview ? undefined : entryHref(addon)}
@@ -56,45 +54,21 @@
 		<span class="col-start-2 row-start-1 font-sans text-muted sm:col-start-auto sm:row-start-auto sm:text-right">
 			{addon.entry_type === 'dll' ? clientKind(addon.category) : addon.category}
 		</span>
-		{#if host}
-			<svelte:element
-				this={preview ? 'span' : 'a'}
-				href={preview ? undefined : addon.repo_url}
-				target={preview ? undefined : '_blank'}
-				rel={preview ? undefined : 'noopener nofollow'}
-				data-sizing-label="{WIDEST} ↗"
-				class={[
-					'repository-link relative col-span-2 row-start-3 grid w-max shrink-0 border border-border px-1.5 font-sans text-sm leading-tight text-muted sm:col-span-1 sm:row-start-auto',
-					!preview && 'transition-colors duration-100 hover:bg-raised hover:text-fg'
-				]}
-			>
-				<span class="truncate">{host}</span>
-			</svelte:element>
-		{:else}
-			<span class="col-span-2 row-start-3 text-sm text-muted sm:col-span-1 sm:row-start-auto">No download links</span>
-		{/if}
+		<span class={[
+			'pointer-events-none col-span-2 row-start-3 shrink-0 font-sans whitespace-nowrap text-muted tabular-nums sm:relative sm:col-span-1 sm:row-start-auto',
+			minor && 'hidden sm:block'
+		]}>
+			<!-- Reserve a date's width on desktop, even when this row has no date. -->
+			<span class="invisible hidden sm:block" aria-hidden="true">2000-12-28</span>
+			{#if !minor}
+				<span class="sm:absolute sm:inset-x-0 sm:top-0">
+					{#if date}
+						<span class="sr-only">Last update </span><time datetime={date}>{formatUpdateDate(date)}</time>
+					{:else}
+						<span class="sr-only">Last update unknown</span><span aria-hidden="true">—</span>
+					{/if}
+				</span>
+			{/if}
+		</span>
 	</span>
 </div>
-
-<style>
-	.repository-link {
-		grid-template-columns: minmax(0, 1fr) auto;
-		column-gap: calc(var(--spacing) * 1);
-	}
-	.repository-link::before {
-		content: attr(data-sizing-label);
-		visibility: hidden;
-		grid-area: 1 / 1 / 2 / 3;
-	}
-	.repository-link::after {
-		content: '↗';
-		content: '↗' / '';
-		grid-area: 1 / 2;
-	}
-	.repository-link > span {
-		grid-area: 1 / 1;
-		/* Let the invisible label size the button, even for an unusually long host. */
-		inline-size: 0;
-		min-inline-size: 100%;
-	}
-</style>

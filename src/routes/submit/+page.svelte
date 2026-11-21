@@ -621,8 +621,7 @@
 						name: form.name,
 						description: matched?.description ?? form.description,
 						category: matched?.category ?? form.category,
-						entry_type: matched?.entry_type ?? form.entry_type,
-						repo_url: mainLink
+						entry_type: matched?.entry_type ?? form.entry_type
 					}}
 				/>
 			</div>

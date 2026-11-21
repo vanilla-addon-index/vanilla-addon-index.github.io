@@ -2,6 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { matchesAddonSearch, prepareAddonQuery, prepareAddonSearch } from '#lib/addon-search.ts';
 	import { isOlderAddon, MAX_UPDATE_AGE } from '#lib/addon-age.ts';
+	import { latestAddonCodeUpdate, newestCodeUpdate } from '#lib/addon-update.ts';
 	import { preferences, loadPreferences, savePreferences } from '#lib/preferences.svelte.ts';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -10,11 +11,11 @@
 	import AddonCard from '#lib/components/AddonCard.svelte';
 	import { CATEGORIES } from '#lib/config.ts';
 	import { HOME_TITLE } from '#lib/seo.ts';
-	import { creditFor, linkKey } from '#lib/links.ts';
-	import type { Addon } from '#lib/types.ts';
+	import { creditFor } from '#lib/links.ts';
+	import type { Addon, CodeUpdate } from '#lib/types.ts';
 	import type { Snapshot } from '@sveltejs/kit';
 
-	import { SORTS, readSort, byCodeUpdate, type Sort } from '#lib/addon-sort.ts';
+	import { SORTS, readSort, compareCodeUpdateDates, type Sort } from '#lib/addon-sort.ts';
 
 	let query = $state('');
 	let category = $state('');
@@ -95,9 +96,10 @@
 		appliedUpdateAge = preferences.maxUpdateAge;
 		return cancelAgePreview;
 	});
+	const updates = $derived(new Map(store.addons.map((addon) => [addon.id, latestAddonCodeUpdate(addon)])));
 	const visibleAddons = $derived.by(() => {
 		const now = new Date();
-		return store.addons.filter((a) => (a.entry_type ?? 'addon') === entryType && (!appliedUpdateAge || !isOlderAddon(a.code_update?.date, now, appliedUpdateAge)));
+		return store.addons.filter((a) => (a.entry_type ?? 'addon') === entryType && (!appliedUpdateAge || !isOlderAddon(updates.get(a.id)?.date, now, appliedUpdateAge)));
 	});
 
 	function readUrl(params: Pick<URLSearchParams, 'get'>) {
@@ -124,10 +126,10 @@
 	// and its sort order when search or category filters change.
 	const catalogueBlocks = $derived.by(() => {
 		const groups = new Map<number, Addon[]>();
-		const list: { main: Addon; others: Addon[] }[] = [];
+		const list: { main: Addon; others: Addon[]; update?: CodeUpdate }[] = [];
 		for (const a of visibleAddons) {
 			if (a.group_id === null) {
-				list.push({ main: a, others: [] });
+				list.push({ main: a, others: [], update: updates.get(a.id) });
 			} else if (groups.has(a.group_id)) {
 				groups.get(a.group_id)!.push(a);
 			} else {
@@ -138,14 +140,16 @@
 			const main = members.find((m) => m.is_main) ?? members[0];
 			const others = members
 				.filter((m) => m !== main)
-				.sort(byCodeUpdate);
-			list.push({ main, others });
+				.sort((a, b) => compareCodeUpdateDates(updates.get(a.id)?.date, updates.get(b.id)?.date) || a.name.localeCompare(b.name));
+			list.push({ main, others, update: newestCodeUpdate(members.map((member) => updates.get(member.id))) });
 		}
 
 		return list;
 	});
 	const nameBlocks = $derived(catalogueBlocks.toSorted((a, b) => a.main.name.localeCompare(b.main.name)));
-	const codeBlocks = $derived(catalogueBlocks.toSorted((a, b) => byCodeUpdate(a.main, b.main)));
+	const codeBlocks = $derived(catalogueBlocks.toSorted((a, b) =>
+		compareCodeUpdateDates(a.update?.date, b.update?.date) || a.main.name.localeCompare(b.main.name)
+	));
 	// Catalogue updates replace changed rows. Prepare a candidate only when it is searched.
 	const searchIndex = new WeakMap<Addon, ReturnType<typeof prepareAddonSearch>>();
 	const terms = $derived(prepareAddonQuery(query));
@@ -174,28 +178,28 @@
 		return first >= 'A' && first <= 'Z' ? first : '#';
 	}
 
-	type CatalogueRow = { addon: Addon; minor?: boolean; credit?: string };
-	type CatalogueSection = { letter: string; rows: CatalogueRow[]; descriptions: number; downloadLinks: number };
+	type CatalogueRow = { addon: Addon; minor?: boolean; credit?: string; updateDate?: string };
+	type CatalogueSection = { letter: string; rows: CatalogueRow[]; descriptions: number; updateRows: number };
 	const sections = $derived.by(() => {
 		const result: CatalogueSection[] = [];
 		let lastLetter = '';
 		let section: CatalogueSection | undefined;
-		for (const { main, others } of blocks) {
+		for (const { main, others, update } of blocks) {
 			const letter = sort === 'name' ? letterOf(main.name) : '';
 			const heading = letter === lastLetter ? '' : letter;
 			lastLetter = letter;
 			// Keep each group together and start a section at each letter jump.
 			if (!section || heading || section.rows.length + others.length >= 32) {
-				section = { letter: heading, rows: [], descriptions: 0, downloadLinks: 0 };
+				section = { letter: heading, rows: [], descriptions: 0, updateRows: 0 };
 				result.push(section);
 			}
-			section.rows.push({ addon: main, credit: others.length ? creditFor(main, true) : undefined });
+			section.rows.push({ addon: main, credit: others.length ? creditFor(main, true) : undefined, updateDate: update?.date });
+			section.updateRows++;
 			for (const addon of others) section.rows.push({ addon, minor: true, credit: creditFor(addon, true) });
 		}
 		for (const section of result) {
 			for (const { addon } of section.rows) {
 				if (addon.description.trim()) section.descriptions++;
-				if (linkKey(addon.repo_url ?? '').split('/', 1)[0]) section.downloadLinks++;
 			}
 		}
 		return result;
@@ -447,7 +451,7 @@
 			{#if !store.loaded}
 				<p class="px-3 py-8 text-center text-muted">Loading addons…</p>
 			{:else if blocks.length}
-				{#each sections as { letter, rows, descriptions, downloadLinks } (rows[0].addon.id)}
+				{#each sections as { letter, rows, descriptions, updateRows } (rows[0].addon.id)}
 					{#if letter}
 						<h2
 							id="letter-{letter}"
@@ -456,9 +460,9 @@
 							{letter}
 						</h2>
 					{/if}
-					<div class="catalogue-section" style:--rows={rows.length} style:--descriptions={descriptions} style:--download-links={downloadLinks}>
-						{#each rows as { addon, minor, credit } (addon.id)}
-							<AddonCard {addon} {minor} owner={credit} catalogueId={addon.id} />
+					<div class="catalogue-section" style:--rows={rows.length} style:--descriptions={descriptions} style:--update-rows={updateRows}>
+						{#each rows as { addon, minor, credit, updateDate } (addon.id)}
+							<AddonCard {addon} {minor} {updateDate} owner={credit} catalogueId={addon.id} />
 						{/each}
 					</div>
 				{/each}
