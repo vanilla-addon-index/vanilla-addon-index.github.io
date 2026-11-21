@@ -22,6 +22,7 @@
 	import AddonPicker from '#lib/components/AddonPicker.svelte';
 	import FavoriteButton from '#lib/components/FavoriteButton.svelte';
 	import ReportDialog from '#lib/components/ReportDialog.svelte';
+	import ScreenshotGallery from '#lib/components/ScreenshotGallery.svelte';
 	import UserLink from '#lib/components/UserLink.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
 	import { ask } from '#lib/confirm.svelte.ts';
@@ -200,60 +201,6 @@
 		}
 	}
 
-	// The screenshots that load, in the order they were given. Linked pictures disappear
-	// from their hosts, so each one is tried before any is shown: a dead one never takes a
-	// place, and the ones that work start where they will stay instead of moving up when
-	// the dead one is found out.
-	let shots = $state<string[]>([]);
-	const wanted = $derived((addon?.images ?? []).join('\n'));
-	$effect(() => {
-		const images = wanted ? wanted.split('\n') : [];
-		shots = [];
-		if (!images.length) return;
-		let current = true;
-		const loaded = new Set<string>();
-		let waiting = images.length;
-		let shown = false;
-		const show = () => {
-			shown = true;
-			if (current) shots = images.filter((image) => loaded.has(image));
-		};
-		// A host that neither answers nor refuses must not hold the others back for long.
-		const patience = setTimeout(show, 3000);
-		for (const image of images) {
-			const probe = new Image();
-			probe.referrerPolicy = 'no-referrer';
-			const settle = (ok: boolean) => {
-				if (ok) loaded.add(image);
-				waiting--;
-				// All of them have answered, or one has come in after the others were shown.
-				if (!waiting || shown) show();
-			};
-			probe.onload = () => settle(true);
-			probe.onerror = () => settle(false);
-			probe.src = image;
-		}
-		return () => {
-			current = false;
-			clearTimeout(patience);
-		};
-	});
-
-	let viewer = $state<HTMLDialogElement>();
-	// Index of the screenshot shown full size, -1 when the viewer is closed.
-	let viewing = $state(-1);
-
-	function view(index: number) {
-		viewing = index;
-		viewer?.showModal();
-	}
-
-	function step(event: KeyboardEvent) {
-		const move = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
-		const count = shots.length;
-		if (move && count) viewing = (viewing + move + count) % count;
-	}
-
 	async function remove() {
 		if (!addon) return;
 		const confirmed = await ask({
@@ -300,47 +247,15 @@
 				<p class="mt-4 font-read text-[0.9rem] leading-relaxed break-words whitespace-pre-line">{addon.description}</p>
 			{/if}
 
-			{#if shots.length}
-				<!-- Five across, the most an addon can have, so the row always fits the panel. -->
-				<ul class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
-					{#each shots as image, index (image)}
-						<li>
-							<button
-								class="block w-full cursor-zoom-in transition-opacity duration-100 hover:opacity-80"
-								aria-label="View screenshot {index + 1} of {addon.name} full size"
-								onclick={() => view(index)}
-							>
-								<!-- Already loaded once, above, so it is drawn at once. -->
-								<img src={image} alt="" referrerpolicy="no-referrer" class="aspect-video w-full object-contain" />
-							</button>
-						</li>
-					{/each}
-				</ul>
+			{#if addon.images?.length}
+				{#key JSON.stringify([addon.id, addon.images])}
+					<ScreenshotGallery images={addon.images} name={addon.name} />
+				{/key}
 			{/if}
 			{#if addon.similar_addons}
 				<p class="mt-4 text-sm text-muted break-words">{addon.similar_addons}</p>
 			{/if}
 		</div>
-
-
-		<!-- Full-size viewer. Escape or a click closes it; the arrow keys step through. -->
-		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-		<dialog
-			bind:this={viewer}
-			class="m-auto max-h-[94vh] max-w-[94vw] cursor-zoom-out border border-border bg-bg p-0 backdrop:bg-black/85"
-			onclick={() => viewer?.close()}
-			onclose={() => (viewing = -1)}
-			onkeydown={step}
-		>
-			{#if shots[viewing]}
-				<img
-					src={shots[viewing]}
-					alt="Screenshot {viewing + 1} of {addon.name}"
-					referrerpolicy="no-referrer"
-					class="max-h-[94vh] max-w-[94vw] object-contain"
-				/>
-			{/if}
-		</dialog>
 
 		<aside class="min-w-0 space-y-2">
 			<div class="panel">
