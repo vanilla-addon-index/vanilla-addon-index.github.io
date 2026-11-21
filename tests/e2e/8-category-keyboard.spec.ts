@@ -50,6 +50,7 @@ test('import review keeps letter-key choices after closing and publishes that ca
 	await expect(category).toHaveValue('Hardcore');
 	await page.keyboard.press('ArrowUp');
 	await expect(category).toHaveValue('Combat');
+	await page.keyboard.press('Tab');
 	await entry.getByLabel('Description',{exact:true}).click();
 	await expect(category).toHaveValue('Combat');
 	const request = page.waitForRequest('**/rest/v1/rpc/publish_import');

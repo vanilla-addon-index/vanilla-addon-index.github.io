@@ -35,7 +35,8 @@ test('contributors propose reviewed edits, remove their own links, and keep acce
  await expect(page.getByText(description,{exact:true})).toBeVisible();
  await switchUser(page,'admin');
  await page.goto('/admin/edits');
- const request=page.getByRole('region',{name:'Edit proposal for '+name});
+ const request=page.locator('article[id^="edit-review-"]').filter({has:page.getByText(name,{exact:true})});
+ await request.locator('[data-act="review"]').press('Enter');
  await expect(request.getByText('Reviewed author',{exact:true})).toBeVisible();
  await request.getByRole('checkbox',{name:'Description',exact:true}).uncheck();
  await request.getByRole('button',{name:'Accept selected fields'}).click();

@@ -105,8 +105,9 @@ test('the shared import queue filters types and offers classification in each en
  await expect(entry).toHaveCount(1);
  await expect(entry.getByLabel('Publish to',{exact:true})).toHaveValue('dll');
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toBeEnabled();
- await expect(entry.getByLabel('Kind',{exact:true})).toBeEnabled();
- await entry.getByLabel('Kind',{exact:true}).selectOption('Util');
+ const category = entry.getByLabel('Category',{exact:true});
+ await expect(category).toBeDisabled();
+ await expect(category).toHaveValue('');
  const filter=page.getByLabel('Type',{exact:true}).filter({has:page.locator('option[value=""]')});
  await filter.selectOption('addon');
  await expect(entry).toHaveCount(0);
@@ -115,8 +116,14 @@ test('the shared import queue filters types and offers classification in each en
  await entry.getByLabel('Publish to',{exact:true}).selectOption('addon');
  await expect(entry.getByLabel('Publish to',{exact:true})).toHaveValue('addon');
  await expect(entry.getByRole('button',{name:'Approve',exact:true})).toBeDisabled();
+ await expect(category).toBeEnabled();
+ await category.selectOption('Combat');
  await entry.getByLabel('Publish to',{exact:true}).selectOption('dll');
- await entry.getByLabel('Kind',{exact:true}).selectOption('Util');
+ await expect(category).toBeDisabled();
+ await expect(category).toHaveValue('');
+ await entry.getByLabel('Publish to',{exact:true}).selectOption('addon');
+ await expect(category).toHaveValue('Combat');
+ await entry.getByLabel('Publish to',{exact:true}).selectOption('dll');
  let submitted: {input: {entry_type: string; category: string}} | undefined;
  await page.route('**/rest/v1/rpc/publish_import',async route=>{
   submitted=route.request().postDataJSON();
@@ -124,7 +131,7 @@ test('the shared import queue filters types and offers classification in each en
  });
  await entry.getByRole('button',{name:'Approve',exact:true}).click();
  await expect.poll(()=>submitted?.input.entry_type).toBe('dll');
- expect(submitted?.input.category).toBe('Util');
+ expect(submitted?.input.category).toBe('DLL');
  await expect(entry).toHaveCount(0);
 });
 
