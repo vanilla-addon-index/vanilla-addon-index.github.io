@@ -8,6 +8,7 @@
 	import {
 		currentCatalogueLoad,
 		deleteAddon,
+		deleteDownloadLink,
 		ensureCatalogue,
 		fetchAddon,
 		findAddon,
@@ -148,6 +149,24 @@
 	function changePin(id: number, url: string, pinned: boolean) {
 		return runTool('downloads', () => pinLink(id, pinned ? null : url),
 			pinned ? 'Main download unpinned.' : 'Main download pinned.');
+	}
+	async function deleteLink(url: string) {
+		if (!addon || updatingDownloads) return;
+		const { id } = addon;
+		const confirmed = await ask({
+			title: 'Delete this download link?',
+			body: `${url} will be removed from this addon page. You can restore it from History.`,
+			action: 'Delete link',
+			danger: true
+		});
+		if (!confirmed || addon?.id !== id) return;
+		await runTool('downloads', async () => {
+			await deleteDownloadLink(id, url);
+			if (addon?.id === id && renameLink === url) {
+				renameLink = '';
+				separateName = '';
+			}
+		}, 'Download link deleted.');
 	}
 	let report = $state<ReturnType<typeof ReportDialog>>();
 
@@ -393,7 +412,7 @@
 
 					{#key addon.id}
 						<details class="admin-tool" data-download-settings>
-							<summary>{@render toolHeading('Download links', 'Pin a main link or split off a version', String(addon.versions.length))}</summary>
+							<summary>{@render toolHeading('Download links', 'Pin, separate, or delete links', String(addon.versions.length))}</summary>
 							<div class="tool-body">
 								{#if !addon.versions.length}<p class="text-sm text-muted">No download links to manage.</p>{/if}
 								{#each addon.versions as version (version.url)}
@@ -403,7 +422,10 @@
 										{#if pinned}<p class="text-xs font-semibold text-accent">Main download</p>{/if}
 										<div class="flex flex-wrap gap-2">
 											<button class="btn" disabled={updatingDownloads} onclick={() => changePin(addon.id, version.url, pinned)}>{pinned ? 'Unpin' : 'Pin'}</button>
-											{#if addon.versions.length > 1}<button class="btn" disabled={updatingDownloads} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>{/if}
+											{#if addon.versions.length > 1}
+												<button class="btn" disabled={updatingDownloads} onclick={() => { renameLink = ''; separateName = ''; void separate(version.url); }}>Separate addon</button>
+												<button class="btn btn-danger" disabled={updatingDownloads} onclick={() => deleteLink(version.url)}>Delete link</button>
+											{/if}
 										</div>
 										{#if renameLink === version.url}
 											<form class="space-y-2 pt-2" onsubmit={(event) => { event.preventDefault(); void separate(version.url, separateName); }}>

@@ -81,6 +81,37 @@ test('newest code link leads automatically; a pin controls both the link and hea
  } finally { await db.close(); }
 });
 
+test('admins can delete and recover a pinned download while preserving the addon', async () => {
+ const db = await createDb();
+ try {
+  const admin = await db.addUser('admin', 'admin');
+  const member = await db.addUser('member');
+  const original = await post(db, member, addon('Atlas'));
+  const fork = 'https://github.com/fork/Atlas';
+  const remove = (user, url) => db.as(user, q => q('select public.delete_addon_link($1, $2)', [original.id, url]));
+  await db.as(admin, q => q('select public.request_addon_link($1, $2)', [original.id, fork]));
+  await db.as(admin, q => q('select public.pin_addon_link($1, $2)', [original.id, fork]));
+  await assert.rejects(() => remove(member, fork), /Only admins/);
+  await assert.rejects(() => db.asVisitor(q => q('select public.delete_addon_link($1, $2)', [original.id, fork])), /permission denied/);
+  await remove(admin, fork);
+  const [row] = await db.sql('select * from public.addons');
+  assert.equal(row.id, original.id);
+  assert.equal(row.slug, original.slug);
+  assert.equal(row.repo_url, original.repo_url);
+  assert.equal(row.pinned_link, null);
+  assert.deepEqual(row.versions, original.versions);
+  assert.deepEqual(await db.sql('select * from public.addon_trash'), []);
+  await assert.rejects(() => remove(admin, fork), /no longer on this addon/);
+  await assert.rejects(() => remove(admin, original.repo_url), /at least one download link/);
+  const [entry] = await db.sql("select id, details from public.activity_log where details ? 'removed_links'");
+  assert.deepEqual(entry.details.removed_links, [{url:fork,note:''}]);
+  await db.as(admin, q => q('select public.recover_edit($1)', [entry.id]));
+  const [restored] = await db.sql('select versions, pinned_link from public.addons where id = $1', [original.id]);
+  assert.equal(restored.pinned_link, fork);
+  assert.deepEqual(restored.versions.map(v => v.url), [fork, original.repo_url]);
+ } finally { await db.close(); }
+});
+
 test('same-name imports are atomic link additions and name collisions can be separated by admins', async () => {
  const db = await createDb();
  try {
