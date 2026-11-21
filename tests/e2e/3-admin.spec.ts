@@ -334,7 +334,7 @@ test('everything a member did is rolled back from their profile, after a look at
 	await page.goto('/addon/member-map');
 	await expect(page.getByText('Posted by the test member. Coordinates and notes on the world map.')).toBeVisible();
 	await page.goto('/admin/log');
-	await expect(logLine(page, /rolled back everything done by\s+member/)).toBeVisible();
+	await expect(logLine(page, /ran a rollback for\s+member/)).toBeVisible();
 
 	// An admin is not offered a rollback of another admin.
 	await page.goto('/admin/users/profile?name=admin2');

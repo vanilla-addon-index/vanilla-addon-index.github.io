@@ -22,8 +22,12 @@
  <p>{value?'Yes':'No'}</p>
 {:else if field === 'description' && typeof value === 'string' && typeof against === 'string' && mode !== 'current'}
  <p class="font-read leading-relaxed break-words whitespace-pre-wrap">{#each textParts(value,against) as part,index (index)}{#if part.changed && mode==='before'}<del class="bg-danger/10 decoration-danger">{part.text}</del>{:else if part.changed}<ins class="bg-accent/10 decoration-accent">{part.text}</ins>{:else}{part.text}{/if}{/each}</p>
+{:else if field === 'pinned_link' && value === null}
+ <p class="text-muted">No link pinned.</p>
 {:else if field === 'pinned_link' && safeHistoryUrl(value)}
  <a href={safeHistoryUrl(value)} target="_blank" rel="noopener noreferrer" class="break-words text-accent underline">{String(value)}</a>
+{:else if field === 'aliases'}
+ <ul>{#each links as alias (alias)}<li class="break-words">{alias}</li>{:else}<li>No previous page addresses.</li>{/each}</ul>
 {:else}
  <p class="leading-relaxed break-words whitespace-pre-wrap">{value===null||value===''?'Not set':String(value)}</p>
 {/if}
