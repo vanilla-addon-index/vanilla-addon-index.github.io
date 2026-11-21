@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import type { Addon } from './types';
 
-const FILE = 'static/addons.json';
+const FILE = process.env.PUBLICATION_SNAPSHOT ?? 'static/addons.json';
 
 /**
  * The addon list the site is being built with. The deploy puts it there, and so does

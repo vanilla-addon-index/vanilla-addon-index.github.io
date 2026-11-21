@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
 	// The local copy of the backend under `npm run dev:local`, the hosted one otherwise.
 	const database = new URL(loadEnv(mode, process.cwd(), 'VITE_').VITE_SUPABASE_URL ?? SUPABASE_URL)
 		.origin as `https://${string}.${string}`;
+	const performanceBuild = process.env.PERFORMANCE_BUILD_DIR;
 
 	return {
 		server: {
@@ -24,7 +25,7 @@ export default defineConfig(({ mode }) => {
 				},
 
 				// GitHub Pages serves 404.html for unknown paths, which boots the SPA for deep links.
-				adapter: adapter({ fallback: '404.html' }),
+				adapter: adapter({ fallback: '404.html', pages: performanceBuild, assets: performanceBuild }),
 
 				// What a page may load and talk to; the browser refuses the rest. The site inserts
 				// no HTML of its own making, so this is a second lock: should a script ever get
