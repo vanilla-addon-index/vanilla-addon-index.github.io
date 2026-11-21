@@ -5,7 +5,7 @@ test('unpinning a download link is explicit in the log and leaves the link liste
 	const name = unique('Pin Activity');
 	await loginAs(page, 'owner');
 	const addon = await postAddon(page, name);
-	await page.locator('summary').filter({ hasText: 'Pin a main link or split off a version' }).click();
+	await page.locator('[data-download-settings] summary').click();
 	await page.getByRole('button', { name: 'Pin', exact: true }).click();
 	await page.getByRole('button', { name: 'Unpin', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Pin', exact: true })).toBeEnabled();

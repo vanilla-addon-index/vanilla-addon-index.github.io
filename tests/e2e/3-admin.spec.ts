@@ -218,6 +218,35 @@ test('admins can merge links, pin the leader and restore a merged page from tras
  await page.goto(address); await expect(page.getByRole('heading',{level:1,name:one})).toBeVisible();
 });
 
+test('admins can delete one download link from the addon page', async ({ page }) => {
+	await loginAs(page, 'admin');
+	const name = unique('DownloadLinks');
+	const fork = unique('DownloadFork');
+	await postAddon(page, fork);
+	const address = await postAddon(page, name);
+	const controls = page.getByRole('region', { name: 'Admin controls' });
+	await controls.locator('[data-merge-settings] summary').click();
+	await page.getByPlaceholder('Merge another addon’s links here…').fill(fork);
+	await page.getByRole('option', { name: new RegExp('^' + fork) }).click();
+	const downloads = controls.locator('[data-download-settings]');
+	await downloads.locator('summary').click();
+	const forkPath = fork.replace(/\W+/g, '-');
+	const card = downloads.locator('[data-link-controls]').filter({ hasText: forkPath });
+	await card.getByRole('button', { name: 'Delete link' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Delete this download link?' });
+	await expect(dialog).toContainText(forkPath);
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(downloads.locator('[data-link-controls]')).toHaveCount(2);
+	await card.getByRole('button', { name: 'Delete link' }).click();
+	await confirm(page, 'Delete link');
+	await expect(downloads.getByRole('status')).toHaveText('Download link deleted.');
+	await expect(card).toHaveCount(0);
+	await expect(downloads.getByRole('button', { name: 'Delete link' })).toHaveCount(0);
+	await expect(page.locator('aside ol > li')).toHaveCount(1);
+	await expect(page).toHaveURL(address);
+	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+});
+
 test('an edit is reverted, and a deleted addon restored to the same address, from the log', async ({ page }) => {
 	await loginAs(page, 'admin');
 	const name = unique('Damaged');

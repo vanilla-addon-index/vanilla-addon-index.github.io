@@ -500,6 +500,7 @@ export const groupAddons = (ids: number[]) => groupCall('group_addons', { ids })
 export const ungroupAddon = (id: number) => groupCall('ungroup_addon', { target: id });
 export const setMain = (id: number) => groupCall('set_main', { target: id });
 export const pinLink = (id: number, link: string | null) => groupCall('pin_addon_link', { target: id, link });
+export const deleteDownloadLink = (id: number, link: string) => groupCall('delete_addon_link', { target: id, link });
 export const mergeAddons = (source: number, target: number) => groupCall('merge_addons', { source_id: source, target_id: target });
 
 /** The poster's request that an addon be grouped as a version of another, for an admin to decide. */
