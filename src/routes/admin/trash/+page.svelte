@@ -24,7 +24,7 @@
 
 	let entries = $state<TrashEntry[]>([]);
 	let selectedId = $state<number>();
-	const selected = $derived(entries.find(entry => entry.id === selectedId) ?? entries[0]);
+	const selected = $derived(entries.find(entry => entry.id === selectedId));
 	let list = $state<HTMLDivElement>();
 	let loaded = $state(false);
 	let loading = $state(false);
@@ -203,7 +203,8 @@
 				title={entry.name}
 				subtitle={(entry.deleted_by_name ?? 'Unknown account') + ' · ' + date(entry.deleted_at)}
 				selected={selected?.id === entry.id}
-				onselect={() => (selectedId = entry.id)}
+				collapsible
+				onselect={() => (selectedId = selectedId === entry.id ? undefined : entry.id)}
 			>
 				{#snippet badges()}
 					<span class="admin-badge border-danger/35 text-danger/90">{REASON_BADGES[entry.reason]}</span>

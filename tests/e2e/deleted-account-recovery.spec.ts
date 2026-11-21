@@ -24,6 +24,7 @@ test('the owner finds a deleted admin, previews recovery, and rolls back its dam
  await page.goto('/admin/users');
  const section = page.getByRole('region', { name: 'Deleted account recovery' });
  const record = section.locator(`#deleted-user-${recovery}`);
+ await expect(record.locator('[data-act="review"]')).toHaveAttribute('aria-expanded', 'false');
  await record.locator('[data-act="review"]').press('Enter');
  await record.getByRole('link', { name: 'Open recovery profile' }).click();
  await expect(page.getByRole('heading', { name: 'Deleted account', exact: true })).toBeVisible();

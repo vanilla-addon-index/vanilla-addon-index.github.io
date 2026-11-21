@@ -20,14 +20,13 @@
 	let error = $state('');
 	let working = $state(false);
 	let deletedAccounts = $state<DeletedAccount[]>([]);
-	const selected = $derived(
-		users.some(user => user.id === selectedId) || deletedAccounts.some(account => account.id === selectedId)
-			? selectedId
-			: users[0]?.id ?? deletedAccounts[0]?.id
-	);
 	let moreDeleted = $state(false);
 	let loadingDeleted = $state(false);
 	let deletedError = $state('');
+	function toggleAccount(id: string) {
+		selectedId = selectedId === id ? undefined : id;
+	}
+
 	async function loadDeleted(older = false) {
 		loadingDeleted = true;
 		deletedError = '';
@@ -181,14 +180,15 @@
 				rowId={'user-' + user.id}
 				title={user.username}
 				subtitle={'Joined ' + date(user.joined)}
-				selected={selected === user.id}
-				onselect={() => (selectedId = user.id)}
+				selected={selectedId === user.id}
+				collapsible
+				onselect={() => toggleAccount(user.id)}
 			>
 				{#snippet badges()}
 					<span class={['admin-badge', user.role === 'member' ? 'border-border text-muted' : 'border-accent/30 text-accent']}>{ROLES[user.role]}</span>
 					{#if user.banned}<span class="admin-badge border-danger/35 text-danger">{user.role === 'admin' ? 'Suspended' : 'Banned'}</span>{/if}
 				{/snippet}
-				{#if selected === user.id}
+				{#if selectedId === user.id}
 					<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Account actions">
 						<a class="btn py-1" href={resolve(`/admin/users/profile?name=${encodeURIComponent(user.username)}`)}>Open profile</a>
 						{#if mayBan(user)}
@@ -236,14 +236,15 @@
 				rowId={'deleted-user-' + account.id}
 				title={'Recovery record ' + account.id.slice(0, 8)}
 				subtitle={'Deleted ' + date(account.deleted_at)}
-				selected={selected === account.id}
-				onselect={() => (selectedId = account.id)}
+				selected={selectedId === account.id}
+				collapsible
+				onselect={() => toggleAccount(account.id)}
 			>
 				{#snippet badges()}
 					<span class="admin-badge border-danger/35 text-danger">Deleted</span>
 					<span class="admin-badge border-border text-muted tabular-nums">{account.actions} {account.actions === 1 ? 'logged action' : 'logged actions'}</span>
 				{/snippet}
-				{#if selected === account.id}
+				{#if selectedId === account.id}
 					<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Account actions">
 						<a class="btn py-1" href={resolve(`/admin/users/profile?deleted=${account.id}`)}>Open recovery profile</a>
 					</div>
