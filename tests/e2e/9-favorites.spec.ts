@@ -15,6 +15,7 @@ test('favorites persist on the account with visible code dates and can be remove
 	await expect(favorites.getByRole('link', {name:'RaidHelper', exact:true})).toBeVisible();
 	await expect(favorites.getByText('Last update:')).toBeVisible();
 	await expect(favorites.locator('time')).toHaveAttribute('datetime', '2024-06-14T14:00:48+00:00');
+	await expect(favorites.locator('time')).toHaveText('2024-06-14');
 	await page.reload();
 	await favorites.getByRole('link', {name:'RaidHelper', exact:true}).click();
 	await page.getByRole('button', {name:'Remove from favorites'}).click();

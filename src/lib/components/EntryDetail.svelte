@@ -31,6 +31,7 @@
 	import { listAddonMirrors, listInactiveMirrorDecisions, decideAddonMirror } from '#lib/admin.ts';
 	import { loginHref } from '#lib/return.ts';
 	import { addonTitle } from '#lib/seo.ts';
+	import { formatUpdateDate, latestAddonCodeUpdate } from '#lib/addon-update.ts';
 	import type { Addon, AddonMirror } from '#lib/types.ts';
 
 	const published = readPublishedAddon();
@@ -50,7 +51,7 @@
 	let kept = $state.raw<Addon>();
 	let leaving = $state(false);
 	const addon = $derived(leaving ? kept : found);
-	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
+	const latestUpdate = $derived(addon && latestAddonCodeUpdate(addon));
 
 	let error = $state('');
 	type AdminTool = 'downloads' | 'mirrors' | 'merge';
@@ -278,12 +279,26 @@
 		</div>
 
 		<aside class="min-w-0 space-y-2">
+			{#snippet lastUpdate()}
+				<div class="flex justify-between gap-4">
+					<dt class="shrink-0 text-muted">Last update</dt>
+					<dd>
+						{#if latestUpdate}
+							<a href={latestUpdate.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history"><time datetime={latestUpdate.date}>{formatUpdateDate(latestUpdate.date)}</time></a>
+						{:else}
+							<span class="text-muted">Unknown</span>
+						{/if}
+					</dd>
+				</div>
+			{/snippet}
 			<div class="panel">
 				<!-- Pinned link first, otherwise newest known code update. -->
 				{#if !addon.versions.length}<p class="px-3 py-3 text-muted">No download links currently listed.</p>{/if}
+				{#if addon.versions.length > 1}
+					<dl class="border-b border-border px-3 py-2 text-sm">{@render lastUpdate()}</dl>
+				{/if}
 				<ol>
 					{#each addon.versions as version (version.url)}
-						{@const update = addon.link_code_updates?.[version.url] ?? (version.url === addon.repo_url ? addon.code_update : null)}
 						{@const sourceMirrors = mirrors.filter(mirror => mirror.source === version.url)}
 						<li class="border-b border-border px-3 py-3 last:border-b-0">
 							<a
@@ -298,10 +313,7 @@
 							{#if version.note}<p class="text-sm">{version.note}</p>{/if}
                             <dl class="mt-2 space-y-1 text-sm">
                                 <div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Author</dt><dd class="min-w-0 break-words text-right">{(!addon.shared ? addon.author : '') || linkAuthor(version.url) || 'Unknown'}</dd></div>
-								<div class="flex justify-between gap-4"><dt class="shrink-0 text-muted">Last update</dt><dd>
-									{#if update}<a href={update.url} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" title="View commit history"><time datetime={update.date}>{date(update.date)}</time></a>
-									{:else}<span class="text-muted">Unknown</span>{/if}
-								</dd></div>
+								{#if addon.versions.length === 1}{@render lastUpdate()}{/if}
                             </dl>
                             {#if addon.pinned_link === version.url}<span class="text-sm text-accent">Pinned</span>{/if}
 							{#if sourceMirrors.length}

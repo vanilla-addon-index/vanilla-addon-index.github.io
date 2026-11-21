@@ -36,12 +36,12 @@ test('date sorting follows last code update and accepts old sort links', async (
 	await expect(sort.locator('option')).toHaveText(['Name', 'Last update']);
 	await sort.selectOption('code');
 	await expect(page).toHaveURL(/sort=code/);
-	// RaidHelper has a known code date; recently added entries without one go below it.
-	await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
+	// QuestHelper has the newest mock code update, even though newer catalogue entries exist.
+	await expect(page.locator('a[href^="/addon/"]').first()).toHaveText('QuestHelper');
 	for (const old of ['new', 'updated']) {
 		await page.goto(`/?sort=${old}`);
 		await expect(sort).toHaveValue('code');
-		await expect(page.locator('a[href^="/addon/"]').first()).toHaveText(/RaidHelper/);
+		await expect(page.locator('a[href^="/addon/"]').first()).toHaveText('QuestHelper');
 	}
 });
 
@@ -245,13 +245,13 @@ test('an addon page shows its shared links and no admin controls', async ({ page
 	await expect(page.getByText('Posted by')).toHaveCount(0);
 	const facts = page.locator('dl').filter({ hasText: 'Author' });
 	await expect(facts).toHaveCount(3);
-	await expect(facts.getByText('Last update')).toHaveCount(3);
-	await expect(facts.getByText('Unknown', { exact: true })).toHaveCount(2);
+	const latest = page.locator('aside dl').filter({ hasText: 'Last update' });
+	await expect(latest).toHaveCount(1);
 	for (const link of await page.locator('aside ol > li').all()) {
 		await expect(link.getByText('Author', { exact: true })).toBeVisible();
 	}
-	await expect(facts.getByRole('link', { name: /2024/ })).toHaveAttribute('href', /\/commits\/HEAD$/);
-	await expect(facts.locator('time')).toHaveAttribute('datetime', '2024-06-14T14:00:48+00:00');
+	await expect(latest.getByRole('link', { name: /2024/ })).toHaveAttribute('href', /\/commits\/HEAD$/);
+	await expect(latest.locator('time')).toHaveAttribute('datetime', '2024-06-14T14:00:48+00:00');
 	await expect(facts.getByText('Added', { exact: true })).toHaveCount(0);
 	await expect(facts.getByText('Updated', { exact: true })).toHaveCount(0);
 	await page.goto('/addon/member-map');
