@@ -33,6 +33,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (name === 'nightly_links') return json([{key: 'github.com/a/addon', url: 'https://github.com/a/addon', readme: !['already-checked', 'category-all'].includes(scenario), images: scenario === 'image-failure' ? ['https://i.imgur.com/wiki.png'] : []}]);
   if (name === 'nightly_waiting') return json({ reports: 0, suggestions: 0, imports: 0 });
   if (name === 'retire_dead_links') return json({queued:0,links_removed:0,addons_removed:0});
+  if (name === 'store_repository_mirrors') return new Response(null, {status: 204});
   return json(0);
  }
  if (url.startsWith('https://codeberg.org/api/')) {
@@ -48,7 +49,7 @@ globalThis.fetch = async (url, init = {}) => {
   calls.push({name:'github', phase:query.includes('stargazerCount') ? 'metadata' : query.includes('code:') || query.includes('top:') ? 'details' : query.includes('f0:') ? 'toc' : 'readme'});
   if (query.includes('stargazerCount') || query.includes('code:') || query.includes('top:')) {
    if (query.includes('stargazerCount') && ++metadataBatches === 3 && scenario === 'late-stop') {console.log('__RESULT__' + JSON.stringify(calls)); process.exit(2);}
-   const repo = {description:'A damage meter',nameWithOwner:'a/addon',stargazerCount:3,pushedAt:'2026-01-01T00:00:00Z',isArchived:false,parent:null,
+   const repo = {description:'A damage meter',nameWithOwner:'a/addon',stargazerCount:3,pushedAt:'2026-01-01T00:00:00Z',isArchived:false,parent:null,isMirror:false,mirrorUrl:null,
     code:{history:{nodes:[{committedDate:'2024-01-01T00:00:00Z'}]}},
     top:{entries: scenario === 'confirmed-absence' ? [] : [{name:'Addon.toc',type:'blob'},{name:'README.md',type:'blob'}]}};
    if (scenario === 'directory-failure') {repo.top=null; return json({data:{r0:repo},errors:[{type:'INTERNAL',path:['r0','top']}]});}
@@ -154,9 +155,10 @@ test('facts, dates and completed screenshots are saved in bounded batches betwee
 });
 
 test('each failed store leaves other result types and later phases running', () => {
-	for (const failed of ['store_repo_stats', 'store_code_updates', 'store_queue_images']) {
+	const stores = ['store_repo_stats', 'store_repository_mirrors', 'store_code_updates', 'store_queue_images'];
+	for (const failed of stores) {
 		const calls = run(failed + '-failure');
-		for (const name of ['store_repo_stats', 'store_code_updates', 'store_queue_images']) {
+		for (const name of stores) {
 			assert.ok(calls.some((c) => c.name === name), `${failed} must not block ${name}`);
 		}
 		assert.ok(calls.some((c) => c.phase === 'readme'), failed);
@@ -206,7 +208,9 @@ test('diagnostics distinguish network requests, field failures, unchanged dates 
 	assert.equal(metrics.phases['GitHub .toc'].attempts, 1);
 	assert.equal(metrics.phases['GitHub README'].attempts, 1);
 	assert.equal(metrics.phases['Database reads'].attempts, 2);
-	assert.equal(metrics.phases['Database writes'].attempts, 9);
+	assert.equal(metrics.phases['Database writes'].attempts, 10);
+	assert.equal(metrics.phases['Database writes'].failedRequests, 0);
+	assert.equal(metrics.counters.mirrors_records_saved, 1);
 	assert.equal(metrics.counters.commit_dates_left_unchanged, 0);
 	assert.equal(metrics.counters.cache_hits, 0);
 	assert.match(stdout, /\[Nightly\] GitHub metadata 1\/1/);
