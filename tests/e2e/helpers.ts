@@ -44,4 +44,11 @@ export async function postAddon(page: Page, name: string, extra: { category?: st
 
 /** The line of the admin log about this addon or account that says this, newest first. */
 export const logLine = (page: Page, text: string | RegExp): Locator =>
-	page.locator('.panel > div').filter({ hasText: text }).first();
+	page.locator('article[id^="log-"]').filter({ has: page.locator('[data-act="review"]').filter({ hasText: text }) }).first();
+
+export async function openLogLine(row: Locator) {
+	const toggle = row.locator('[data-act="review"]');
+	await expect(toggle).toBeVisible();
+	if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+	await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}

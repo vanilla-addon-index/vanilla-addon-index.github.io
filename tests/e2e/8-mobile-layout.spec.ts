@@ -49,7 +49,12 @@ test('phone admin entries come before expandable filters and navigation can be s
 	await navigation.getByRole('link', { name: 'Users', exact: true }).click();
 	await expect(page.getByRole('searchbox', { name: 'Search accounts' })).toBeInViewport();
 	await page.getByRole('searchbox', { name: 'Search accounts' }).fill('member2');
-	await expect(page.getByRole('region', { name: 'Admin content' }).getByRole('link', { name: 'member2', exact: true })).toBeVisible();
+	const account = page.getByRole('region', { name: 'Admin content' }).getByRole('article')
+		.filter({ has: page.getByRole('button', { name: /^member2\b/ }) });
+	await expect(account.getByRole('button', { name: /^member2\b/ })).toHaveAttribute('aria-expanded', 'true');
+	const profile = account.getByRole('link', { name: 'Open profile', exact: true });
+	await expect(profile).toBeVisible();
+	await expect(profile).toHaveAttribute('href', '/admin/users/profile?name=member2');
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await expect(page.getByRole('button', { name: 'Page details and filters', exact: true })).toBeHidden();
 	await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();

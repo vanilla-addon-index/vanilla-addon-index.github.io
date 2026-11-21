@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from './test.ts';
-import { confirm, loginAs, unique } from './helpers.ts';
+import { confirm, loginAs, logLine, openLogLine, unique } from './helpers.ts';
 
 const sql = (input: string) => execFileSync('docker', ['exec','-i','supabase_db_vanilla-addon-index','psql','-U','postgres','-d','postgres','-Atq','-v','ON_ERROR_STOP=1'], {input,encoding:'utf8'}).trim();
 const item = (id: number, name: string) => ({id,name,reason:'delete',deleted_by_name:'admin',deleted_at:new Date().toISOString(),addon:{slug:'fixture',description:'A trash search fixture.',category:'Combat',images:[],versions:[]}});
@@ -21,6 +21,7 @@ test('Trash and History find an older recoverable entry beyond the API row cap',
  try {
   await loginAs(page,'admin');
   await page.goto(`/admin/log?addon=${addonId}`);
+  await openLogLine(logLine(page, `deleted ${name}`));
   await expect(page.getByRole('button',{name:'Restore',exact:true})).toBeVisible();
   await page.goto('/admin/trash');
   const search=page.getByRole('searchbox',{name:'Search the trash'});
@@ -78,11 +79,18 @@ test('the owner can permanently delete one entry but cannot empty the whole tras
  await page.goto('/admin/trash');
  await expect(page.getByRole('status')).toHaveText('Showing 2 of 2 matching entries.');
  await expect(page.getByRole('button',{name:'Empty the trash',exact:true})).toHaveCount(0);
- const first=page.locator('.panel > div').filter({has:page.getByText('First entry',{exact:true})});
+ const first=page.locator('#trash-9001');
+ const second=page.locator('#trash-9002');
+ await expect(first.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','true');
+ await expect(second.getByRole('group',{name:'Entry actions'})).toBeHidden();
+ await second.locator('[data-act="review"]').click();
+ await expect(first.getByRole('group',{name:'Entry actions'})).toBeHidden();
+ await first.locator('[data-act="review"]').click();
  await first.getByRole('button',{name:'Delete forever',exact:true}).click();
  await confirm(page,'Delete forever');
  expect(submitted).toEqual({ids:[9001]});
  await expect(page.getByText('Removed 1 for good.',{exact:true})).toBeVisible();
  await expect(page.getByRole('status')).toHaveText('Showing 1 of 1 matching entries.');
  await expect(page.getByText('Second entry',{exact:true})).toBeVisible();
+ await expect(second.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','true');
 });

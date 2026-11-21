@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
+	import ReviewQueueRow from '#lib/components/ReviewQueueRow.svelte';
 	import { entryHref } from '#lib/entry-href.ts';
 	import { TRASH_DAYS, loadTrash, purgeTrash, restoreAddon, type TrashEntry } from '#lib/admin.ts';
 	import { store, loadAddons } from '#lib/addons.svelte.ts';
@@ -15,9 +17,15 @@
 		merge: 'Merged into another addon',
 		ban: 'Trashed when its poster was banned'
 	};
+	const REASON_BADGES: Record<TrashEntry['reason'], string> = {
+		delete: 'Deleted', merge: 'Merged', ban: 'Account banned'
+	};
 	const DAY = 24 * 60 * 60 * 1000;
 
 	let entries = $state<TrashEntry[]>([]);
+	let selectedId = $state<number>();
+	const selected = $derived(entries.find(entry => entry.id === selectedId) ?? entries[0]);
+	let list = $state<HTMLDivElement>();
 	let loaded = $state(false);
 	let loading = $state(false);
 	let working = $state(false);
@@ -63,13 +71,30 @@
 		// Clamped: this computer's clock can be slightly behind the database's.
 		Math.max(0, TRASH_DAYS - Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY)));
 
+	async function removeEntry(entry: TrashEntry, request: number) {
+		const index = entries.findIndex(row => row.id === entry.id);
+		if (request !== asked || index < 0) {
+			await load();
+		} else {
+			if (selected?.id === entry.id) selectedId = entries[index + 1]?.id ?? entries[index - 1]?.id;
+			entries = entries.filter(row => row.id !== entry.id);
+			total = Math.max(0, total - 1);
+			matching = Math.max(0, matching - 1);
+		}
+		await tick();
+		if (selected && document.activeElement === document.body) {
+			list?.querySelector<HTMLElement>(`#trash-${selected.id} [data-act="review"]`)?.focus();
+		}
+	}
+
 	async function restore(entry: TrashEntry) {
 		if (working) return;
 		working = true;
 		error = notice = restored = '';
+		const request = asked;
 		try {
 			const slug = await restoreAddon(entry.id);
-			await Promise.all([loadAddons(), load()]);
+			await Promise.all([loadAddons(), removeEntry(entry, request)]);
 			restored = slug;
 			notice = `Restored "${entry.name}".`;
 		} catch (e) {
@@ -79,19 +104,22 @@
 		}
 	}
 
-	async function purge(ids: number[], question: string) {
-		const confirmed = await ask({
-			title: question,
-			body: 'This cannot be undone.',
-			action: 'Delete forever',
-			danger: true
-		});
-		if (!confirmed || working) return;
+	async function purge(entry: TrashEntry) {
+		if (working) return;
 		working = true;
-		error = notice = restored = '';
 		try {
-			const gone = await purgeTrash(ids);
-			await load();
+			const confirmed = await ask({
+				title: `Remove "${entry.name}" for good?`,
+				body: 'This cannot be undone.',
+				action: 'Delete forever',
+				danger: true
+			});
+			if (!confirmed) return;
+			error = notice = restored = '';
+			const request = asked;
+			const gone = await purgeTrash([entry.id]);
+			if (gone) await removeEntry(entry, request);
+			else await load();
 			notice = `Removed ${gone} for good.`;
 		} catch (e) {
 			error = (e as Error).message;
@@ -105,94 +133,116 @@
 	<title>Trash · {SITE_NAME}</title>
 </svelte:head>
 
-<AdminToolbar>
 <AdminSidebarContent>
-	<div class="panel p-3"><h1 class="text-2xl font-bold">Trash</h1><p class="text-muted">Recover removed addons.</p></div>
-	<dl class="panel space-y-2 p-3 text-sm">
-		<div class="flex justify-between gap-2"><dt class="text-muted">Stored entries</dt><dd>{loaded ? total : '…'}</dd></div>
-		<div class="flex justify-between gap-2"><dt class="text-muted">Matching entries</dt><dd>{loaded ? matching : '…'}</dd></div>
-		<div class="flex justify-between gap-2"><dt class="text-muted">Retention</dt><dd>{TRASH_DAYS} days</dd></div>
-	</dl>
-	<p class="panel p-3 text-sm text-muted">Restore an addon to recover its saved details. Permanent deletion cannot be undone.</p>
-
+	<div class="panel">
+		<header class="border-b border-border px-3 py-2">
+			<h1 class="text-2xl leading-tight font-bold">Trash</h1>
+			<p class="text-sm text-muted">Recover removed addons.</p>
+		</header>
+		<dl class="space-y-1 px-3 py-2 text-sm">
+			<div class="flex justify-between gap-2">
+				<dt class="text-muted">Stored entries</dt><dd class="tabular-nums">{loaded ? total : '…'}</dd>
+			</div>
+			{#if query.trim()}
+				<div class="flex justify-between gap-2">
+					<dt class="text-muted">Matching entries</dt><dd class="tabular-nums">{loaded ? matching : '…'}</dd>
+				</div>
+			{/if}
+			<div class="flex justify-between gap-2">
+				<dt class="text-muted">Retention</dt><dd>{TRASH_DAYS} days</dd>
+			</div>
+		</dl>
+	</div>
 </AdminSidebarContent>
-<div class="flex flex-wrap gap-2">
-	<input
-		class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
-		type="search"
-		placeholder="Search the trash"
-		aria-label="Search the trash"
-		bind:value={query}
-	/>
-	<button class="btn" disabled={loading || working} onclick={() => load()}>Refresh trash</button>
-</div>
 
-<AdminNavigation />
+<AdminToolbar>
+	<div class="flex flex-wrap gap-2">
+		<input
+			class="input flex-1 basis-full sm:min-w-48 sm:basis-0"
+			type="search"
+			placeholder="Search the trash"
+			aria-label="Search the trash"
+			bind:value={query}
+		/>
+		<button class="btn" disabled={loading || working} onclick={() => load()}>Refresh trash</button>
+	</div>
+	<AdminNavigation />
 </AdminToolbar>
 
 <div aria-live="polite">
-{#if error || notice || restored}
-<p class={['mb-2 truncate', error ? 'text-danger' : 'text-accent']}>
-	{error || notice}
-	{#if restored}
-		<a href={entryHref(store.addons.find(a => a.slug === restored) ?? {slug: restored})} class="underline">Open it</a>
+	{#if error || notice || restored}
+		<p class={['mb-2 break-words', error ? 'text-danger' : 'text-accent']}>
+			{error || notice}
+			{#if restored}
+				<a href={entryHref(store.addons.find(a => a.slug === restored) ?? {slug: restored})} class="underline">Open it</a>
+			{/if}
+		</p>
 	{/if}
-</p>
-{/if}
 </div>
 
-<div class="panel">
+<div class="panel" bind:this={list}>
 	{#if !loaded}
-		<p class="px-3 py-8 text-center text-muted">{loading ? 'Loading the trash…' : 'Unable to load the trash. Try refreshing.'}</p>
+		<p class="px-4 py-5 text-center text-muted">{loading ? 'Loading the trash…' : 'Unable to load the trash. Try refreshing.'}</p>
 	{:else if !entries.length}
-		<p class="px-3 py-8 text-center text-muted">
-			{total
-				? 'Nothing in the trash matches.'
-				: `The trash is empty. Deleted addons stay here for ${TRASH_DAYS} days.`}
-		</p>
+		<div class="px-4 py-5 text-center">
+			{#if query.trim() && total}
+				<h2 class="font-semibold">Nothing in the trash matches.</h2>
+				<p class="mt-1 text-sm text-muted">Try a different addon name.</p>
+			{:else}
+				<h2 class="font-semibold">The trash is empty.</h2>
+				<p class="mt-1 text-sm text-muted">Deleted addons stay here for {TRASH_DAYS} days.</p>
+			{/if}
+		</div>
 	{:else}
 		{#each entries as entry (entry.id)}
-			<div class="border-b border-border px-3 py-2 last:border-b-0">
-				<div class="flex flex-wrap items-baseline gap-x-3">
-					<span class="font-bold">{entry.name}</span>
-					<span class="text-sm text-muted">{entry.addon.category}</span>
-					<span class="ml-auto text-sm text-muted">{daysLeft(entry.deleted_at)} days left</span>
-				</div>
-				<!-- What happened to it, set apart from the addon's own content below. -->
-				<p class="label mt-1 mb-1 text-danger/90">
-					{REASONS[entry.reason]} by <UserLink name={entry.deleted_by_name} fallback="an unknown account" /> · {date(entry.deleted_at)}
-				</p>
-				<p class="line-clamp-2 break-words">{entry.addon.description || 'No description.'}</p>
-				<p class="text-sm text-muted">
-					{entry.addon.images.length} screenshot{entry.addon.images.length === 1 ? '' : 's'}
-				</p>
-				{#each entry.addon.versions as version (version.url)}
-					<a
-						href={version.url}
-						target="_blank"
-						rel="noopener nofollow"
-						class="block break-all text-accent/80 hover:text-accent hover:underline"
-					>
-						{version.url}
-					</a>
-				{/each}
-				<div class="mt-1.5 flex flex-wrap gap-2">
-					<button class="btn btn-primary py-1" disabled={working || loading} onclick={() => restore(entry)}>Restore</button>
-					{#if auth.isOwner}
-						<button
-							class="btn btn-danger py-1"
-							disabled={working || loading} onclick={() => purge([entry.id], `Remove "${entry.name}" for good?`)}
-						>
-							Delete forever
-						</button>
+			{@const remaining = daysLeft(entry.deleted_at)}
+			{@const screenshots = entry.addon.images.length}
+			{@const links = entry.addon.versions.length}
+			<ReviewQueueRow
+				rowId={'trash-' + entry.id}
+				title={entry.name}
+				subtitle={(entry.deleted_by_name ?? 'Unknown account') + ' · ' + date(entry.deleted_at)}
+				selected={selected?.id === entry.id}
+				onselect={() => (selectedId = entry.id)}
+			>
+				{#snippet badges()}
+					<span class="admin-badge border-danger/35 text-danger/90">{REASON_BADGES[entry.reason]}</span>
+					<span class="admin-badge border-border text-muted tabular-nums">{remaining === 0 ? 'Expires today' : remaining === 1 ? '1 day left' : remaining + ' days left'}</span>
+				{/snippet}
+				{#if selected?.id === entry.id}
+					<p class="text-sm text-muted">
+						{REASONS[entry.reason]} by <UserLink name={entry.deleted_by_name} fallback="an unknown account" class={entry.deleted_by_name ? 'text-accent' : ''} />
+					</p>
+					<div class="mt-2 flex flex-wrap items-center gap-2" role="group" aria-label="Entry actions">
+						<button class="btn btn-primary py-1" disabled={working || loading} onclick={() => restore(entry)}>Restore</button>
+						{#if auth.isOwner}
+							<button class="btn btn-danger py-1" disabled={working || loading} onclick={() => purge(entry)}>Delete forever</button>
+						{/if}
+					</div>
+					<section class="mt-2 space-y-1.5 border-t border-border pt-2" aria-label="Entry details">
+						<h3 class="text-sm font-semibold">Details</h3>
+						<p class="whitespace-pre-line [overflow-wrap:anywhere]">{entry.addon.description || 'No description.'}</p>
+						<p class="text-sm text-muted">
+							{entry.addon.category} · {screenshots} {screenshots === 1 ? 'screenshot' : 'screenshots'}
+						</p>
+					</section>
+					{#if links}
+						<details class="mt-2 border-t border-border pt-2 text-sm">
+							<summary class="cursor-pointer font-semibold hover:text-accent">Download links ({links})</summary>
+							<ul class="mt-1.5 space-y-1">
+								{#each entry.addon.versions as version (version.url)}
+									<li><a href={version.url} target="_blank" rel="noopener nofollow" class="[overflow-wrap:anywhere] text-accent hover:underline">{version.url}</a></li>
+								{/each}
+							</ul>
+						</details>
 					{/if}
-				</div>
-			</div>
+				{/if}
+			</ReviewQueueRow>
 		{/each}
 	{/if}
 </div>
 
 {#if loaded}
- <p class="mt-2 text-sm text-muted" role="status">Showing {entries.length} of {matching} matching entries.</p>
- {#if more}<button class="btn mt-3" disabled={loading || working} onclick={() => load(true)}>{loading ? 'Loading…' : 'Load more entries'}</button>{/if}
+	<p class="mt-2 text-sm text-muted" role="status">Showing {entries.length} of {matching} matching entries.</p>
+	{#if more}<button class="btn mt-2 w-full" disabled={loading || working} onclick={() => load(true)}>{loading ? 'Loading…' : 'Load more entries'}</button>{/if}
 {/if}

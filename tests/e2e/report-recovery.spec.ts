@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from './test.ts';
-import { confirm, loginAs, logLine, unique } from './helpers.ts';
+import { confirm, loginAs, logLine, openLogLine, unique } from './helpers.ts';
 
 const sql = (input: string) => execFileSync('docker', ['exec', '-i', 'supabase_db_vanilla-addon-index', 'psql', '-U', 'postgres', '-d', 'postgres', '-Atq', '-v', 'ON_ERROR_STOP=1'], {input,encoding:'utf8'}).trim();
 function closedReport(outcome: 'dismissed' | 'handled') {
@@ -46,14 +46,16 @@ test('History offers reopening only to the owner and returns handled reports to 
  const fixture=closedReport('handled');
  await loginAs(page,'admin');
  await page.goto(`/admin/log?addon=${fixture.addon}`);
- await expect(logLine(page,new RegExp(`handled a report about\\s+${fixture.name}`))).toBeVisible();
+ const handled=logLine(page,new RegExp(`handled a report about\\s+${fixture.name}`));
+ await openLogLine(handled);
  await expect(page.getByRole('button',{name:'Reopen report',exact:true})).toHaveCount(0);
  await page.goto('/account');
  await page.getByRole('button',{name:'Log out',exact:true}).click();
  await expect(page.getByRole('link',{name:'Log in',exact:true})).toBeVisible();
  await loginAs(page,'owner');
  await page.goto(`/admin/log?addon=${fixture.addon}`);
- await logLine(page,new RegExp(`handled a report about\\s+${fixture.name}`)).getByRole('button',{name:'Reopen report',exact:true}).click();
+ await openLogLine(handled);
+ await handled.getByRole('button',{name:'Reopen report',exact:true}).click();
  await confirm(page,'Reopen report');
  await expect(page.getByText(`The report about "${fixture.name}" is open again.`,{exact:true})).toBeVisible();
  await expect(logLine(page,new RegExp(`handled a report about\\s+${fixture.name}`))).toContainText('Recovered by owner');
@@ -86,8 +88,11 @@ for (const refreshFails of [false, true]) {
    await page.unroute('**/rest/v1/rpc/list_users');
   }
   await page.goto(`/admin/log?kind=user&q=${fixture.reviewer}`);
+  const rollback=logLine(page,new RegExp(`rolled back everything done by\\s+${fixture.reviewer}`));
+  await openLogLine(rollback);
   await expect(page.getByText(/Cannot undo/).filter({hasText:fixture.name})).toContainText('A newer report from this member is already open');
   await page.reload();
+  await openLogLine(rollback);
   await expect(page.getByText(/Cannot undo/).filter({hasText:fixture.name})).toBeVisible();
  });
 }

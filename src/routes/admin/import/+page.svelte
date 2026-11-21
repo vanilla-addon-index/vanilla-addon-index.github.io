@@ -222,10 +222,12 @@
 		]}
 		onclick={() => (current = index)}
 	>
-		<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+		<div class="flex flex-wrap items-baseline gap-x-admin-badge gap-y-1">
 			<span class="font-bold [overflow-wrap:anywhere]">{item.name}</span>
-			<span class="text-sm text-muted">{item.category}</span>
-			<span class="ml-auto rounded border border-border px-1.5 py-0.5 text-xs text-muted">{view === 'dead' ? 'Dead link' : 'Rejected'}</span>
+			<span class="ml-auto flex items-baseline gap-x-admin-badge">
+				{#if item.category}<span class="text-sm text-muted">{item.category}</span>{/if}
+				<span class="admin-badge border-border text-muted">{view === 'dead' ? 'Dead link' : 'Rejected'}</span>
+			</span>
 		</div>
 		<p class="mt-1 break-words text-sm text-muted">{item.description || 'No description from the source.'}</p>
 		<a

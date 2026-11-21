@@ -119,20 +119,20 @@
 		{@const subtitle = (row.kind === 'link' ? 'Suggested' : 'Proposed') + ' by ' + (request.proposer?.username ?? 'a contributor')}
 		<ReviewQueueRow rowId={id} title={addon?.name ?? 'Unavailable addon'} {subtitle} selected={selected === id} onselect={() => (openId = id)}>
 			{#snippet badges()}
-				<span class="rounded border border-border px-1.5 py-0.5 text-xs text-muted">{row.kind === 'link' ? 'Link suggestion' : 'Edit proposal'}</span>
+				<span class="admin-badge border-border text-muted">{row.kind === 'link' ? 'Link suggestion' : 'Edit proposal'}</span>
 				{#if row.kind === 'link'}
 					{@const count = row.request.images?.length ?? 0}
 					{#if count}
-						<span class="rounded border border-border px-1.5 py-0.5 text-xs text-muted">{count} {count === 1 ? 'screenshot' : 'screenshots'}</span>
+						<span class="admin-badge border-border text-muted">{count} {count === 1 ? 'screenshot' : 'screenshots'}</span>
 					{/if}
 				{:else}
 					{@const proposal = row.request}
 					{@const keys = fieldsOf(proposal)}
 					{#each keys as key (key)}
-						<span class="rounded border border-border px-1.5 py-0.5 text-xs text-muted">{FIELD_LABELS[key]}</span>
+						<span class="admin-badge border-border text-muted">{FIELD_LABELS[key]}</span>
 					{/each}
 					{#if addon && keys.some(key => conflict(proposal, key))}
-						<span class="rounded border border-accent/35 px-1.5 py-0.5 text-xs text-accent">Conflict</span>
+						<span class="admin-badge border-accent/35 text-accent">Conflict</span>
 					{/if}
 				{/if}
 			{/snippet}
@@ -172,7 +172,12 @@
 
 	{#if edits.loaded && links.loaded && !rows.length && !hasMore}
 		<div class="px-4 py-5 text-center">
-			<h2 class="font-semibold">{query.trim() ? 'No edit reviews match your search.' : 'No edits are waiting for review.'}</h2>
+			{#if query.trim()}
+				<h2 class="font-semibold">No edit reviews match your search.</h2>
+			{:else}
+				<h2 class="font-semibold">No edits are waiting for review.</h2>
+				<p class="mt-1 text-sm text-muted">Members can suggest links or propose edits from an addon's page.</p>
+			{/if}
 		</div>
 	{/if}
 </div>
