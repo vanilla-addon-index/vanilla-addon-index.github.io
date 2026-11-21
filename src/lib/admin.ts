@@ -158,10 +158,18 @@ export interface LogFilter {
 }
 
 /** Newest first. Pass the id of the oldest line already shown to get the ones before it. */
-export async function loadLog(filter: LogFilter = {}, before?: number) {
+export async function loadLog(filter: LogFilter = {}, before?: number, limit = LOG_PAGE) {
 	let query = client().from('activity_log').select('*');
 	if (filter.entryId) query = query.eq('id', filter.entryId);
 	else {
+		if (import.meta.env.MODE === 'localdb' && !filter.addonId && !filter.by && !filter.recoveryId) {
+			// Start the local overview with the seeded examples and any activity after them.
+			// Direct links and scoped histories can still reach earlier entries.
+			const { data: latestExample, error } = await client().from('activity_log')
+				.select('id').eq('details->>local_demo', 'log').order('id', { ascending: false }).limit(1).maybeSingle();
+			if (error) throw new Error(error.message);
+			if (latestExample) query = query.or(`details->>local_demo.eq.log,id.gt.${latestExample.id}`);
+		}
 		if (filter.kind) query = query.like('action', `${filter.kind}.%`);
 		if (filter.addonId) query = query.eq('addon_id', filter.addonId);
 		if (filter.by) query = query.eq('actor_name', filter.by);
@@ -174,7 +182,7 @@ export async function loadLog(filter: LogFilter = {}, before?: number) {
 		}
 		if (before) query = query.lt('id', before);
 	}
-	const { data, error } = await query.order('id', { ascending: false }).limit(LOG_PAGE);
+	const { data, error } = await query.order('id', { ascending: false }).limit(limit);
 	if (error) throw new Error(error.message);
 	return data as LogEntry[];
 }

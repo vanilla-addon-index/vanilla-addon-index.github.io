@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from './test.ts';
-import { confirm, loginAs, unique } from './helpers.ts';
+import { confirm, loginAs, openLogLine, unique } from './helpers.ts';
 
 const sql = (input: string) => execFileSync('docker', ['exec','-i','supabase_db_vanilla-addon-index','psql','-U','postgres','-d','postgres','-Atq','-v','ON_ERROR_STOP=1'], {input,encoding:'utf8'}).trim();
 function fixture(padding = 0) {
@@ -26,6 +26,7 @@ test('filtered recovery permanently marks the original edit and removes its reco
  await loginAs(page,'owner');
  await page.goto(`/admin/log?by=${f.reviewer}`);
  const row=page.locator(`#log-${f.edit}`);
+ await openLogLine(row);
  await row.getByRole('button',{name:'Revert',exact:true}).click();
  await confirm(page,'Revert');
  await expect(row).toContainText('Recovered by owner');
@@ -47,7 +48,7 @@ test('recovery preserves older pages, expanded details and position in a long fi
  await page.goto(`/admin/log?by=${f.reviewer}`);
  await page.getByRole('button',{name:'Show older lines',exact:true}).click();
  const row=page.locator(`#log-${f.edit}`);
- await row.getByText('View changes',{exact:true}).click();
+ await openLogLine(row);
  await row.getByRole('button',{name:'Revert',exact:true}).scrollIntoViewIfNeeded();
  const count=await page.locator('[id^="log-"]').count();
  expect(count).toBeGreaterThan(100);
@@ -57,7 +58,7 @@ test('recovery preserves older pages, expanded details and position in a long fi
  await expect(row).toContainText('Recovered by owner');
  await expect(row.getByRole('button',{name:'Revert',exact:true})).toHaveCount(0);
  await expect(page.locator('[id^="log-"]')).toHaveCount(count);
- await expect(row.locator('details').first()).toHaveAttribute('open','');
+ await expect(row.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','true');
  const after=await row.evaluate(element=>element.getBoundingClientRect().top);
  expect(Math.abs(after-top)).toBeLessThan(8);
  await expect(page.getByRole('button',{name:'Show older lines',exact:true})).toHaveCount(0);
@@ -83,17 +84,35 @@ test('group and report recovery status survives filters excluding the recovering
  await page.goto(`/admin/log?by=${f.reviewer}`);
  const group=page.locator(`#log-${ids.group}`);
  const report=page.locator(`#log-${ids.report}`);
+ const groupBadge=group.getByText('Group',{exact:true});
+ const reportBadge=report.getByText('Report',{exact:true});
+ await expect(groupBadge).toBeVisible();
+ await expect(reportBadge).toBeVisible();
+ const groupBox=await groupBadge.boundingBox();
+ const reportBox=await reportBadge.boundingBox();
+ expect(groupBox?.x).toBe(reportBox?.x);
+ expect(groupBox?.width).toBe(reportBox?.width);
+ await expect(group.getByRole('group',{name:'Entry actions'})).toBeHidden();
+ await openLogLine(group);
+ await expect(group.getByRole('region',{name:'Grouping changes'})).toBeVisible();
  await expect(group.getByRole('button',{name:'Undo',exact:true})).toBeVisible();
+ await openLogLine(report);
+ await expect(group.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','false');
+ await expect(group.getByRole('button',{name:'Undo',exact:true})).toBeHidden();
  await expect(report.getByRole('button',{name:'Reopen report',exact:true})).toBeVisible();
+ await report.locator('[data-act="review"]').press('Enter');
+ await expect(report.getByRole('group',{name:'Entry actions'})).toBeHidden();
  sql(`begin;
   select set_config('request.jwt.claims',jsonb_build_object('sub',id,'role','authenticated')::text,true) from public.profiles where username='owner';
   select public.undo_grouping(${ids.group});
   select public.reopen_report(${ids.report});
   commit;`);
  await page.reload();
+ await openLogLine(group);
  await expect(group).toContainText('Recovered by owner');
- await expect(report).toContainText('Recovered by owner');
  await expect(group.getByRole('button',{name:'Undo',exact:true})).toHaveCount(0);
+ await openLogLine(report);
+ await expect(report).toContainText('Recovered by owner');
  await expect(report.getByRole('button',{name:'Reopen report',exact:true})).toHaveCount(0);
 });
 
@@ -102,6 +121,7 @@ test('group and report recovery status survives filters excluding the recovering
   await loginAs(page,'owner');
   await page.goto(`/admin/log?by=${f.reviewer}`);
   const row=page.locator(`#log-${f.edit}`);
+  await openLogLine(row);
   await expect(row.getByRole('button',{name:'Revert',exact:true})).toBeVisible();
   sql(`begin;
    select set_config('request.jwt.claims',jsonb_build_object('sub',id,'role','authenticated')::text,true) from public.profiles where username='owner';
@@ -127,6 +147,7 @@ test('group and report recovery status survives filters excluding the recovering
   await loginAs(page,'owner');
   await page.goto(`/admin/log?kind=user&q=${member}`);
   const row=page.locator(`#log-${id}`);
+  await openLogLine(row);
   await row.getByRole('button',{name:'Lift the ban',exact:true}).click();
   await confirm(page,'Lift the ban');
   await expect(row).toContainText(`${member} can post again.`);
@@ -143,9 +164,9 @@ test('group and report recovery status survives filters excluding the recovering
   await loginAs(page,'owner');
   await page.goto(`/admin/log?by=${f.reviewer}`);
   const row=page.locator(`#log-${f.edit}`);
+  await openLogLine(row);
   await expect(row).toContainText('Conflicts with later changes');
   await expect(row.getByRole('button',{name:'Revert',exact:true})).toHaveCount(0);
-  await row.getByText('View changes',{exact:true}).click();
   await expect(row.getByRole('heading',{name:'Current content',exact:true})).toBeVisible();
   await expect(row).toContainText('Later description with valid improvements.');
   await row.getByRole('link',{name:'Edit current addon',exact:true}).click();
@@ -161,6 +182,7 @@ test('group and report recovery status survives filters excluding the recovering
   await expect(page).toHaveURL(/\/addon\//);
   expect(sql(`select category from public.addons where id=${f.addon}`)).toBe('PvP');
   await page.goto(`/admin/log?by=${f.reviewer}`);
+  await openLogLine(row);
   await expect(row).toContainText('Recovered by owner');
  });
 
@@ -169,6 +191,7 @@ test('group and report recovery status survives filters excluding the recovering
   await loginAs(page,'owner');
   await page.goto(`/admin/log?by=${f.reviewer}`);
   const row=page.locator(`#log-${f.edit}`);
+  await openLogLine(row);
   await row.getByRole('button',{name:'Revert',exact:true}).click();
   sql(`update public.addons set description='New work arriving during confirmation.' where id=${f.addon}`);
   await confirm(page,'Revert');
@@ -182,12 +205,12 @@ test('group and report recovery status survives filters excluding the recovering
   await page.goto(`/admin/log?entry=${f.edit}&by=Nobody&kind=report#log-${f.edit}`);
   const row=page.locator(`#log-${f.edit}`);
   await expect(row).toBeVisible();
-  await expect(row.locator('details[data-comparison]')).toHaveAttribute('open','');
+  await expect(row.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','true');
   await expect(row.getByRole('region',{name:'Description comparison'})).toContainText('Damaged description for recovery.');
-  await expect(page.locator('[id^="log-"][tabindex="-1"]')).toHaveCount(1);
+  await expect(page.locator('article[id^="log-"]')).toHaveCount(1);
   await page.reload();
   await expect(row).toBeVisible();
-  await expect(row.locator('details[data-comparison]')).toHaveAttribute('open','');
+  await expect(row.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','true');
   await page.getByRole('link',{name:'Show the whole log',exact:true}).click();
   await expect(page).toHaveURL(/\/admin\/log$/);
   await expect(page.getByRole('button',{name:'Show older lines',exact:true})).toBeVisible();

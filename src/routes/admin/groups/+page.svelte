@@ -8,8 +8,10 @@
 
 	let query = $state('');
 	const term = $derived(plainName(query));
-	const pages = $derived(store.addons
-		.filter(addon => addon.shared && plainName(addon.name).includes(term))
+	const grouped = $derived(store.addons.filter(addon => addon.shared));
+	const countWidth = $derived(String(grouped.reduce((max, addon) => Math.max(max, addon.versions.length), 0)).length);
+	const pages = $derived(grouped
+		.filter(addon => plainName(addon.name).includes(term))
 		.toSorted((a, b) => a.name.localeCompare(b.name)));
 </script>
 <svelte:head><title>Grouped addons · {SITE_NAME}</title></svelte:head>
@@ -27,11 +29,17 @@
 		{@const count = addon.versions.length}
 		<a class="flex items-center justify-between gap-3 border-b border-border px-3 py-2 last:border-b-0 hover:text-accent" href={entryHref(addon)}>
 			<span class="min-w-0 [overflow-wrap:anywhere]">{addon.name}</span>
-			<span class="flex shrink-0 items-center gap-2">
+			<span class="flex shrink-0 items-center gap-x-admin-badge">
+				{#if addon.pinned_link}<span class="admin-badge border-border text-muted">Pinned</span>{/if}
 				{#if addon.entry_type === 'dll'}
-					<span class="rounded border border-accent/30 px-1.5 py-0.5 text-xs text-accent">DLL mod</span>
+					<span class="admin-badge w-17 border-border text-muted">DLL mod</span>
 				{/if}
-				<span class="text-muted">{count} {count === 1 ? 'link' : 'links'}{addon.pinned_link ? ' · pinned' : ''}</span>
+				<span class="inline-grid whitespace-nowrap text-muted tabular-nums">
+					<span class="invisible col-start-1 row-start-1 flex gap-x-1" aria-hidden="true"><span>{'0'.repeat(countWidth)}</span><span>links</span></span>
+					<span class="col-start-1 row-start-1 flex justify-between gap-x-1">
+						<span>{count}</span>{' '}<span>{count === 1 ? 'link' : 'links'}</span>
+					</span>
+				</span>
 			</span>
 		</a>
 	{:else}

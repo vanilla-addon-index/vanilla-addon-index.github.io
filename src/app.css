@@ -19,6 +19,7 @@
 	--color-muted: #a59d8b;
 	--color-accent: #f5c32c;
 	--color-danger: #ff6b5e;
+	--spacing-admin-badge: 0.375rem;
 }
 
 @layer base {
@@ -115,6 +116,9 @@
 	}
 	.panel {
 		@apply border border-border bg-surface;
+	}
+	.admin-badge {
+		@apply inline-flex items-center justify-center rounded border px-1.5 py-0.5 text-center text-xs font-normal;
 	}
 	/* Painted exactly like the page behind it, but solid: for what stays put while the page
 	   scrolls underneath. Only where things do stay put, which a phone's layout has none of;

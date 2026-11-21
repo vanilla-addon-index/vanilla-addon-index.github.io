@@ -122,7 +122,7 @@
 				onselect={() => (selectedId = report.id)}
 			>
 				{#snippet badges()}
-					<span class={['rounded border px-1.5 py-0.5 text-xs', report.reason === 'harmful' ? 'border-danger/35 text-danger' : 'border-border text-muted']}>
+					<span class={['admin-badge', report.reason === 'harmful' ? 'border-danger/35 text-danger' : 'border-border text-muted']}>
 						{labels[report.reason]}
 					</span>
 				{/snippet}

@@ -15,6 +15,7 @@ import { CATEGORIES } from '../src/lib/config.ts';
 import { LOCAL_ACCOUNTS, LOCAL_PASSWORD } from '../src/lib/local-accounts.ts';
 import { dllDemoSql } from './local-dll-demo.mjs';
 import { adminDemoSql } from './local-admin-demo.mjs';
+import { logDemoSql } from './local-log-demo.mjs';
 
 // The site only needs the database, the API and the login service.
 const LEFT_OUT = 'realtime,storage-api,imgproxy,mailpit,logflare,vector,supavisor';
@@ -147,6 +148,7 @@ delete from public.activity_log;
 
 function seedAdminDemo() {
 	sql(adminDemoSql, 'adding local admin demo fixtures');
+	sql(logDemoSql, 'adding local log demo fixtures');
 	console.log('Local admin demo data is ready. Existing entries were preserved.');
 }
 

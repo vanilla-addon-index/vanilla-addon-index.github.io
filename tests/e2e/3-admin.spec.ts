@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './test.ts';
-import { confirm, loginAs, logLine, postAddon, unique, chooseImportCategory } from './helpers.ts';
+import { confirm, loginAs, logLine, openLogLine, postAddon, unique, chooseImportCategory } from './helpers.ts';
 
 // An admin: reviews imports and reports, and can undo anything from the log.
 
@@ -161,9 +161,10 @@ test('an import is approved as it is, another with changes, and one is rejected 
 
 	// The log calls both approvals, neither an edit, and offers the way back.
 	await page.goto('/admin/log');
-	await expect(logLine(page, new RegExp(`approved the import of\\s+${renamed}`))).toBeVisible();
-	await expect(page.locator('.panel > div').filter({ hasText: new RegExp(`edited\\s+${renamed}`) })).toHaveCount(0);
-	await logLine(page, new RegExp(`approved the import of\\s+${renamed}`)).getByRole('button', { name: 'Back to the queue' }).click();
+	const approval = logLine(page, new RegExp(`approved the import of\\s+${renamed}`));
+	await expect(logLine(page, new RegExp(`edited\\s+${renamed}`))).toHaveCount(0);
+	await openLogLine(approval);
+	await approval.getByRole('button', { name: 'Back to the queue' }).click();
 	await confirm(page, 'Back to the queue');
 	await expect(page.getByText(`"${renamed}" is back in the import queue.`)).toBeVisible();
 	await page.goto('/admin/import');
@@ -189,7 +190,8 @@ test('admins can merge links, pin the leader and restore a merged page from tras
  await expect(page.getByText('Pinned',{exact:true})).toHaveCount(0);
  await expect(controls.getByRole('status').filter({hasText:'Main download unpinned.'})).toBeVisible();
  await page.goto('/admin/trash');
- const trashed=page.locator('.panel > div').filter({hasText:two});
+ const trashed=page.locator('article[id^="trash-"]').filter({hasText:two});
+ await trashed.locator('[data-act="review"]').press('Enter');
  await trashed.getByRole('button',{name:'Restore',exact:true}).click();
  await expect(page.getByText('Restored "'+two+'".')).toBeVisible();
  await page.goto(address); await expect(page.getByRole('heading',{level:1,name:one})).toBeVisible();
@@ -207,7 +209,7 @@ test('an edit is reverted, and a deleted addon restored to the same address, fro
 
 	await page.goto('/admin/log');
 	const edited = logLine(page, new RegExp(`edited\\s+${name}`));
-	await edited.getByText('View changes').click();
+	await openLogLine(edited);
 	await expect(edited.getByRole('region',{name:'Description comparison'}).getByRole('heading',{name:'Before this edit',exact:true}).locator('..')).toContainText('The description as it should be.');
 	await edited.getByRole('button', { name: 'Revert' }).click();
 	await confirm(page, 'Revert');
@@ -218,7 +220,9 @@ test('an edit is reverted, and a deleted addon restored to the same address, fro
 	await page.getByRole('button', { name: 'Delete' }).click();
 	await confirm(page, 'Delete');
 	await page.goto('/admin/log');
-	await logLine(page, new RegExp(`deleted\\s+${name}`)).getByRole('button', { name: 'Restore' }).click();
+	const deleted = logLine(page, new RegExp(`deleted\\s+${name}`));
+	await openLogLine(deleted);
+	await deleted.getByRole('button', { name: 'Restore' }).click();
 	await confirm(page, 'Restore');
 	await expect(page.getByText(`Restored "${name}".`)).toBeVisible();
 	// Restored once, the line no longer offers it.
@@ -242,7 +246,7 @@ test('the log is searched in the database: by name, by kind, by addon and by acc
 	await page.getByRole('link', { name: 'History' }).click();
 	await expect(page).toHaveURL(/\/admin\/log\?addon=\d+/);
 	await expect(page.getByText(`History of ${name}`)).toBeVisible();
-	const lines = page.getByRole('region', {name:'Admin content',exact:true}).locator('.panel > div.border-b');
+	const lines = page.getByRole('region', {name:'Admin content',exact:true}).locator('article[id^="log-"]');
 	await expect(lines).toHaveCount(2);
 	await expect(lines.nth(0)).toContainText(`edited ${name}`);
 	await expect(lines.nth(1)).toContainText(`posted ${name}`);
@@ -264,9 +268,10 @@ test('the log is searched in the database: by name, by kind, by addon and by acc
 	// By account, from that account's page.
 	await page.goto('/admin/users/profile?name=member');
 	await page.getByRole('link', { name: 'Everything they did, in the log' }).click();
-	await expect(page.getByText('Everything done by member')).toBeVisible();
+	await expect(page).toHaveURL(/\/admin\/log\?by=member$/);
+	await expect(page.getByRole('button', { name: 'Show the whole log' }).locator('..')).toContainText('Everything done by member');
 	await expect(lines.first()).toContainText('member');
-	for (const line of await lines.all()) await expect(line.locator('.font-bold').first()).toHaveText('member');
+	for (const line of await lines.all()) await expect(line.locator('[data-act="review"]')).toHaveAccessibleName(/^member\s/);
 });
 
 test('a member is banned from the Users tab, with nothing trashed, and unbanned from the log', async ({ page }) => {
@@ -283,7 +288,9 @@ test('a member is banned from the Users tab, with nothing trashed, and unbanned 
 	await expect(page.getByRole('heading', { level: 1, name: 'Second Member Chat' })).toBeVisible();
 
 	await page.goto('/admin/log');
-	await logLine(page, /banned\s+member2/).getByRole('button', { name: 'Lift the ban' }).click();
+	const banned = logLine(page, /banned\s+member2/);
+	await openLogLine(banned);
+	await banned.getByRole('button', { name: 'Lift the ban' }).click();
 	await confirm(page, 'Lift the ban');
 	await expect(page.getByText('member2 can post again.')).toBeVisible();
 	await expect(logLine(page, /banned\s+member2/).getByRole('button', { name: 'Lift the ban' })).toHaveCount(0);
@@ -371,7 +378,8 @@ test('the owner makes a member an admin and takes the role away again; an admin 
 
 	// From the list of accounts as well, where it is taken away again.
 	await page.goto('/admin/users');
-	const row = page.locator('div.border-b', { hasText: 'member2' });
+	const row = page.locator('article[id^="user-"]').filter({has:page.getByText('member2', { exact: true })});
+	await row.locator('[data-act="review"]').press('Enter');
 	await row.getByRole('button', { name: 'Remove admin' }).click();
 	await confirm(page, 'Remove admin');
 	await expect(page.getByText('member2 is no longer an admin.')).toBeVisible();

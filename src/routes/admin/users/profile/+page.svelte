@@ -214,10 +214,10 @@
 			<div class="panel">
 				<div class="border-b border-border px-3 py-3">
 					<h1 class="truncate text-2xl leading-tight font-bold">{user.username}</h1>
-					<p class={user.role === 'member' ? 'text-muted' : 'text-accent'}>{user.deleted ? 'Recovery record' : ROLES[user.role]}</p>
-					{#if user.banned}
-						<p class="text-danger">{user.role === 'admin' ? 'Suspended' : 'Banned'}</p>
-					{/if}
+					<div class="mt-1 flex flex-wrap items-center gap-x-admin-badge gap-y-1">
+						<span class={['admin-badge', user.role === 'member' ? 'border-border text-muted' : 'border-accent/30 text-accent']}>{user.deleted ? 'Recovery record' : ROLES[user.role]}</span>
+						{#if user.banned}<span class="admin-badge border-danger/35 text-danger">{user.role === 'admin' ? 'Suspended' : 'Banned'}</span>{/if}
+					</div>
 				</div>
 				<dl>
 					{@render fact('Addons posted', String(owned.posted.length))}

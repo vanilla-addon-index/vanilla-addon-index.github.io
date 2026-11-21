@@ -231,7 +231,7 @@
 >
 	{#snippet badges()}
 		{#each reviewStatuses as status (status.text)}
-			<span class={['rounded border px-1.5 py-0.5 text-xs', status.attention ? 'border-accent/30 text-accent' : status.text === 'Ready' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-border text-muted']}>{status.text}</span>
+			<span class={['admin-badge', status.attention ? 'border-accent/30 text-accent' : status.text === 'Ready' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-border text-muted']}>{status.text}</span>
 		{/each}
 	{/snippet}
 
