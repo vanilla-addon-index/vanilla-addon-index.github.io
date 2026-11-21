@@ -1,4 +1,5 @@
 import { auth } from './auth.svelte';
+import { refreshAdminBadges } from './admin-badges.svelte';
 import { loadAddons } from './addons.svelte';
 import { supabase } from './supabase';
 import type { Addon, AddonInput } from './types';
@@ -16,7 +17,6 @@ export interface EditRequest {
  proposer?: {username: string} | null;
 }
 export interface ContributionAccess {can_propose: boolean; links: string[]}
-export const editReviews = $state({pending:0});
 
 function client() {
  if (!supabase) throw new Error('Database is not configured.');
@@ -39,11 +39,6 @@ export async function removeOwnLink(id: number,link: string) {
  await call('remove_own_addon_link',{target:id,link});
  await loadAddons();
 }
-export async function countEditReviews() {
- if(!supabase) return;
- const [edits, links]=await Promise.all(['addon_edit_requests','addon_link_requests'].map(table => supabase!.from(table).select('id',{count:'exact',head:true}).eq('status','pending')));
- editReviews.pending=(edits.count??0)+(links.count??0);
-}
 export async function loadEditReviews() {
  const {data,error}=await client().from('addon_edit_requests').select('*, proposer:profiles!addon_edit_requests_proposed_by_fkey(username)').eq('status','pending').order('id').limit(1000);
  if(error) throw new Error(error.message);
@@ -51,8 +46,8 @@ export async function loadEditReviews() {
 }
 export async function decideEdit(id: number,accept: boolean,fields: EditField[]) {
  await call('decide_addon_edit',{request_id:id,accept,fields});
+ refreshAdminBadges({ afterAction: true });
  await loadAddons();
- editReviews.pending=Math.max(0,editReviews.pending-1);
 }
 
 export const displayEditValue = (input: unknown): string => Array.isArray(input) ? input.map(v => typeof v === 'string' ? v : v && typeof v === 'object' ? String(v.url??'') + (v.note ? ' · ' + String(v.note) : '') : String(v??'')).join('\n') || '(none)' : String(input??'');

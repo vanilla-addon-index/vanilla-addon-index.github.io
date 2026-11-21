@@ -1,6 +1,7 @@
 // Reports about live addons: anyone logged in sends them, admins read and close them.
 // The database checks the caller's rights on every call; see the reports migration.
 import { supabase } from './supabase';
+import { refreshAdminBadges } from './admin-badges.svelte';
 
 // Must match the check on reports.reason in the reports migration.
 export const REASONS = {
@@ -23,11 +24,6 @@ export interface Report {
 	created_at: string;
 }
 
-export const reports = $state({
-	// How many wait for an admin, for the count next to "Admin" and "Reports".
-	open: 0
-});
-
 function client() {
 	if (!supabase) throw new Error('Database is not configured.');
 	return supabase;
@@ -36,6 +32,7 @@ function client() {
 export async function reportAddon(addonId: number, reason: Reason, note: string) {
 	const { error } = await client().rpc('report_addon', { addon: addonId, reason, note });
 	if (error) throw new Error(error.message);
+	refreshAdminBadges({ afterAction: true });
 }
 
 /** The reports still waiting, oldest first. */
@@ -47,19 +44,11 @@ export async function loadReports() {
 		.order('id')
 		.limit(1000);
 	if (error) throw new Error(error.message);
-	reports.open = data.length;
 	return data as Report[];
-}
-
-/** Counts the waiting reports without fetching them. Admins only; anyone else gets 0. */
-export async function countReports() {
-	if (!supabase) return;
-	const { count } = await supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open');
-	reports.open = count ?? 0;
 }
 
 export async function decideReport(id: number, outcome: 'handled' | 'dismissed') {
 	const { error } = await client().rpc('decide_report', { report: id, outcome });
 	if (error) throw new Error(error.message);
-	reports.open = Math.max(0, reports.open - 1);
+	refreshAdminBadges({ afterAction: true });
 }

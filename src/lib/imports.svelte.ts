@@ -1,6 +1,7 @@
 import { loadAddons, plainName } from './addons.svelte';
 import { supabase } from './supabase';
 import { auth } from './auth.svelte';
+import { refreshAdminBadges, trackImportBadge } from './admin-badges.svelte';
 import type { Addon, AddonInput } from './types';
 import type { Candidate } from './wiki';
 import { readArticle, type ArticleLink } from './wiki-article.ts';
@@ -64,17 +65,6 @@ function client() {
 
 let countsRequest = 0;
 
-/** Refreshes the Import tab badge without loading the queue or repository details. */
-export async function countImports() {
-	if (!supabase) return;
-	const read = ++countsRequest;
-	const { count, error } = await supabase.from('pending_imports')
-		.select('id', { count: 'exact', head: true })
-		.eq('status', 'pending');
-	if (error) throw new Error(error.message);
-	if (read === countsRequest && auth.isAdmin) imports.counts.pending = count ?? 0;
-}
-
 let selection: Selection = { view: 'all', query: '', entryType: '' };
 let activeRequest: AbortController | undefined;
 let nextOffset = $state(0);
@@ -98,6 +88,7 @@ export async function loadQueue(refreshCounts = true, more = false) {
 	const decided = view === 'rejected' || view === 'dead';
 	const offset = more ? nextOffset : 0;
 	const read = refreshCounts ? ++countsRequest : countsRequest;
+	const updateBadge = refreshCounts ? trackImportBadge() : undefined;
 	try {
 		let rows = client().from(decided ? 'decided_imports' : 'pending_imports')
 			.select('id,key,url,name,description,images,alts,category,obsolete,parent,group_key,status,problem,readme_checked_at,rejected_by_owner,wiki_source,wiki_recommended,source,entry_type' +
@@ -119,7 +110,10 @@ export async function loadQueue(refreshCounts = true, more = false) {
 		if (request.signal.aborted || !auth.isAdmin) return;
 		if (page.error || counts?.error) throw new Error((page.error ?? counts?.error)!.message);
 		const items = (page.data ?? []) as unknown as QueueItem[];
-		if (counts?.data && read === countsRequest) imports.counts = counts.data as QueueCounts;
+		if (counts?.data && read === countsRequest) {
+			imports.counts = counts.data as QueueCounts;
+			updateBadge?.(imports.counts.pending);
+		}
 		nextOffset = offset + items.length;
 		imports.matching = page.count ?? (more && items.length === IMPORT_PAGE_SIZE ? imports.matching : nextOffset);
 		imports.items = more ? [...new Map([...imports.items, ...items].map(item => [item.id, item])).values()] : items;
@@ -180,8 +174,12 @@ async function call<T>(name: string, args: Record<string, unknown>) {
 
 async function refreshQueueCounts() {
 	const read = ++countsRequest;
+	const updateBadge = trackImportBadge();
 	const { data, error } = await client().rpc('import_review_counts');
-	if (!error && data && read === countsRequest && auth.isAdmin) imports.counts = data as QueueCounts;
+	if (!error && data && read === countsRequest && auth.isAdmin) {
+		imports.counts = data as QueueCounts;
+		updateBadge(imports.counts.pending);
+	}
 }
 
 async function afterPublish() {
@@ -245,6 +243,7 @@ export async function reject(ids: number[]) {
 	const undo = settle(ids, 'rejected');
 	try {
 		await call<number>('decide_imports', { ids, decision: 'rejected' });
+		refreshAdminBadges({ afterAction: true });
 	} catch (e) {
 		await loadQueue().catch(undo);
 		throw e;

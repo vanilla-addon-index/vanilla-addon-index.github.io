@@ -8,85 +8,83 @@ const waiting = async (page: Page) =>
 	Number(await page.locator('dl > div', { hasText: 'Waiting' }).locator('dd').innerText());
 const entry = (page: Page, name: string) => page.locator('[data-entry]').filter({ has: page.locator(`input[aria-label="Name"][value="${name}"]`) });
 
-test('returning to admin refreshes an empty import queue and review counts without reloading', async ({ page }) => {
+test('returning to admin refreshes an empty import queue without reloading', async ({ page }) => {
 	await loginAs(page, 'admin');
 	let fresh = false;
-	let reviewCounts = 0;
 	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
 		const url = new URL(route.request().url());
 		if (!fresh && route.request().method() === 'GET' && url.searchParams.get('status') === 'eq.pending') {
 			await route.fulfill({ json: [] });
 		} else await route.continue();
 	});
-	await page.route('**/rest/v1/addon_edit_requests?**', async route => {
-		if (route.request().method() === 'HEAD') {
-			reviewCounts++;
-			await route.fulfill({ status: 200, headers: { 'content-range': `*/${fresh ? 1 : 0}` } });
-		} else await route.continue();
-	});
 	await page.goto('/admin/import');
 	await expect(page.getByText('Loading', { exact: false })).toHaveCount(0);
 	await expect(page.locator('[data-entry]')).toHaveCount(0);
-	await expect.poll(() => reviewCounts).toBeGreaterThan(0);
-	const before = reviewCounts;
 	fresh = true;
 	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Edit reviews/ }).click();
-	await expect.poll(() => reviewCounts).toBeGreaterThan(before);
 	await page.getByRole('navigation', { name: 'Admin', exact: true }).getByRole('link', { name: /^Import(?:\s+\d+)?$/ }).click();
 	await expect(page.locator('[data-entry]').first()).toBeVisible();
 });
 
-test('only the three moderation queues show tab notifications', async ({ page }) => {
+test('the header and moderation tabs share one badge request until it expires', async ({ page }) => {
 	await loginAs(page, 'admin');
+	const now = Date.now();
+	await page.clock.setFixedTime(new Date(now));
 	let empty = false;
-	for (const [table, status, count] of [
-		['pending_imports', 'pending', 16],
-		['reports', 'open', 3],
-		['addon_edit_requests', 'pending', 7],
-		['addon_link_requests', 'pending', 4]
-	] as const) {
-		await page.route(`**/rest/v1/${table}?**`, async route => {
-			const url = new URL(route.request().url());
-			if (route.request().method() === 'HEAD' && url.searchParams.get('status') === `eq.${status}`) {
-				await route.fulfill({ status: 200, headers: { 'content-range': `*/${empty ? 0 : count}`, 'access-control-expose-headers': 'content-range' } });
-			} else await route.continue();
-		});
-	}
-	await page.goto('/');
+	let reads = 0;
+	const legacy = /\/rest\/v1\/(pending_imports|reports|addon_edit_requests|addon_link_requests)$/;
+	let legacyReads = 0;
+	page.on('request', request => {
+		if (request.method() === 'HEAD' && legacy.test(new URL(request.url()).pathname)) legacyReads++;
+	});
+	await page.route('**/rest/v1/rpc/admin_badge_counts', route => {
+		reads++;
+		return route.fulfill({ json: empty ? { imports: 0, reports: 0, edits: 0 } : { imports: 16, reports: 3, edits: 11 } });
+	});
+	await page.goto('/admin/log');
 	const total = page.locator('header').getByRole('link', { name: /^Admin/ });
 	await expect(total).toHaveText('Admin 30');
-	await page.goto('/admin/log');
 	const tabs = page.getByRole('navigation', { name: 'Admin', exact: true });
 	for (const label of ['Import 16', 'Reports 3', 'Edit reviews 11', 'Grouped addons', 'Log', 'Trash', 'Users']) {
 		await expect(tabs.getByRole('link', { name: label, exact: true })).toBeVisible();
 	}
-	await expect(total).toHaveText('Admin 30');
-	empty = true;
 	await tabs.getByRole('link', { name: 'Users', exact: true }).click();
+	await expect(page).toHaveURL(/\/admin\/users$/);
+	await page.getByRole('link', { name: 'About and privacy' }).click();
+	await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+	await expect(total).toHaveText('Admin 30');
+	expect(reads).toBe(1);
+	empty = true;
+	await page.clock.setFixedTime(new Date(now + 61_000));
+	await page.locator('header').getByRole('link', { name: 'Vanilla Addon Index' }).click();
 	await expect(total).toHaveText('Admin');
 	await expect(total).toHaveAttribute('href', '/admin/import');
+	expect(reads).toBe(2);
+	expect(legacyReads).toBe(0);
 });
 
 test('the report a member sent shows up, with a count on the Admin button, and can be dismissed', async ({ page }) => {
-	await page.route(/\/rest\/v1\/(?:import_queue|pending_imports)\?/, async route => {
-		if (route.request().method() === 'HEAD') {
-			await route.fulfill({ status: 200, headers: { 'content-range': '*/16', 'access-control-expose-headers': 'content-range' } });
-		} else await route.continue();
+	let reads = 0;
+	page.on('request', request => {
+		if (new URL(request.url()).pathname === '/rest/v1/rpc/admin_badge_counts') reads++;
 	});
 	await loginAs(page, 'admin');
 	const admin = page.getByRole('navigation').getByRole('link', { name: /^Admin/ });
 	// The member tests leave one report and one link suggestion for review.
-	await expect(admin).toHaveText('Admin 18');
+	await expect(admin).toHaveAttribute('href', '/admin/reports');
+	const before = Number(await admin.locator('[aria-label$="items waiting"]').textContent());
 	await admin.click();
 	await expect(page).toHaveURL(/\/admin\/reports/);
 
 	const report = page.locator('.panel > div').filter({ hasText: 'QuestHelper' });
 	await expect(report.getByText('Harmful or malicious')).toBeVisible();
 	await expect(report.getByText('Reported by a browser test.')).toBeVisible();
+	expect(reads).toBe(1);
 	await report.getByRole('button', { name: 'Dismiss' }).click();
 	await expect(page.getByText('No reports are waiting.')).toBeVisible();
-	await expect(admin).toHaveText('Admin 17');
+	await expect(admin).toHaveText(`Admin ${before - 1}`);
 	await expect(admin).toHaveAttribute('href', '/admin/edits');
+	expect(reads).toBe(2);
 });
 
 test('waiting filters partition every entry and review issues stay out of Looks fine', async ({ page }) => {
