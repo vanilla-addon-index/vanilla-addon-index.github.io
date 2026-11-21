@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { ACTION_TEXT, loadLog, type LogEntry } from '#lib/admin.ts';
+	import { actionTarget, actionText, loadLog, type LogEntry } from '#lib/admin.ts';
 
 	let { addonId, entryId, when }: {
 		addonId: number;
@@ -42,7 +42,7 @@
 					<a href={resolve(`/admin/log?entry=${entry.id}#log-${entry.id}`)} class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-2.5 py-1.5 hover:bg-raised hover:text-accent">
 						<span class="min-w-0 [overflow-wrap:anywhere]">
 							<span class="font-semibold">{entry.actor_name ?? 'The system'}</span>
-							{ACTION_TEXT[entry.action] ?? entry.action} {entry.subject}
+							{actionText(entry)} {entry.subject} {actionTarget(entry)}
 						</span>
 						<time datetime={entry.at} class="text-xs text-muted tabular-nums">{when(entry.at)}</time>
 					</a>

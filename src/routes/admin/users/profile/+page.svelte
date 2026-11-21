@@ -6,6 +6,8 @@
 	import { page } from '$app/state';
 	import {
 		ACTION_TEXT,
+		actionTarget,
+		actionText,
 		ROLLBACK_TEXT,
 		listUsers,
 		listDeletedAccounts,
@@ -341,8 +343,9 @@
 						<p class="min-w-0 flex-1 break-words">
 							<!-- Lines about this account, such as a ban, were done by someone else. -->
 							<span class="font-bold">{entry.actor_name ?? 'The system'}</span>
-							<span class="text-muted">{ACTION_TEXT[entry.action] ?? entry.action}</span>
+							<span class="text-muted">{actionText(entry)}</span>
 							{entry.action === 'user.autosuspend' ? entry.details?.reason : entry.subject}
+							{actionTarget(entry)}
 						</p>
 						<span class="shrink-0 text-sm text-muted">{when(entry.at)}</span>
 					</div>
