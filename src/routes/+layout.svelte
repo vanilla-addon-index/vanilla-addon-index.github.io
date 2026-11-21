@@ -7,17 +7,13 @@
 	import { ensureCatalogue, store } from '#lib/addons.svelte.ts';
 	import { auth, initAuth } from '#lib/auth.svelte.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
-	import WikiSubmissionDialog from '#lib/components/WikiSubmissionDialog.svelte';
 	import { SITE_NAME } from '#lib/config.ts';
-	import { countEditReviews, editReviews } from '#lib/edit-reviews.svelte.ts';
-	import { countReports, reports } from '#lib/reports.svelte.ts';
-	import { countImports, imports } from '#lib/imports.svelte.ts';
 	import { loginHref, takeReturn } from '#lib/return.ts';
 	import { configured } from '#lib/supabase.ts';
+	import { wikiThanks } from '#lib/wiki-submission.svelte.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
-	const pendingAdminItems = $derived(imports.counts.pending + reports.open + editReviews.pending);
 
 	// Shown inside a frame on someone else's page, the site could be laid under that page's
 	// own buttons, and a logged-in admin tricked into clicking through to something here.
@@ -48,21 +44,6 @@
 		if (!userId || page.url.pathname === resolve('/login')) return;
 		const next = takeReturn();
 		if (next) goto(next, { replaceState: true });
-	});
-
-	// Refresh the badge on navigation as well as login: new work can arrive while open.
-	$effect(() => {
-		void page.url.pathname;
-		if (auth.isAdmin) {
-			countReports();
-			countEditReviews();
-			// The Import page refreshes its own queue, including this count.
-			if (!page.url.pathname.startsWith(resolve('/admin/import'))) void countImports().catch(() => {});
-		} else {
-			imports.counts.pending = 0;
-			reports.open = 0;
-			editReviews.pending = 0;
-		}
 	});
 
 	// The header stays at the top of the window and the footer at the bottom; what sticks
@@ -112,12 +93,16 @@
 						<a href={resolve('/submit')} class="btn btn-primary">Submit addon</a>
 					{/if}
 					{#if auth.isAdmin}
-						<a href={resolve(reports.open ? '/admin/reports' : editReviews.pending ? '/admin/edits' : '/admin/import')} class="btn">
-							Admin
-							{#if pendingAdminItems}
-								<span class="text-accent" aria-label="{pendingAdminItems} items waiting">{pendingAdminItems}</span>
-							{/if}
-						</a>
+					{#snippet adminLink()}
+						<a href={resolve('/admin/import')} class="btn">Admin</a>
+					{/snippet}
+					{#await import('#lib/components/AdminNavLink.svelte')}
+						{@render adminLink()}
+					{:then { default: AdminNavLink }}
+						<AdminNavLink />
+					{:catch}
+						{@render adminLink()}
+					{/await}
 					{/if}
 					{#if auth.username}
 						<a href={resolve('/account')} class="btn">{auth.username}</a>
@@ -169,5 +154,11 @@
 </div>
 
 <ConfirmDialog />
-<WikiSubmissionDialog />
+{#if wikiThanks.addon}
+	{#await import('#lib/components/WikiSubmissionDialog.svelte') then { default: WikiSubmissionDialog }}
+		<WikiSubmissionDialog />
+	{:catch}
+		<p role="status" class="mx-auto max-w-6xl px-4 pb-4 text-muted">Your addon was posted. The wiki helper couldn’t load.</p>
+	{/await}
+{/if}
 {/if}

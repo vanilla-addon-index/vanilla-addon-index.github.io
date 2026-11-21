@@ -26,11 +26,15 @@ test('same-name imports inherit the existing category and keyboard approval need
 	await entry.getByLabel('Name', {exact:true}).fill('OpaqueWidget');
 	await expect(entry.getByLabel('Category', {exact:true})).toHaveValue('Professions');
 	const request = page.waitForRequest('**/rest/v1/rpc/publish_import');
+	// Approval reloads the catalogue before refreshing the counts. Keep the page
+	// open until the intercepted catalogue response has been read and fulfilled.
+	const refreshed = page.waitForResponse('**/rest/v1/rpc/import_review_counts');
 	await page.getByRole('region', {name:'Import entries', exact:true}).focus();
 	await page.keyboard.press('a');
 	const payload = (await request).postDataJSON();
 	expect(payload.destination).toBe(1);
 	expect(payload.input.category).toBe('Professions');
+	expect((await refreshed).ok()).toBe(true);
 });
 
 test('repository evidence and old guesses do not preselect a category', async ({page}) => {

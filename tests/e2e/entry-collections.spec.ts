@@ -68,8 +68,7 @@ test('admins classify DLL mods with the normal submit and edit forms', async ({p
  await page.getByLabel('Description',{exact:true}).fill('A local browser test of the DLL collection.');
  await page.getByRole('button',{name:'Post addon',exact:true}).click();
  await expect(page.getByRole('heading',{level:1,name})).toBeVisible();
- const helper=page.getByRole('button',{name:'Close wiki helper',exact:true});
- if (await helper.isVisible()) await helper.click();
+ await page.getByRole('button',{name:'Close wiki helper',exact:true}).click();
  const detail=page.url();
  await expect(page.getByRole('link',{name:/All DLL mods/,exact:false})).toBeVisible();
  await page.getByRole('link',{name:/All DLL mods/}).click();
