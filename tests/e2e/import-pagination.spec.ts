@@ -1,14 +1,16 @@
 import { expect, test } from './test.ts';
 import { loginAs } from './helpers.ts';
 
-test('the import queue requests only the active page and searches beyond it', async ({ page }) => {
+test('the import queue continues past a removed row and searches beyond the first page', async ({ page }) => {
 	await loginAs(page, 'admin');
 	const rows = Array.from({ length: 120 }, (_, index) => ({
 		id: 90000 + index, key: `github.com/fixture/${index}`, name: `Queue fixture ${index}`,
+		sort_name: index === 49 || index === 50 ? 'queue fixture 049, "same"' : `queue fixture ${String(index).padStart(3, '0')}`,
 		url: `https://github.com/fixture/${index}`, category: '', description: '', status: 'pending',
 		images: [], alts: [], review_stats: { key: `github.com/fixture/${index}`, stars: index }
 	}));
-	const pages: [number, number][] = [];
+	const pages: (string | null)[] = [];
+	const removed = new Set<number>();
 	let counts = 0;
 	let decided = 0;
 	let allStats = 0;
@@ -27,30 +29,35 @@ test('the import queue requests only the active page and searches beyond it', as
 	await page.route('**/rest/v1/pending_imports?*', route => {
 		if (route.request().method() !== 'GET') return route.continue();
 		const params = new URL(route.request().url()).searchParams;
-		const offset = Number(params.get('offset')), limit = Number(params.get('limit'));
-		pages.push([offset, limit]);
-		const matches = params.has('search_document') ? rows.slice(-1) : rows;
-		return route.fulfill({
-			headers: {
-				'content-range': `${offset}-${Math.min(offset + limit, matches.length) - 1}/${matches.length}`,
-				'access-control-expose-headers': 'content-range'
-			},
-			json: matches.slice(offset, offset + limit)
-		});
+		expect(params.get('offset')).toBeNull();
+		expect(params.get('limit')).toBe('51');
+		const predicate = params.get('or');
+		pages.push(predicate);
+		const after = predicate && rows.find(row => row.id === Number(predicate.match(/id\.gt\.(\d+)/)?.[1]));
+		const source = params.has('search_document') ? rows.slice(-1) : rows;
+		const matches = source.filter(row => !removed.has(row.id) && (!after ||
+			row.sort_name > after.sort_name || (row.sort_name === after.sort_name && row.id > after.id)));
+		return route.fulfill({ json: matches.slice(0, 51) });
 	});
 	await page.goto('/admin/import');
 	const entries = page.locator('[data-entry]');
 	await expect(entries).toHaveCount(50);
-	expect(pages).toEqual([[0, 50]]);
+	expect(pages).toEqual([null]);
 	expect(counts).toBe(1);
 	expect(decided).toBe(0);
 	expect(allStats).toBe(0);
-	await page.getByRole('button', { name: 'Show 50 more of 120' }).click();
+	removed.add(rows[10].id);
+	removed.add(rows[49].id);
+	expect(pages).toHaveLength(1);
+	await page.getByRole('button', { name: 'Show more imports' }).click();
 	await expect(entries).toHaveCount(100);
-	expect(pages).toEqual([[0, 50], [50, 50]]);
+	await expect(entries.nth(50).getByLabel('Name')).toHaveValue(rows[50].name);
+	const sortName = JSON.stringify(rows[49].sort_name);
+	const keyset = `(sort_name.gt.${sortName},and(sort_name.eq.${sortName},id.gt.${rows[49].id}))`;
+	expect(pages).toEqual([null, keyset]);
 	await page.getByLabel('Search', { exact: true }).fill('fixture 119');
 	await expect(entries).toHaveCount(1);
 	await expect(entries.getByLabel('Name')).toHaveValue('Queue fixture 119');
-	expect(pages).toEqual([[0, 50], [50, 50], [0, 50]]);
+	expect(pages).toEqual([null, keyset, null]);
 	expect(counts).toBe(1);
 });

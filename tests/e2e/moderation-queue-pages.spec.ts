@@ -1,0 +1,64 @@
+import { expect, test } from './test.ts';
+import { loginAs } from './helpers.ts';
+
+test('reports, edit proposals, and link suggestions page independently and search beyond loaded rows', async ({ page }) => {
+	await loginAs(page, 'admin');
+	const pages: { queue: string; after_id: number; search: string; include_report_counts: boolean }[] = [];
+	let reportCount = 53;
+	await page.route('**/rest/v1/rpc/moderation_queue_page', route => {
+		const input = route.request().postDataJSON();
+		pages.push(input);
+		const { queue, after_id, search, include_report_counts } = input;
+		const rows = Array.from({ length: queue === 'reports' ? reportCount : 53 }, (_, index) => {
+			const id = index + 1;
+			const row = { id, addon_id: 1, proposer: { username: 'fixture' } };
+			if (queue === 'reports') return {
+				...row, reason: 'broken', note: `Report sample ${id}`, reported_by_name: 'fixture',
+				created_at: '2026-11-19T00:00:00Z'
+			};
+			if (queue === 'edits') return { ...row, status: 'pending', base: {}, changes: { description: `Proposal sample ${id}` } };
+			return { ...row, url: `https://github.com/fixture/link-${id}`, images: [] };
+		});
+		return route.fulfill({
+			json: {
+				rows: rows.filter(row => row.id > after_id && (!search || (queue === 'links' && 'url' in row && row.url?.includes(search)))).slice(0, 51),
+				report_counts: include_report_counts ? { broken: reportCount } : null
+			}
+		});
+	});
+
+	await page.goto('/admin/reports');
+	await expect(page.getByText('Report sample 50', { exact: true })).toBeVisible();
+	expect(pages).toEqual([{ queue: 'reports', after_id: 0, search: '', include_report_counts: true }]);
+	await expect(page.getByText('Report sample 51', { exact: true })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Show more reports' }).click();
+	await expect(page.getByText('Report sample 53', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Show more reports' })).toHaveCount(0);
+	expect(pages.at(-1)).toEqual({ queue: 'reports', after_id: 50, search: '', include_report_counts: false });
+
+	reportCount = 2;
+	await page.reload();
+	await expect(page.getByText('Report sample 2', { exact: true })).toBeVisible();
+	const beforeSearch = pages.length;
+	await page.getByRole('searchbox', { name: 'Search reports' }).fill('Report sample 1');
+	await expect(page.getByText('Report sample 2', { exact: true })).toHaveCount(0);
+	await expect(page.getByText('Report sample 1', { exact: true })).toBeVisible();
+	expect(pages).toHaveLength(beforeSearch);
+
+	await page.goto('/admin/edits');
+	const edits = page.getByRole('button', { name: 'Show more edit proposals' });
+	const links = page.getByRole('button', { name: 'Show more link suggestions' });
+	await expect(edits).toBeVisible();
+	await expect(links).toBeVisible();
+	await edits.click();
+	await expect(page.getByText('Proposal sample 53', { exact: true })).toBeVisible();
+	expect(pages.at(-1)).toMatchObject({ queue: 'edits', after_id: 50, search: '' });
+	await links.click();
+	await expect(page.getByRole('link', { name: 'https://github.com/fixture/link-53', exact: true })).toBeVisible();
+	expect(pages.at(-1)).toMatchObject({ queue: 'links', after_id: 50, search: '' });
+
+	await page.getByRole('searchbox', { name: 'Search edit reviews' }).fill('link-53');
+	await expect.poll(() => pages.filter(p => p.search === 'link-53').map(p => [p.queue, p.after_id]).sort()).toEqual([['edits', 0], ['links', 0]]);
+	await expect(page.getByRole('link', { name: 'https://github.com/fixture/link-53', exact: true })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'https://github.com/fixture/link-1', exact: true })).toHaveCount(0);
+});

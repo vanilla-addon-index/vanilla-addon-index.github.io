@@ -39,11 +39,6 @@ export async function removeOwnLink(id: number,link: string) {
  await call('remove_own_addon_link',{target:id,link});
  await loadAddons();
 }
-export async function loadEditReviews() {
- const {data,error}=await client().from('addon_edit_requests').select('*, proposer:profiles!addon_edit_requests_proposed_by_fkey(username)').eq('status','pending').order('id').limit(1000);
- if(error) throw new Error(error.message);
- return data as EditRequest[];
-}
 export async function decideEdit(id: number,accept: boolean,fields: EditField[]) {
  await call('decide_addon_edit',{request_id:id,accept,fields});
  refreshAdminBadges({ afterAction: true });

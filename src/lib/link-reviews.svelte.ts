@@ -28,12 +28,6 @@ export async function ownLinkRequests(target: number) {
 	return data as Pick<LinkRequest, 'id' | 'url'>[];
 }
 export const withdrawLink = (request_id: number) => call('withdraw_addon_link', { request_id });
-export async function loadLinkRequests() {
-	const { data, error } = await client().from('addon_link_requests')
-		.select('*, proposer:profiles!addon_link_requests_proposed_by_fkey(username)').eq('status', 'pending').order('id').limit(1000);
-	if (error) throw new Error(error.message);
-	return data as LinkRequest[];
-}
 export async function decideLink(request_id: number, accept: boolean) {
 	await call('decide_addon_link', { request_id, accept });
 	refreshAdminBadges({ afterAction: true });

@@ -9,7 +9,7 @@
 	import AdminNavigation from '#lib/components/AdminNavigation.svelte';
 	import DiscordUpload from '#lib/components/DiscordUpload.svelte';
 	import { CATEGORIES, SITE_NAME } from '#lib/config.ts';
-	import { IMPORT_PAGE_SIZE, imports, loadMoreImports, loadQueue, remainingImports, selectQueue, restore, type QueueItem, type QueueView as View } from '#lib/imports.svelte.ts';
+	import { hasMoreImports, imports, loadMoreImports, loadQueue, selectQueue, restore, type QueueItem, type QueueView as View } from '#lib/imports.svelte.ts';
 	import { linkAuthor, linkKey } from '#lib/links.ts';
 	import type { Addon } from '#lib/types.ts';
 	import { WIKI_NAME } from '#lib/wiki.ts';
@@ -387,9 +387,9 @@
 				{/if}
 			</div>
 
-			{#if remainingImports()}
+			{#if hasMoreImports()}
 				<button class="btn mt-2 w-full" disabled={imports.loading} onclick={() => loadMoreImports()?.catch((e) => (error = e.message))}>
-					Show {Math.min(IMPORT_PAGE_SIZE, remainingImports())} more of {imports.matching}
+					Show more imports
 				</button>
 			{/if}
 		</section>

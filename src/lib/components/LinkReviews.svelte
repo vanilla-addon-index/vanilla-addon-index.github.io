@@ -1,23 +1,22 @@
 <script lang="ts">
 	import { entryHref } from '#lib/entry-href.ts';
 	import { store } from '#lib/addons.svelte.ts';
-	import { loadLinkRequests, decideLink, type LinkRequest } from '#lib/link-reviews.svelte.ts';
-	let { query = '', oncount }: { query?: string; oncount: (count: number) => void } = $props();
-	let requests = $state<LinkRequest[]>([]), loaded = $state(false), busy = $state<number>(), error = $state('');
-	const matching = $derived(requests.filter(r => [store.addons.find(a => a.id === r.addon_id)?.name, r.url, r.proposer?.username].join(' ').toLowerCase().includes(query.trim().toLowerCase())));
-	loadLinkRequests().then(rows => { requests = rows; loaded = true; oncount(rows.length); }).catch(e => error = e.message);
+	import { decideLink, type LinkRequest } from '#lib/link-reviews.svelte.ts';
+	import type { createModerationQueue } from '#lib/moderation-queue.svelte.ts';
+	let { queue }: { queue: ReturnType<typeof createModerationQueue<LinkRequest>> } = $props();
+	let busy = $state<number>(), error = $state('');
 	async function decide(r: LinkRequest, accept: boolean) {
 		busy = r.id; error = '';
-		try { await decideLink(r.id, accept); requests = requests.filter(row => row.id !== r.id); oncount(requests.length); }
+		try { await decideLink(r.id, accept); queue.remove(r.id); }
 		catch (e) { error = (e as Error).message; }
 		finally { busy = undefined; }
 	}
 </script>
 
 <section aria-label="Link suggestions">
-	{#if error}<p class="mb-3 text-danger" role="alert">{error}</p>{/if}
-	{#if !loaded}<p class="mb-3 text-muted">Loading link suggestions…</p>{/if}
-	{#each matching as request (request.id)}
+	{#if error || queue.error}<p class="mb-3 text-danger" role="alert">{error || queue.error}</p>{/if}
+	{#if !queue.loaded && queue.loading}<p class="mb-3 text-muted">Loading link suggestions…</p>{/if}
+	{#each queue.rows as request (request.id)}
 		{@const addon = store.addons.find(a => a.id === request.addon_id)}
 		<div class="panel mb-4 p-4">
 			<h2 class="font-bold">New link for {#if addon}<a class="text-accent" href={entryHref(addon)}>{addon.name}</a>{:else}unavailable addon{/if}</h2>
@@ -34,4 +33,9 @@
 			</div>
 		</div>
 	{/each}
+	{#if queue.hasMore || (!queue.loaded && queue.error)}
+		<button class="btn mb-4 w-full" disabled={queue.loading} onclick={queue.loadMore}>
+			{queue.loaded ? 'Show more link suggestions' : 'Retry loading link suggestions'}
+		</button>
+	{/if}
 </section>
