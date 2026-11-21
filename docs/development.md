@@ -28,6 +28,7 @@ time; `npm run local:stop` stops it.
 | `npm test` | Database permissions, parsers, importer and workflow behavior | Git, Bash and jq; database tests use Postgres inside Node |
 | `npm run check` | Svelte and TypeScript checks | Installed dependencies |
 | `npm run build` | Production static build | Installed dependencies |
+| `npm run test:performance` | Production-build request and payload budgets using fixtures | Playwright Chromium |
 | `npm run test:e2e` | Browser tests against a reset local backend | Docker and Playwright Chromium |
 
 On Windows, shell tests use Git Bash from a standard Git installation; put jq on
@@ -35,12 +36,18 @@ On Windows, shell tests use Git Bash from a standard Git installation; put jq on
 
 ```sh
 npx playwright install chromium
+npm run test:performance
 npm run test:e2e
 ```
 
 On Linux, Playwright may also need its system dependencies; CI uses
 `npx playwright install --with-deps chromium`. The test suites do not write to the
 hosted database. Browser tests reset the local backend.
+
+The performance suite builds a 1,077-entry synthetic publication and uses a
+1,200-entry import queue. It blocks external requests and answers the simulated
+Supabase calls in the test. Its limits in [budgets.spec.ts](../tests/performance/budgets.spec.ts)
+measure request counts and gzip sizes, without relying on wall-clock timings.
 
 ## Database changes
 
