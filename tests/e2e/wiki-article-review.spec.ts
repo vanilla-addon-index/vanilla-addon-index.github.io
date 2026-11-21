@@ -7,7 +7,8 @@ test('wiki download links appear as ordinary import cards and group through norm
 	const name=unique('WikiLinks').replace(/\W/g,'');
 	execFileSync('docker',['exec','-i','supabase_db_vanilla-addon-index','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:`insert into public.import_queue(key,url,name,description) values('turtle-wow.fandom.com/wiki/${name.toLowerCase()}','https://turtle-wow.fandom.com/wiki/${name}','Old${name}','Old listing description.');`,encoding:'utf8'});
 	await page.route('https://turtle-wow.fandom.com/api.php?*',route=>route.fulfill({json:{parse:{title:name,redirects:[{from:'Old'+name,to:name}],revid:123,wikitext:`Automates repetitive interactions.\n\n== Git links ==\n[https://github.com/wiki-first/${name} First]\n'''[https://github.com/wiki-second/${name} Second]'''\n*[https://github.com/wiki-recommended/${name} Third] - Recommended`}}}));
-	await loginAs(page,'admin');
+	// The main admin account can reach its hourly edit limit in the full suite.
+	await loginAs(page,'admin2');
 	await page.goto('/admin/import');
 	await page.getByLabel('Search',{exact:true}).fill(name);
 	await expect(page.locator('[data-entry]')).toHaveCount(3);
@@ -27,10 +28,12 @@ test('wiki download links appear as ordinary import cards and group through norm
 	await first.getByLabel('Category',{exact:true}).selectOption('Miscellaneous');
 	await first.getByRole('button',{name:'Approve',exact:true}).click();
 	await expect(page.locator('[data-entry]')).toHaveCount(2);
-	await expand(row('wiki-second'));
-	await page.getByRole('button',{name:`Add link to ${name}`,exact:true}).first().click();
+	const second = row('wiki-second');
+	await expand(second);
+	await second.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
 	await expect(page.locator('[data-entry]')).toHaveCount(1);
-	await page.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
+	await expand(recommended);
+	await recommended.getByRole('button',{name:`Add link to ${name}`,exact:true}).click();
 	await expect(page.locator('[data-entry]')).toHaveCount(0);
 	await page.goto(`/addon/${name.toLowerCase()}`);
 	await expect(page.getByRole('heading',{level:1,name})).toBeVisible();
