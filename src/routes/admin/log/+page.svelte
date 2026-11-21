@@ -373,6 +373,7 @@
 		try {
 			const confirmed = await ask({ title: action.title, body: action.body, action: action.label, danger: action.danger });
 			if (!confirmed) return;
+			delete outcomes[entry.id];
 			const result = await action.run();
 			const row = document.getElementById(`log-${entry.id}`);
 			const top = row?.getBoundingClientRect().top;
@@ -545,9 +546,10 @@
 							{:else if recovery?.reason}
 								<p class="text-sm text-muted">{recovery.reason}</p>
 							{/if}
-							{#if active === entry.id}<p class="text-sm text-muted" role="status">Recovering…</p>{/if}
 							{#if outcomes[entry.id]}
 								<p class={['text-sm break-words', outcomes[entry.id].failed ? 'text-danger' : 'text-accent']} role="status">{outcomes[entry.id].text}</p>
+							{:else if active === entry.id}
+								<p class="text-sm text-muted" role="status">Recovering…</p>
 							{/if}
 							{#if reportReason}
 								<p class="text-muted">{details?.report_id ? `Report #${details.report_id} · ` : ''}{reportReason}</p>

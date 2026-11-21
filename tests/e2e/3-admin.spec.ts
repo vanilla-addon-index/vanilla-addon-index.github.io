@@ -144,7 +144,9 @@ test('an import is approved as it is, another with changes, and one is rejected 
 	// Rejected, then put back from the list of rejected entries.
 	const third = page.locator('[data-entry]').first();
 	const thirdName = await third.getByLabel('Name').inputValue();
+	const rejection = page.waitForResponse('**/rest/v1/rpc/decide_imports');
 	await third.getByRole('button', { name: 'Reject' }).click();
+	expect((await rejection).ok()).toBe(true);
 	await expect.poll(() => waiting(page)).toBe(before - 3);
 	await page.getByRole('button', { name: /^Rejected/ }).click();
 	await page.locator('.panel > div').filter({ hasText: thirdName }).getByRole('button', { name: 'Put back in the queue' }).click();
@@ -165,8 +167,27 @@ test('an import is approved as it is, another with changes, and one is rejected 
 	await expect(logLine(page, new RegExp(`edited\\s+${renamed}`))).toHaveCount(0);
 	await openLogLine(approval);
 	await approval.getByRole('button', { name: 'Back to the queue' }).click();
-	await confirm(page, 'Back to the queue');
-	await expect(approval.getByRole('status')).toHaveText(`"${renamed}" is back in the import queue.`);
+
+	// Hold the recovery status refresh so the check also covers a slow response.
+	const refreshUrl = '**/rest/v1/rpc/log_recovery_status';
+	const refresh = Promise.withResolvers<void>();
+	await page.route(refreshUrl, async route => {
+		await refresh.promise;
+		await route.continue();
+	});
+	const refreshRequest = page.waitForRequest(refreshUrl);
+	try {
+		await confirm(page, 'Back to the queue');
+		await refreshRequest;
+		const details = approval.getByRole('region', { name: 'Entry details' });
+		await expect(details.getByRole('status').filter({
+			hasText: `"${renamed}" is back in the import queue.`
+		})).toBeVisible();
+		await expect(details.getByText('Recovering…', { exact: true })).toHaveCount(0);
+	} finally {
+		refresh.resolve();
+		await page.unroute(refreshUrl);
+	}
 	await page.goto('/admin/import');
 	await expect.poll(() => waiting(page)).toBe(before - 1);
 });
