@@ -32,6 +32,9 @@ test('Trash and History find an older recoverable entry beyond the API row cap',
   await expect(page.getByRole('status')).toHaveText('Showing 200 of 1106 matching entries.');
   await search.fill(name.toLowerCase());
   await expect(page.getByRole('status')).toHaveText('Showing 1 of 1 matching entries.');
+  const result = page.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+  await expect(result).toHaveAttribute('aria-expanded', 'false');
+  await result.click();
   await page.getByRole('button',{name:'Restore',exact:true}).click();
   await expect(page.getByText(`Restored "${name}".`,{exact:false})).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Showing 0 of 0 matching entries.');
@@ -81,9 +84,13 @@ test('the owner can permanently delete one entry but cannot empty the whole tras
  await expect(page.getByRole('button',{name:'Empty the trash',exact:true})).toHaveCount(0);
  const first=page.locator('#trash-9001');
  const second=page.locator('#trash-9002');
- await expect(first.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','true');
+ await expect(first.locator('[data-act="review"]')).toHaveAttribute('aria-expanded','false');
+ await expect(first.getByRole('group',{name:'Entry actions'})).toBeHidden();
  await expect(second.getByRole('group',{name:'Entry actions'})).toBeHidden();
  await second.locator('[data-act="review"]').click();
+ await expect(second.getByRole('group',{name:'Entry actions'})).toBeVisible();
+ await second.locator('[data-act="review"]').click();
+ await expect(second.getByRole('group',{name:'Entry actions'})).toBeHidden();
  await expect(first.getByRole('group',{name:'Entry actions'})).toBeHidden();
  await first.locator('[data-act="review"]').click();
  await first.getByRole('button',{name:'Delete forever',exact:true}).click();

@@ -48,13 +48,20 @@ test('phone admin entries come before expandable filters and navigation can be s
 	await expect.poll(async () => (await navigation.boundingBox())!.height).toBeLessThan(60);
 	await navigation.getByRole('link', { name: 'Users', exact: true }).click();
 	await expect(page.getByRole('searchbox', { name: 'Search accounts' })).toBeInViewport();
+	const accountList = page.getByRole('region', { name: 'Admin content' });
+	await expect(accountList.locator('article[id^="user-"] [data-act="review"]').first()).toHaveAttribute('aria-expanded', 'false');
 	await page.getByRole('searchbox', { name: 'Search accounts' }).fill('member2');
-	const account = page.getByRole('region', { name: 'Admin content' }).getByRole('article')
+	const account = accountList.getByRole('article')
 		.filter({ has: page.getByRole('button', { name: /^member2\b/ }) });
-	await expect(account.getByRole('button', { name: /^member2\b/ })).toHaveAttribute('aria-expanded', 'true');
+	const toggle = account.getByRole('button', { name: /^member2\b/ });
+	await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+	await toggle.click();
+	await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 	const profile = account.getByRole('link', { name: 'Open profile', exact: true });
 	await expect(profile).toBeVisible();
 	await expect(profile).toHaveAttribute('href', '/admin/users/profile?name=member2');
+	await toggle.click();
+	await expect(profile).toBeHidden();
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await expect(page.getByRole('button', { name: 'Page details and filters', exact: true })).toBeHidden();
 	await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
