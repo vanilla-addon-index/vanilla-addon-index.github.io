@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       refresh-imports:
-        description: Refresh wiki import candidates without fetching repository facts.
+        description: Refresh import candidates and check commit dates for new links.
         type: boolean
         default: false
       prepared:
@@ -55,6 +55,7 @@ jobs:
         continue-on-error: true
         env:
           NIGHTLY_TOKEN: ${{ secrets.NIGHTLY_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/refresh-imports.mjs
       - name: Report import refresh failure
         if: ${{ !cancelled() && (steps.imports.outcome == 'failure' || steps.current.outcome == 'failure') }}

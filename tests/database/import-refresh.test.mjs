@@ -17,9 +17,9 @@ test('lightweight refresh clears pending category guesses without replacing revi
 			if (endpoint.includes('octowow.st/git/api/')) return new Response(JSON.stringify({ok:true,data:[]}));
 			if (endpoint.includes('turtle-wow.fandom.com/api.php')) body = {parse:{revid:1, wikitext:`===Full Addons List===\n* [${url} CerniesWonderfulFunctions] Script methods helping players create macros\n==SuperWoW Addons==\n==ClassicAPI Addons==\n==Further Addons Collections==`}};
 			else {
-				assert.ok(/\/rpc\/queue_(octowow_)?imports$/.test(endpoint), endpoint);
-				const {items, token} = JSON.parse(init.body);
-				body = await db.queueImports(items, token);
+				assert.ok(endpoint.endsWith('/rpc/queue_import_candidates'), endpoint);
+				const {items, token, source} = JSON.parse(init.body);
+				body = (await db.asVisitor(q => q('select public.queue_import_candidates($1, $2::jsonb, $3) as urls', [token, JSON.stringify(items), source])))[0].urls;
 			}
 			return new Response(JSON.stringify(body), {headers:{'content-type':'application/json'}});
 		};
@@ -44,5 +44,37 @@ test('new imports stay uncategorized and cannot publish a new page without a rev
 		assert.deepEqual(await db.sql('select * from public.addons'), []);
 		await db.as(admin, q => q('select public.publish_import($1, $2::jsonb)', [id, JSON.stringify({name:'UnknownWidget', description:'Includes a button.', category:'Chat & Social', images:[]})]));
 		assert.equal((await db.sql('select category from public.addons'))[0].category, 'Chat & Social');
+	} finally { await db.close(); }
+});
+
+test('Deploy returns only inserted links and seeds dates on both sides of approval', async () => {
+	const db = await createDb();
+	const early = 'https://github.com/a/early/tree/vanilla/Addon';
+	const late = 'https://octowow.st/git/a/late';
+	const row = (url, date) => ({url, date, history_url: url + '/commits'});
+	const rpc = async (sql, params) => (await db.asVisitor(q => q(sql, params)))[0].result;
+	const queue = (source, url, token = NIGHTLY_TOKEN) => rpc('select public.queue_import_candidates($1, $2::jsonb, $3) as result', [token, JSON.stringify([{url, name:source}]), source]);
+	const seed = (...updates) => rpc('select public.seed_import_code_updates($1, $2::jsonb) as result', [NIGHTLY_TOKEN, JSON.stringify(updates)]);
+	const approve = async (admin, url, name) => {
+		const [{id}] = await db.sql('select id from public.import_queue where url = $1', [url]);
+		await db.as(admin, q => q('select public.publish_import($1, $2::jsonb)', [id, JSON.stringify({name, description:'Test addon', category:'Chat & Social'})]));
+	};
+	try {
+		const admin = await db.addUser('importer', 'admin');
+		const date = '2024-01-02T00:00:00.000Z';
+		await assert.rejects(queue('wiki', early, 'wrong-token'), /Only the nightly job/);
+		assert.deepEqual(await queue('wiki', early), [early]);
+		assert.deepEqual(await queue('wiki', early), []);
+		assert.deepEqual(await queue('octowow', late), [late]);
+		assert.deepEqual(await queue('octowow', late), []);
+		assert.equal(await seed(row(early, date), row('https://github.com/a/unqueued', date)), 1);
+		await approve(admin, early, 'Early');
+		await approve(admin, late, 'Late');
+		assert.equal(await seed(row(early, '2020-01-01'), row(late, date)), 1);
+		const published = await db.sql('select name, link_code_updates from public.addons order by name');
+		assert.deepEqual(published, [
+			{name:'Early', link_code_updates:{[early]:{date:'2024-01-02T00:00:00+00:00', url:early + '/commits'}}},
+			{name:'Late', link_code_updates:{[late]:{date:'2024-01-02T00:00:00+00:00', url:late + '/commits'}}}
+		]);
 	} finally { await db.close(); }
 });
