@@ -313,6 +313,7 @@
 			}
 			// "saving" stays on until the addon's page has replaced this one, so the form does
 			// not flick back to its idle state on the way out.
+			if (showWikiHelper) void import('#lib/components/WikiSubmissionDialog.svelte').catch(() => {});
 			await goto(entryHref(addon));
 			if (showWikiHelper) wikiThanks.addon = $state.snapshot(input);
 		} catch (e) {
