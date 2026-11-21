@@ -176,6 +176,23 @@ function repositoryApi(place: ForgePlace, repo: ReturnType<ForgeSite['read']>) {
 	return place.kind === 'gitlab' ? `https://${place.host}/api/v4/projects/${encodeURIComponent(repo.id)}` : `https://${forgeHostPath(place.host)}/api/v1/repos/${encodePath(repo.project)}`;
 }
 
+function commitUpdate(site: ForgeSite, place: ForgePlace, project: string, ref: string, commits: Awaited<ReturnType<Ask>>): CodeUpdate | null {
+	const date = commits?.status === 200 && Array.isArray(commits.body) ? site.commitDate(commits.body[0]) : undefined;
+	return date && Number.isFinite(Date.parse(date)) ? { date, url: site.history(place, project, ref) } : null;
+}
+
+/** Fetch only the commit date for a newly imported link. */
+export async function forgeCodeUpdate(place: ForgePlace, ask: Ask): Promise<CodeUpdate | null> {
+	const site = SITES[place.kind];
+	const answer = await ask(site.repo(place), 'json');
+	if (answer?.status !== 200 || !answer.body || typeof answer.body !== 'object') return null;
+	const repo = site.read(answer.body as Record<string, any>);
+	const ref = place.ref || repo.branch;
+	if (!repo.project || !ref) return null;
+	const commits = await ask(site.commits(repositoryApi(place, repo), ref, place.path), 'json');
+	return commitUpdate(site, place, repo.project, ref, commits);
+}
+
 async function fileText(site: ForgeSite, api: string, ref: string, path: string, ask: Ask) {
 	const file = await ask(site.file(api, ref, path), 'text');
 	return file?.status === 404 ? '' : file?.status === 200 && typeof file.body === 'string' ? file.body : null;
@@ -269,11 +286,11 @@ export async function askForge(place: ForgePlace, ask: Ask, wantReadme = false, 
 		// A root link already has its history in the branch check. Folder history is
 		// requested only after that branch changed or the previous history check failed.
 		const commits = cache && !place.path ? branch : await ask(site.commits(api, readRef, place.path), 'json');
-		const last = commits?.status === 200 && Array.isArray(commits.body) ? site.commitDate(commits.body[0]) : undefined;
-		if (last && Number.isFinite(Date.parse(last))) {
-			facts.pushed_at = last;
-			facts.code_update = { date: last, url: site.history(place, repo.project, ref) };
-			if (state) state.history = { date: last };
+		const update = commitUpdate(site, place, repo.project, ref, commits);
+		if (update) {
+			facts.pushed_at = update.date;
+			facts.code_update = update;
+			if (state) state.history = { date: update.date };
 		}
 	}
 	if (same && previous?.toc) {
