@@ -1,6 +1,7 @@
 // Calls behind the admin panel's Log, Trash and Users tabs. The database checks the
 // caller's rights on every one of them; see the moderation migration.
 import { PROVIDER_NAMES } from './config';
+import { pinChange, type PinChange } from './history';
 import { refreshAdminBadges } from './admin-badges.svelte';
 import { linkKey } from './links';
 import { supabase } from './supabase';
@@ -20,6 +21,18 @@ export interface LogEntry {
 		changed?: string[];
 		before?: Record<string, unknown>;
 		after?: Record<string, unknown>;
+		pin_change?: PinChange;
+		source?: string;
+		decision?: 'mirror' | 'independent' | 'removed';
+		previous?: { source?: string; decision?: string };
+		related_addon_id?: number;
+		urls?: string[];
+		fields?: string[];
+		request_id?: number;
+		report_id?: number;
+		unchanged?: boolean;
+		added?: number;
+		removed?: number;
 		reason?: string;
 		trashed?: boolean;
 		url?: string;
@@ -78,6 +91,8 @@ export const ACTION_TEXT: Record<string, string> = {
 	'addon.recovery': 'recovered an edit of',
 	'addon.delete': 'deleted',
 	'addon.merge': 'merged away',
+	'addon.split': 'moved a download link from',
+	'addon.retire_link': 'retired an unavailable download link for',
 	'addon.purge': 'trashed (with a ban)',
 	'addon.restore': 'restored',
 	'group.add': 'grouped versions under',
@@ -92,17 +107,62 @@ export const ACTION_TEXT: Record<string, string> = {
 	'report.dismiss': 'dismissed a report about',
 	'report.reopen': 'reopened a report about',
 	'import.approve': 'approved the import of',
+	'import.attach': 'approved an import as a download link for',
+	'import.discord_upload': 'queued repositories from',
+	'import.discord_clear': 'cleared pending',
 	'import.submitted': 'submitted a link already waiting for import:',
 	'import.reject': 'rejected the import of',
+	'import.dead': 'marked the import as unavailable for',
 	'import.requeue': 'put back in the import queue',
+	'review.edit.proposed': 'proposed an edit to',
+	'review.edit.revised': 'revised an edit proposal for',
+	'review.edit.accepted': 'accepted an edit proposal for',
+	'review.edit.rejected': 'rejected an edit proposal for',
+	'review.edit.withdrawn': 'withdrew an edit proposal for',
+	'review.link.proposed': 'suggested a download link for',
+	'review.link.revised': 'revised a download link suggestion for',
+	'review.link.accepted': 'accepted a download link suggestion for',
+	'review.link.rejected': 'rejected a download link suggestion for',
+	'review.link.withdrawn': 'withdrew a download link suggestion for',
 	'account.delete': 'deleted',
 	'user.admin': 'made an admin of',
 	'user.unadmin': 'took the admin rights of',
 	'user.ban': 'banned',
 	'user.unban': 'unbanned',
 	'user.autosuspend': 'was suspended automatically:',
-	'user.rollback': 'rolled back everything done by'
+	'user.rollback': 'ran a rollback for'
 };
+
+export function actionText({ action, details }: LogEntry): string {
+	if (action === 'addon.update' && details?.changed?.length === 1 && details.changed[0] === 'pinned_link') {
+		const change = details.pin_change ?? pinChange(details.before, details.after);
+		if (change === 'pinned') return 'pinned a download link for';
+		if (change === 'unpinned') return 'unpinned a download link for';
+		if (change === 'repinned') return 'changed the pinned download link for';
+	}
+	if (action === 'addon.mirror') {
+		if (details?.decision === 'independent') return 'restored a mirror as a download link for';
+		if (details?.decision === 'removed') return 'unlinked a mirror from';
+		if (details?.decision === 'mirror') {
+			if (details.previous?.decision !== 'mirror') return 'attached a mirror to';
+			return details.previous.source === details.source ? 'confirmed a mirror for' : 'changed the source of a mirror for';
+		}
+	}
+	if (action === 'addon.merge' && details?.related_addon_id) return 'merged';
+	if (action === 'addon.recovery' && details?.unchanged) return 'recorded that an edit was already undone for';
+	return ACTION_TEXT[action] ?? action;
+}
+
+export function actionTarget({ action, details }: LogEntry): string {
+	if (!details?.target) return '';
+	switch (action) {
+		case 'group.decline':
+		case 'group.suggest': return `with ${details.target}`;
+		case 'addon.merge': return `into ${details.target}`;
+		case 'addon.split': return `to ${details.target}`;
+		default: return '';
+	}
+}
 
 export const TRASH_DAYS = 90;
 export const LOG_PAGE = 100;
@@ -170,15 +230,16 @@ export async function loadLog(filter: LogFilter = {}, before?: number, limit = L
 			if (error) throw new Error(error.message);
 			if (latestExample) query = query.or(`details->>local_demo.eq.log,id.gt.${latestExample.id}`);
 		}
-		if (filter.kind) query = query.like('action', `${filter.kind}.%`);
-		if (filter.addonId) query = query.eq('addon_id', filter.addonId);
+		if (filter.kind === 'user') query = query.or('action.like.user.%,action.like.account.%');
+		else if (filter.kind) query = query.like('action', `${filter.kind}.%`);
+		if (filter.addonId) query = query.or(`addon_id.eq.${filter.addonId},details->>related_addon_id.eq.${filter.addonId}`);
 		if (filter.by) query = query.eq('actor_name', filter.by);
 		if (filter.recoveryId) query = query.eq('recovery_actor', filter.recoveryId);
 		const text = filter.q?.trim();
 		if (text) {
 			// Quoted, so a comma or bracket in what was typed is searched for, not read as syntax.
 			const pattern = `"*${text.replace(/[\\"]/g, '\\$&')}*"`;
-			query = query.or(`subject.ilike.${pattern},actor_name.ilike.${pattern}`);
+			query = query.or(`subject.ilike.${pattern},actor_name.ilike.${pattern},details->>target.ilike.${pattern}`);
 		}
 		if (before) query = query.lt('id', before);
 	}
@@ -266,7 +327,8 @@ export async function loadTrashIds(ids: number[]) {
 export const undoGrouping = (logId: number) => call<null>('undo_grouping', { log_id: logId });
 
 /** Undoes an approval: the addon goes to the trash and its entry is back in the import queue. */
-export const unapproveImport = (addonId: number) => callAndRefreshBadges<null>('unapprove_import', { target: addonId });
+export const requeueImportApproval = (logId: number) =>
+	callAndRefreshBadges<boolean>('requeue_import_approval', { log_id: logId });
 
 /** Puts a rejected import back in the queue, found by its link. False when it was not rejected any more. */
 export async function requeueImport(url: string) {

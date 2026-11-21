@@ -4,7 +4,7 @@
 	import HistoryComparison from '#lib/components/HistoryComparison.svelte';
 	import LogAddonHistory from '#lib/components/LogAddonHistory.svelte';
 	import { REASONS } from '#lib/reports.svelte.ts';
-	import { fieldLabel, changeSummary } from '#lib/history.ts';
+	import { fieldLabel, changeSummary, safeHistoryUrl } from '#lib/history.ts';
 	import { recoveryComparison, type RecoveryComparison } from '#lib/admin.ts';
 	import AdminToolbar from '#lib/components/AdminToolbar.svelte';
 	import AdminSidebarContent from '#lib/components/AdminSidebarContent.svelte';
@@ -16,6 +16,8 @@
 	import { page } from '$app/state';
 	import {
 		ACTION_TEXT,
+		actionTarget,
+		actionText,
 		LOG_PAGE,
 		loadLog,
 		loadTrashIds,
@@ -23,10 +25,10 @@
 		type RecoveryStatus,
 		remembered,
 		requeueImport,
+		requeueImportApproval,
 		reopenReport,
 		restoreAddon,
 		revertEdit,
-		unapproveImport,
 		unbanByName,
 		undoGrouping,
 		type LogEntry,
@@ -45,11 +47,12 @@
 		group: 'Groups',
 		import: 'Imports',
 		report: 'Reports',
+		review: 'Edit and link reviews',
 		user: 'Accounts',
 		trash: 'Trash'
 	} as const;
 	const BADGES: Record<string, string> = {
-		addon: 'Addon', group: 'Group', import: 'Import', report: 'Report',
+		addon: 'Addon', group: 'Group', import: 'Import', report: 'Report', review: 'Review',
 		user: 'Account', account: 'Account', trash: 'Trash'
 	};
 
@@ -61,7 +64,7 @@
 		if (Number.isSafeInteger(entryId) && entryId > 0) return { entryId };
 		const kind = params.get('kind') ?? '';
 		return {
-			kind: kind in GROUPS && kind !== 'all' ? kind : undefined,
+			kind: Object.hasOwn(GROUPS, kind) && kind !== 'all' ? kind : undefined,
 			addonId: Number(params.get('addon')) || undefined,
 			by: params.get('by') || undefined,
 			recoveryId: params.get('recovery') || undefined,
@@ -117,14 +120,9 @@
 			const next = await loadLog(wanted, older ? entries.at(-1)?.id : undefined);
 			if (mine !== asked) return;
 			const combined = older ? [...entries, ...next] : next;
-			const [trash, status] = await Promise.all([
-				loadTrashIds(combined.flatMap(entry => entry.details?.trash_id === undefined ? [] : [entry.details.trash_id])),
-				loadRecoveryStatus(combined.map(entry => entry.id))
-			]);
-			if (mine !== asked) return;
 			entries = combined;
-			inTrash = trash;
-			recoveries = status;
+			inTrash = new Set();
+			recoveries = {};
 			if (!filtered) remembered.log = entries;
 			more = next.length === LOG_PAGE;
 			loaded = true;
@@ -141,10 +139,20 @@
 				summary?.focus({ preventScroll: true });
 				summary?.scrollIntoView({ block: 'start' });
 			}
-
+			try {
+				await refreshStatus(false);
+			} catch (e) {
+				if (mine === asked) error = `The log loaded. Recovery status is unavailable. ${(e as Error).message}`;
+			}
 		} catch (e) {
 			if (mine === asked) {
 				error = (e as Error).message;
+				if (!older) {
+					entries = [];
+					more = false;
+				}
+				loaded = true;
+				inTrash = new Set();
 				recoveries = {};
 			}
 		} finally {
@@ -163,7 +171,9 @@
 	const live = (id: number | null) => store.addons.find((a) => a.id === id);
 	// The addon whose history is shown, by the name it has now or had in its last line.
 	const historyOf = $derived(
-		filter.addonId ? (live(filter.addonId)?.name ?? entries.find((e) => e.subject)?.subject ?? 'this addon') : ''
+		filter.addonId ? (live(filter.addonId)?.name ??
+			entries.find((e) => e.addon_id === filter.addonId && e.subject)?.subject ??
+			entries.find((e) => e.details?.related_addon_id === filter.addonId)?.details?.target ?? 'this addon') : ''
 	);
 	let comparison = $state<RecoveryComparison>();
 	let comparisonError = $state('');
@@ -258,19 +268,19 @@
 			case 'addon.restore':
 				return remove ? [remove] : [];
 			case 'import.approve':
-				return addon && remove
-					? [
-							{
-								label: 'Back to the queue',
-								danger: true,
-								title: `Send "${addon.name}" back to the import queue?`,
-								body: 'The addon goes to the trash and its entry waits for review again.',
-								run: () => unapproveImport(addon.id),
-								done: `"${addon.name}" is back in the import queue.`
-							},
-							remove
-						]
-					: [];
+			case 'import.attach':
+				if (!addon || !remove) return [];
+				return [
+					...(outcomes[entry.id] && !outcomes[entry.id].failed ? [] : [{
+						label: 'Back to the queue',
+						danger: true,
+						title: `Send this import for "${addon.name}" back to the queue?`,
+						body: 'This import goes back to review. On a shared page, only the approved download link is removed.',
+						run: () => requeueImportApproval(entry.id),
+						done: 'The import is back in the queue.'
+					}]),
+					...(entry.action === 'import.approve' ? [remove] : [])
+				];
 			case 'addon.delete': {
 				const trashId = entry.details?.trash_id;
 				return trashId !== undefined && inTrash.has(trashId)
@@ -341,7 +351,7 @@
 	}
 
 	// Refresh status without replacing or prepending any of the loaded log entries.
-	async function refreshStatus() {
+	async function refreshStatus(refreshComparison = true) {
 		const mine = asked;
 		const current = entries;
 		const [trash, status] = await Promise.all([
@@ -352,7 +362,7 @@
 		inTrash = trash;
 		recoveries = status;
 		const selected = current.find(entry => entry.id === selectedId);
-		if (selected) await inspect(selected);
+		if (refreshComparison && selected) await inspect(selected);
 	}
 
 	async function undo(entry: LogEntry, action: Undo) {
@@ -456,11 +466,11 @@
 <div class="panel">
 	{#if !loaded}
 		<p class="px-3 py-8 text-center text-muted">Loading the log…</p>
-	{:else if !entries.length}
+	{:else if !entries.length && !error}
 		<p class="px-3 py-8 text-center text-muted">
 			{filter.entryId ? 'This log entry is unavailable or no longer exists.' : filtered ? 'No line matches.' : 'Nothing has been logged yet.'}
 		</p>
-	{:else}
+	{:else if entries.length}
 		{#each entries as entry (entry.id)}
 			{@const addon = live(entry.addon_id)}
 			{@const kind = entry.action.split('.')[0]}
@@ -468,11 +478,9 @@
 			<ReviewQueueRow rowId={`log-${entry.id}`} selected={selectedId === entry.id} collapsible onselect={() => selectEntry(entry)}>
 				{#snippet title()}
 					{entry.actor_name ?? 'The system'}
-					<span class="font-normal text-muted">{ACTION_TEXT[entry.action] ?? entry.action}</span>
+					<span class="font-normal text-muted">{actionText(entry)}</span>
 					{entry.action === 'user.autosuspend' ? entry.details?.reason : entry.subject}
-					{#if entry.action === 'group.decline' && entry.details?.target}
-						<span class="font-normal text-muted">with</span> {entry.details.target}
-					{/if}
+					{actionTarget(entry)}
 					{#if entry.details?.trashed}<span class="font-normal text-muted">and trashed their addons</span>{/if}
 				{/snippet}
 				{#snippet badges()}
@@ -489,6 +497,9 @@
 					{@const canEdit = addon && entry.details?.changed && entry.details.before && !recovery?.recovery_id}
 					{@const canReviewGroup = addon && entry.details?.groups_before?.length && recovery?.reason}
 					{@const details = entry.details}
+					{@const related = live(details?.related_addon_id ?? null)}
+					{@const urls = details?.url ? [details.url] : (details?.urls ?? [])}
+					{@const discordAction = ['import.discord_upload', 'import.discord_clear'].includes(entry.action)}
 					{@const reportReason = kind === 'report' && details?.reason ? Object.entries(REASONS).find(([key]) => key === details.reason)?.[1] ?? details.reason : undefined}
 					{@const removed = entry.action === 'trash.purge' && details?.names && details.names.length > 1 ? details.names : undefined}
 					<div class="space-y-2">
@@ -499,10 +510,13 @@
 							{/if}
 						</p>
 
-						{#if addon || details?.undid || actions.length}
+						{#if addon || related || details?.undid || actions.length}
 							<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Entry actions">
 								{#if addon}
 									<a href={entryHref(addon)} class="btn py-1">{canReviewGroup ? 'Review current grouping' : 'Open the addon'}</a>
+								{/if}
+								{#if related}
+									<a href={entryHref(related)} class="btn py-1">Open {related.name}</a>
 								{/if}
 								{#if canEdit && addon}
 									<a class="btn py-1" href={resolve(`/submit?edit=${addon.slug}&review=${entry.id}`)}>Edit current addon</a>
@@ -533,9 +547,31 @@
 							{#if outcomes[entry.id]}
 								<p class={['text-sm break-words', outcomes[entry.id].failed ? 'text-danger' : 'text-accent']} role="status">{outcomes[entry.id].text}</p>
 							{/if}
-							{#if reportReason}<p class="text-muted">Reason <span class="ml-1 text-fg">{reportReason}</span></p>{/if}
-							{#if details?.url}
-								<p class="text-muted">Source <span class="ml-1 [overflow-wrap:anywhere] text-fg">{details.url}</span></p>
+							{#if reportReason}
+								<p class="text-muted">{details?.report_id ? `Report #${details.report_id} · ` : ''}{reportReason}</p>
+							{/if}
+							{#if details?.request_id}
+								<p class="text-muted">
+									Request #{details.request_id}{details.fields?.length ? ` · ${details.fields.map(fieldLabel).join(', ')}` : ''}
+								</p>
+							{/if}
+							{#each urls as url (url)}
+								<p class="break-all text-muted">
+									{#if safeHistoryUrl(url)}<a href={safeHistoryUrl(url)} class="text-accent underline" rel="noopener noreferrer" target="_blank">{url}</a>{:else}{url}{/if}
+								</p>
+							{/each}
+							{#if entry.action === 'addon.mirror'}
+								{#if details?.previous?.source && (details.decision !== 'mirror' || details.previous.source !== details.source)}
+									<p class="break-all text-muted">Previous source · {details.previous.source}</p>
+								{/if}
+								{#if details?.decision === 'mirror' && details.source}
+									<p class="break-all text-muted">Source · {details.source}</p>
+								{/if}
+							{/if}
+							{#if entry.action === 'import.discord_upload'}
+								<p class="text-muted">{details?.added} added · {details?.skipped} skipped</p>
+							{:else if entry.action === 'import.discord_clear'}
+								<p class="text-muted">{details?.removed} pending entries removed</p>
 							{/if}
 
 							{#if entry.action === 'user.rollback'}
@@ -559,18 +595,19 @@
 							{/if}
 							{#if entry.details?.changed && entry.details.before}
 								<section aria-label="Changes">
-									<p class="text-sm text-muted">{changeSummary(entry.details.changed, entry.details.before, entry.details.after)}</p>
+									<p class="text-sm text-muted">{changeSummary(entry.details.changed, entry.details.before, entry.details.after, entry.details.pin_change)}</p>
 									{#if comparisonError}<p class="text-sm text-danger" role="alert">{comparisonError}</p>
 									{:else if !comparison}<p class="text-sm text-muted" role="status">Loading current content…</p>{/if}
 									<HistoryComparison {entry} {comparison} showSummary={false} />
 								</section>
 							{:else if entry.details?.changed}
 								<p class="text-sm text-muted">
-									Changed {entry.details.changed.map(fieldLabel).join(', ')}. What it looked like before is no longer kept.
+									{changeSummary(entry.details.changed, undefined, undefined, entry.details.pin_change)}. The before and after values are no longer available.
 								</p>
 							{/if}
 							{#if !recovery?.recovery_id && !recovery?.reason && !outcomes[entry.id] && active !== entry.id &&
-								!reportReason && !details?.url && !removed && !details?.changed && !details?.groups_before?.length &&
+								!reportReason && !urls.length && !details?.request_id && !discordAction &&
+								!removed && !details?.changed && !details?.groups_before?.length &&
 								entry.action !== 'user.rollback'}
 								<p class="text-muted">No additional details were recorded.</p>
 							{/if}

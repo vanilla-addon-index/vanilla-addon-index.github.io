@@ -88,7 +88,7 @@ for (const refreshFails of [false, true]) {
    await page.unroute('**/rest/v1/rpc/list_users');
   }
   await page.goto(`/admin/log?kind=user&q=${fixture.reviewer}`);
-  const rollback=logLine(page,new RegExp(`rolled back everything done by\\s+${fixture.reviewer}`));
+  const rollback=logLine(page,new RegExp(`ran a rollback for\\s+${fixture.reviewer}`));
   await openLogLine(rollback);
   await expect(page.getByText(/Cannot undo/).filter({hasText:fixture.name})).toContainText('A newer report from this member is already open');
   await page.reload();
