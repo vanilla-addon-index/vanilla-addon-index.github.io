@@ -103,6 +103,15 @@ describe('a bullet of the list', () => {
 		assert.deepEqual(entry.images, [0, 1, 2, 3, 4].map((i) => `https://i.imgur.com/${i}.png`));
 	});
 
+	test('different GitHub links to the same screenshot use only one slot', () => {
+		const direct = 'https://raw.githubusercontent.com/a/b/main/shot.png';
+		const links = [`[https://github.com/a/b/raw/main/shot.png Img1]`, `[${direct} Img2]`];
+		const others = ['a', 'b', 'c', 'd'].map((name) => `https://i.imgur.com/${name}.png`);
+		const shots = [...links, ...others.map((url) => `[${url} img]`)].join(' ');
+		const entry = only(`* [https://github.com/a/b Name] shows things ${shots}`);
+		assert.deepEqual(entry.images, [direct, ...others]);
+	});
+
 	test('"(obsolete)" marks the entry and comes off the name', () => {
 		const entry = only('* [https://github.com/a/b Old Thing (obsolete)] replaced long ago');
 		assert.equal(entry.name, 'OldThing');

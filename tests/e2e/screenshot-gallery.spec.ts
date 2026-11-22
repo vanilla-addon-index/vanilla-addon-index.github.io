@@ -4,6 +4,10 @@ test('screenshots wait until nearby, appear independently, and keep the viewer o
 	const name = 'Screenshot gallery';
 	const address = 'https://i.imgur.com/';
 	const images = ['gallery-slow.png', 'gallery-early.png', 'gallery-broken.png', 'gallery-last.png'];
+	const proxied = Buffer.from(address + images[1]).toString('hex');
+	const camo = (signature: string) => `https://camo.githubusercontent.com/${signature}/${proxied}`;
+	const lastImage = `https://raw.githubusercontent.com/example/addon/main/${images[3]}`;
+	const githubAlias = `https://github.com/example/addon/raw/main/${images[3]}`;
 	const description = Array(150).fill('A long addon description keeps the screenshots well below the first screen.').join('\n');
 	const requested: string[] = [];
 	let releaseSlow!: () => void;
@@ -13,10 +17,21 @@ test('screenshots wait until nearby, appear independently, and keep the viewer o
 	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.route('**/rest/v1/addons?*', route => route.fulfill({ json: [{
 		id: 98002, slug: 'screenshot-gallery', name, description, category: 'Combat', versions: [],
-		images: images.map(image => address + image), similar_addons: 'More addons'
+		images: [address + images[0], camo('abc'), camo('def'), address + images[2], githubAlias, lastImage],
+		similar_addons: 'More addons'
 	}] }));
 	await page.route('**/rest/v1/rpc/addon_mirrors', route => route.fulfill({ json: [] }));
 	await page.route('https://static.cloudflareinsights.com/**', route => route.abort());
+	let proxyRequests = 0;
+	await page.route('https://camo.githubusercontent.com/**', route => {
+		proxyRequests++;
+		return route.fulfill({ status: 403 });
+	});
+	await page.route(githubAlias, route => route.fulfill({ contentType: 'image/png', body: png }));
+	await page.route(lastImage, route => {
+		requested.push(images[3]);
+		return route.fulfill({ contentType: 'image/png', body: png });
+	});
 	await page.route('https://i.imgur.com/gallery-*.png', async route => {
 		const image = new URL(route.request().url()).pathname.slice(1);
 		requested.push(image);
@@ -44,6 +59,7 @@ test('screenshots wait until nearby, appear independently, and keep the viewer o
 		await expect(shot(4)).toBeVisible();
 		await expect(shots).toHaveCount(2);
 		expect([...requested].sort()).toEqual([...images].sort());
+		expect(proxyRequests).toBe(0);
 		expect(await followingPosition()).toBeCloseTo(before);
 
 		await shot(2).click();
@@ -54,7 +70,7 @@ test('screenshots wait until nearby, appear independently, and keep the viewer o
 		await page.keyboard.press('ArrowLeft');
 		await expect(viewer.getByRole('img')).toHaveAttribute('src', address + images[0]);
 		await page.keyboard.press('ArrowLeft');
-		await expect(viewer.getByRole('img')).toHaveAttribute('src', address + images[3]);
+		await expect(viewer.getByRole('img')).toHaveAttribute('src', lastImage);
 		await page.keyboard.press('Escape');
 		await expect(viewer).toBeHidden();
 		await expect(shot(2)).toBeFocused();

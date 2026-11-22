@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { SvelteMap } from 'svelte/reactivity';
+	import { screenshotUrl } from '#lib/github.ts';
+	import { hostAllowed } from '#lib/hosts.ts';
 
-	let { images, name }: { images: string[]; name: string } = $props();
+	let { images: savedImages, name }: { images: string[]; name: string } = $props();
+
+	// Older entries can store both proxy and GitHub file URLs alongside direct image URLs.
+	const images = $derived([...new Set(savedImages.map((image) => {
+		const original = screenshotUrl(image);
+		return hostAllowed(original, 'image') ? original : image;
+	}))]);
 
 	const status = new SvelteMap<string, 'loaded' | 'failed'>();
 	const loaded = $derived(images.filter(image => status.get(image) === 'loaded'));

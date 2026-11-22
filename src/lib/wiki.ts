@@ -1,7 +1,7 @@
 // Reads the addon list from the Turtle WoW wiki and turns each entry into a candidate
 // for the import queue. Run by the nightly job and the dry run in scripts/.
 import { MAX_IMAGES } from './config.ts';
-import { uncamo } from './github.ts';
+import { screenshotUrl } from './github.ts';
 import { linkKey } from './links.ts';
 import { request, type RequestMetrics } from './request.ts';
 
@@ -111,9 +111,7 @@ function parseBullet(line: string): Parsed {
 			name,
 			url,
 			description,
-			// A picture copied from a page on github.com came with the address of GitHub's image
-			// proxy, which stops working; the address behind it does not.
-			images: httpsOnly(images.map(uncamo)).slice(0, MAX_IMAGES),
+			images: [...new Set(httpsOnly(images.map(screenshotUrl)))].slice(0, MAX_IMAGES),
 			alts: httpsOnly(alts),
 			category: '',
 			obsolete,
