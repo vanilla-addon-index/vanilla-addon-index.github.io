@@ -23,7 +23,7 @@ import { appendFileSync } from 'node:fs';
 import { MAX_IMAGES, SUPABASE_ANON_KEY, SUPABASE_URL } from '../src/lib/config.ts';
 import { githubCodeQuery, githubCodeUpdate } from '../src/lib/code-updates.ts';
 import { forgeHostPath, askForge, forgePlace, forgeRepositoryEndpoint } from '../src/lib/forges.ts';
-import { imagesIn, uncamo } from '../src/lib/github.ts';
+import { imagesIn, screenshotUrl } from '../src/lib/github.ts';
 import { hostAllowed } from '../src/lib/hosts.ts';
 import { githubPlace } from '../src/lib/links.ts';
 import { declaredMirrorSource, repositoryRoot } from '../src/lib/mirrors.ts';
@@ -155,10 +155,9 @@ async function gone(image) {
 	}
 }
 
-// The pictures a queued entry has from the wiki, with proxy addresses turned back into
-// the real ones, and without those that are gone. A few at a time.
+// Check queued wiki screenshots at their direct addresses, a few at a time.
 async function stillThere(images) {
-	const real = [...new Set(images.map(uncamo))].filter((image) => image.startsWith('https://'));
+	const real = [...new Set(images.map(screenshotUrl))].filter((image) => image.startsWith('https://'));
 	const kept = [];
 	let complete = true;
 	for (let i = 0; i < real.length; i += 5) {
@@ -174,7 +173,9 @@ async function stillThere(images) {
 const pictures = [];
 const incompletePictures = new Set();
 const savePictures = (key, images) => {
-	if (!incompletePictures.has(key)) pictures.push({ key, images });
+	if (!incompletePictures.has(key)) {
+		pictures.push({ key, images: [...new Set(images.map(screenshotUrl))].slice(0, MAX_IMAGES) });
+	}
 };
 const links = await db('nightly_links');
 
@@ -343,7 +344,7 @@ function applyGithubDetails(r, repo, errors, alias, history, tree) {
 			if (r.readme) savePictures(r.key, r.wiki);
 		}
 		else if (gitOid(readme.oid) && r.state?.readme?.file === file && r.state.readme.oid === readme.oid) {
-			if (r.readme) savePictures(r.key, [...new Set([...r.wiki, ...r.state.readme.images])].slice(0, MAX_IMAGES));
+			if (r.readme) savePictures(r.key, [...r.wiki, ...r.state.readme.images]);
 			cacheHit('github_readme');
 		} else withReadme.push({ ...r, full: repo.nameWithOwner, file, fileOid: readme.oid, source: r });
 	}
@@ -517,7 +518,7 @@ async function checkGithub() {
 				queueCache(r.source);
 			}
 			// The wiki's first, since someone chose those; then the README's, each picture once.
-			if (r.readme) savePictures(r.key, [...new Set([...r.wiki, ...found])].slice(0, MAX_IMAGES));
+			if (r.readme) savePictures(r.key, [...r.wiki, ...found]);
 		});
 		await saveProgress();
 		metrics.progress('GitHub README', readmeCompleted, withReadme.length);
@@ -586,7 +587,7 @@ async function checkOtherHosts() {
 				}
 				if (!readme || facts.missing || !facts.readme_checked) return;
 				const found = facts.readme ? imagesIn(facts.readme.text, facts.readme.base).filter((image) => hostAllowed(image, 'image')) : [];
-				savePictures(key, [...new Set([...wiki, ...found])].slice(0, MAX_IMAGES));
+				savePictures(key, [...wiki, ...found]);
 			} finally {
 				await saveProgress();
 				metrics.progress('Other hosts', ++completed, elsewhere.length);
