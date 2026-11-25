@@ -1,6 +1,6 @@
 // Bump this version when parsing or file-selection rules change: the same commit must
 // then be checked again. Cache entries are private, keyed by the original complete URL.
-export const CHECK_CACHE_VERSION = 1;
+export const CHECK_CACHE_VERSION = 2;
 export const gitOid = (value: unknown): value is string => typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 export const validDate = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value));
 
