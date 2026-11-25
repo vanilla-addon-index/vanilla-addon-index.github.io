@@ -1,3 +1,4 @@
+// github.ts
 import { MAX_IMAGES } from './config.ts';
 
 const REPO = /^https:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i;
@@ -42,12 +43,13 @@ export function screenshotUrl(value: string): string {
 }
 
 /**
- * Image links in the text of a README, in document order. "base" is the README's own raw
+ * Image links outside README comments, in document order. "base" is the README's own raw
  * address, so that a picture kept next to it in the repository resolves to where it is.
  */
 export function imagesIn(readme: string, base: string): string[] {
+	const uncommented = readme.replace(/<!--[\s\S]*?(?:-->|$)/g, ' ');
 	const images = new Set<string>();
-	for (const [, markdown, html] of readme.matchAll(IMAGE)) {
+	for (const [, markdown, html] of uncommented.matchAll(IMAGE)) {
 		try {
 			const url = screenshotUrl(new URL(markdown ?? html, base).href);
 			if (url.startsWith('https://') && !/\s/.test(url) && !NOT_A_SCREENSHOT.test(url)) images.add(url);

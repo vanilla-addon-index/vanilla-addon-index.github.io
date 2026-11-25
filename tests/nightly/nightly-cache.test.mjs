@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { advanceGithubCache, githubCache, githubFiles, githubScope } from '../../src/lib/nightly-cache.ts';
+import { CHECK_CACHE_VERSION, advanceGithubCache, githubCache, githubFiles, githubScope } from '../../src/lib/nightly-cache.ts';
 import { linkKey } from '../../src/lib/links.ts';
 
 const hash = (char) => char.repeat(40);
@@ -120,7 +120,8 @@ test('an exact-link cache cannot be borrowed by another branch, folder or fork',
 
 test('cache scope preserves branch and folder case, repository identity, and nested file identifiers', () => {
 	const scope = githubScope('A', 'Addon', 'HEAD', 'Folder');
-	const previous = { version: 1, kind: 'github', scope, identity: 'id', canonical: 'a/addon', head: hash('a'), history: {date:'2020-01-01T00:00:00Z'} };
+	const previous = { version: CHECK_CACHE_VERSION, kind: 'github', scope, identity: 'id', canonical: 'a/addon', head: hash('a'), history: {date:'2020-01-01T00:00:00Z'} };
+	assert.equal(githubCache({ ...previous, version: CHECK_CACHE_VERSION - 1 }, scope), undefined);
 	assert.equal(githubCache(previous, githubScope('a', 'addon', 'other', 'Folder')), undefined);
 	assert.equal(githubCache(previous, githubScope('a', 'addon', 'HEAD', 'folder')), undefined);
 	assert.equal(githubCache({...previous, tree:{oid:hash('b'),entries:[null]}, toc:{signature:'x',interface:11200,files:[null]}}, scope).tree, undefined);

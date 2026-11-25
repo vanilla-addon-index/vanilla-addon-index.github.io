@@ -1,3 +1,4 @@
+// github.test.mjs
 // What the README reader makes of a README: which links in it are pictures worth showing.
 // See src/lib/github.ts. Nothing here talks to GitHub.
 //
@@ -12,6 +13,33 @@ describe('pictures in a README', () => {
 	test('markdown and html pictures are found, in the order they appear', () => {
 		const readme = '# Addon\n![The window](https://i.imgur.com/AL5w5HE.png)\ntext\n<img width="300" src="https://user-images.githubusercontent.com/1/2.png">';
 		assert.deepEqual(imagesIn(readme, base), ['https://i.imgur.com/AL5w5HE.png', 'https://user-images.githubusercontent.com/1/2.png']);
+	});
+
+	test('HTML comments hide both Markdown and HTML screenshot references', () => {
+		const hidden = '<!-- Add screenshots here.\n![Hidden](docs/images/hidden.png)\n<img src="hidden.png">\n-->';
+		const readme = `![First](first.png)\n${hidden}\n<img src="second.png"> <!-- ![Draft](draft.png) -->`;
+		assert.deepEqual(imagesIn(readme, base), [
+			'https://raw.githubusercontent.com/Owner/Addon/HEAD/first.png',
+			'https://raw.githubusercontent.com/Owner/Addon/HEAD/second.png'
+		]);
+		assert.deepEqual(imagesIn(hidden, base), []);
+	});
+
+	test('SkullEPGP screenshot placeholders stay hidden on OctoWoW', () => {
+		for (const [repo, files] of [
+			['SkullEPGP_Officer', ['loot-tab', 'bidding', 'trades-tab', 'import-export']],
+			['SkullEPGP_Player', ['bidding-window', 'winner']]
+		]) {
+			const raw = `https://octowow.st/git/Hapto/${repo}/raw/branch/main/README.md`;
+			const placeholders = files.map((file) => `![Screenshot](docs/images/${file}.png)`).join('\n');
+			const comment = `<!-- Screenshots: put the PNG files in docs/images/ and uncomment the lines below\n${placeholders}\n-->`;
+			assert.deepEqual(imagesIn(comment, raw), []);
+			assert.deepEqual(imagesIn(placeholders, raw), files.map((file) => new URL(`docs/images/${file}.png`, raw).href));
+		}
+	});
+
+	test('an unfinished HTML comment hides images through the end of the README', () => {
+		assert.deepEqual(imagesIn('<!-- Draft\n![Hidden](draft.png)', base), []);
 	});
 
 	test('a picture kept in the repository resolves next to the README, and a page link to the file itself', () => {
